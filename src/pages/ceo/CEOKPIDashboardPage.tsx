@@ -1,22 +1,16 @@
 import { useEffect, useState } from 'react';
 import {
   Target,
-  TrendingUp,
-  TrendingDown,
   CheckCircle,
   Clock,
   AlertCircle,
   Calendar,
-  Users,
-  Building2,
   Award,
   ArrowUpRight,
   ArrowDownRight,
   BarChart2,
 } from 'lucide-react';
 import {
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -24,12 +18,9 @@ import {
   ResponsiveContainer,
   BarChart,
   Bar,
-  PieChart,
-  Pie,
   Cell,
   RadialBarChart,
   RadialBar,
-  Legend,
 } from 'recharts';
 import { PageSpinner } from '@/components/ui';
 import {
@@ -130,7 +121,7 @@ export function CEOKPIDashboardPage() {
   ];
 
   // Progress data for radial chart
-  const progressData = kpis.map((kpi, index) => ({
+  const progressData = kpis.map((kpi, _index) => ({
     name: kpi.name,
     value: kpi.target > 0 ? Math.min((Math.abs(kpi.current) / kpi.target) * 100, 100) : 100,
     fill: kpi.color,
@@ -286,7 +277,10 @@ export function CEOKPIDashboardPage() {
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11 }} stroke="#9ca3af" tickFormatter={(v) => `${v}%`} />
               <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} stroke="#9ca3af" width={100} />
-              <Tooltip formatter={(value: number) => `${value.toFixed(1)}%`} />
+              <Tooltip formatter={(value: number | undefined) => {
+                if (value === undefined) return '';
+                return `${value.toFixed(1)}%`;
+              }} />
               <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                 {progressData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={entry.fill} />

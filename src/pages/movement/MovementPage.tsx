@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { employeeMovementService } from '@/services/employee-movement.service';

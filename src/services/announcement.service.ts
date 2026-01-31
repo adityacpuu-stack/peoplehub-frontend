@@ -213,7 +213,7 @@ export const announcementService = {
 // HELPER FUNCTIONS
 // ==========================================
 
-export const getCategoryLabel = (category: AnnouncementCategory): string => {
+export const getAnnouncementCategoryLabel = (category: AnnouncementCategory): string => {
   const labels: Record<AnnouncementCategory, string> = {
     general: 'General',
     policy: 'Policy Update',

@@ -1,14 +1,11 @@
 import { useEffect, useState } from 'react';
 import {
   TrendingDown,
-  Users,
   UserMinus,
   UserPlus,
   Clock,
   AlertCircle,
   Calendar,
-  Building2,
-  ArrowRight,
 } from 'lucide-react';
 import {
   LineChart,
@@ -18,12 +15,9 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  BarChart,
-  Bar,
   PieChart,
   Pie,
   Cell,
-  Legend,
 } from 'recharts';
 import { PageSpinner } from '@/components/ui';
 import {
@@ -80,7 +74,7 @@ export function CEOTurnoverReportPage() {
   const monthlyTurnover = turnoverData?.monthly_turnover || [];
   const exitReasons = turnoverData?.exit_reasons || [];
   const departmentTurnover = turnoverData?.department_turnover || [];
-  const tenureAtExit = turnoverData?.tenure_at_exit || [];
+  const _tenureAtExit = turnoverData?.tenure_at_exit || [];
   const recentExits = turnoverData?.recent_exits || [];
   const avgTenureAtExit = turnoverData?.avg_tenure_at_exit || 0;
   const totalExits = turnoverData?.total_exits_period || 0;
@@ -191,7 +185,10 @@ export function CEOTurnoverReportPage() {
                   <XAxis dataKey="month" tick={{ fontSize: 11 }} stroke="#9ca3af" />
                   <YAxis tick={{ fontSize: 11 }} stroke="#9ca3af" tickFormatter={(v) => `${v}%`} />
                   <Tooltip
-                    formatter={(value: number) => `${value}%`}
+                    formatter={(value: number | undefined) => {
+                      if (value === undefined) return '';
+                      return `${value}%`;
+                    }}
                     contentStyle={{
                       backgroundColor: 'white',
                       border: 'none',

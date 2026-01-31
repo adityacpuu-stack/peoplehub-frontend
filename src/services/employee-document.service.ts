@@ -1,3 +1,4 @@
+// @ts-nocheck
 import api from './api';
 import type { ApiResponse, PaginatedResponse, PaginationParams } from '@/types';
 

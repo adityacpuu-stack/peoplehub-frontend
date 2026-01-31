@@ -255,7 +255,7 @@ export function PPh21Page() {
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="month" tick={{ fontSize: 11 }} stroke="#9ca3af" />
               <YAxis tickFormatter={(v) => formatCompactCurrency(v)} tick={{ fontSize: 11 }} stroke="#9ca3af" />
-              <Tooltip formatter={(value: number) => formatCurrency(value)} />
+              <Tooltip formatter={(value) => formatCurrency(value as number)} />
               <Bar dataKey="amount" fill="#0d9488" radius={[4, 4, 0, 0]} name="PPh 21" />
             </BarChart>
           </ResponsiveContainer>

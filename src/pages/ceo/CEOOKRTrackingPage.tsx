@@ -9,9 +9,6 @@ import {
   ChevronDown,
   ChevronRight,
   Users,
-  Building2,
-  TrendingUp,
-  Filter,
 } from 'lucide-react';
 
 // Mock OKR data

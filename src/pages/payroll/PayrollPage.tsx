@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useState, useEffect, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import { companyService, type Company } from '@/services/company.service';

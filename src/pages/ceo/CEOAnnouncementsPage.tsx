@@ -15,7 +15,7 @@ import {
   announcementService,
   type Announcement,
   type AnnouncementStatistics,
-  getCategoryLabel,
+  getAnnouncementCategoryLabel,
 } from '@/services/announcement.service';
 import { PageSpinner } from '@/components/ui';
 
@@ -236,7 +236,7 @@ export function CEOAnnouncementsPage() {
                     <span
                       className={`inline-flex items-center px-2 py-1 rounded-lg text-xs font-semibold ${categoryColors[announcement.category] || 'bg-gray-100 text-gray-700'}`}
                     >
-                      {getCategoryLabel(announcement.category)}
+                      {getAnnouncementCategoryLabel(announcement.category)}
                     </span>
                     {announcement.is_global && (
                       <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-blue-100 text-blue-700">
@@ -286,7 +286,7 @@ export function CEOAnnouncementsPage() {
                     <span
                       className={`inline-flex items-center px-2 py-1 rounded-lg text-xs font-semibold ${categoryColors[announcement.category] || 'bg-gray-100 text-gray-700'}`}
                     >
-                      {getCategoryLabel(announcement.category)}
+                      {getAnnouncementCategoryLabel(announcement.category)}
                     </span>
                     <span
                       className={`inline-flex items-center px-2 py-1 rounded-lg text-xs font-semibold ${priorityColors[announcement.priority] || 'bg-gray-100 text-gray-700'}`}

@@ -23,7 +23,7 @@ export function CEOLeadershipTeamPage() {
 
   // Get CEO's company
   const companyId = user?.employee?.company_id;
-  const companyName = user?.employee?.company_name;
+  const companyName = (user?.employee as { company_name?: string } | undefined)?.company_name;
 
   useEffect(() => {
     const fetchLeaders = async () => {

@@ -376,7 +376,7 @@ export function EBupotPage() {
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                <Tooltip formatter={(value) => formatCurrency(value as number)} />
                 <Legend />
               </PieChart>
             </ResponsiveContainer>

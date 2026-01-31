@@ -4,12 +4,8 @@ import {
   Star,
   TrendingUp,
   Award,
-  Target,
-  Calendar,
   Building2,
-  Filter,
   Search,
-  ChevronRight,
   Sparkles,
   Zap,
 } from 'lucide-react';

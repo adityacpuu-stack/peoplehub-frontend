@@ -2,14 +2,8 @@ import { useState } from 'react';
 import {
   Users,
   TrendingUp,
-  ArrowRight,
-  Calendar,
   Award,
-  AlertCircle,
-  CheckCircle,
-  Clock,
   ChevronRight,
-  Building2,
 } from 'lucide-react';
 
 // Mock succession data

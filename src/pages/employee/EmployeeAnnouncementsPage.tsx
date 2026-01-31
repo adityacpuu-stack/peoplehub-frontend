@@ -23,9 +23,7 @@ import {
   ANNOUNCEMENT_CATEGORIES,
   type Announcement,
   type AnnouncementStatistics,
-  getCategoryLabel,
-  getPriorityLabel,
-  getVisibilityLabel,
+  getAnnouncementCategoryLabel,
 } from '@/services/announcement.service';
 import { useAuthStore } from '@/stores/auth.store';
 import toast from 'react-hot-toast';
@@ -251,7 +249,7 @@ export function EmployeeAnnouncementsPage() {
             >
               <option value="all">All Categories</option>
               {ANNOUNCEMENT_CATEGORIES.map(cat => (
-                <option key={cat} value={cat}>{getCategoryLabel(cat)}</option>
+                <option key={cat} value={cat}>{getAnnouncementCategoryLabel(cat)}</option>
               ))}
             </select>
 

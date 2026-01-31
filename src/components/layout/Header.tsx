@@ -218,23 +218,8 @@ export function Header() {
     navigate('/login');
   };
 
-  const _getInitials = () => {
-    if (user?.employee?.name) {
-      const names = user.employee.name.split(' ');
-      if (names.length >= 2) {
-        return `${names[0][0]}${names[1][0]}`.toUpperCase();
-      }
-      return names[0][0].toUpperCase();
-    }
-    return user?.email?.[0]?.toUpperCase() || 'U';
-  };
-
   const getDisplayName = () => {
     return user?.employee?.name || user?.email?.split('@')[0] || 'User';
-  };
-
-  const _getPrimaryRole = () => {
-    return user?.roles?.[0] || 'Employee';
   };
 
   const userRoles = user?.roles || ['Employee'];

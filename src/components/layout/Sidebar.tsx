@@ -606,7 +606,6 @@ export function Sidebar() {
   const attendanceEnabled = companyFeatures?.attendance_enabled ?? true;
   const leaveEnabled = companyFeatures?.leave_enabled ?? true;
   const payrollEnabled = companyFeatures?.payroll_enabled ?? true;
-  const _performanceEnabled = companyFeatures?.performance_enabled ?? true;
 
   // Close sidebar on route change (mobile)
   useEffect(() => {

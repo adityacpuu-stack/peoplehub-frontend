@@ -2,13 +2,9 @@ import { useEffect, useState } from 'react';
 import {
   Award,
   TrendingUp,
-  TrendingDown,
-  Users,
-  Building2,
   Star,
   AlertCircle,
   Calendar,
-  Target,
   CheckCircle,
 } from 'lucide-react';
 import {
@@ -74,7 +70,7 @@ export function CEOPerformanceSummaryPage() {
     return <PageSpinner />;
   }
 
-  const totalEmployees = groupData?.summary?.total_employees || 300;
+  const _totalEmployees = groupData?.summary?.total_employees || 300;
 
   return (
     <div className="space-y-6">

@@ -9,11 +9,8 @@ import {
   AlertCircle,
   Calendar,
   Target,
-  BarChart2,
 } from 'lucide-react';
 import {
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
