@@ -1,0 +1,549 @@
+import { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
+import { leaveService } from '@/services/leave.service';
+import type { LeaveRequest } from '@/types';
+
+export function RequestsPage() {
+  const [requests, setRequests] = useState<LeaveRequest[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [filter, setFilter] = useState({
+    status: 'pending',
+    search: '',
+  });
+  const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null);
+  const [showApproveModal, setShowApproveModal] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [approveComment, setApproveComment] = useState('');
+  const [rejectReason, setRejectReason] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  useEffect(() => {
+    fetchRequests();
+  }, []);
+
+  const fetchRequests = async () => {
+    setIsLoading(true);
+    try {
+      const data = await leaveService.getPendingApprovals();
+      setRequests(data);
+    } catch (error) {
+      console.error('Failed to load requests:', error);
+      toast.error('Failed to load approval requests');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const filteredRequests = requests.filter(request => {
+    if (filter.status !== 'all' && request.status !== filter.status) return false;
+    if (filter.search) {
+      const searchLower = filter.search.toLowerCase();
+      return (
+        request.employee?.name?.toLowerCase().includes(searchLower) ||
+        request.employee?.employee_id?.toLowerCase().includes(searchLower)
+      );
+    }
+    return true;
+  });
+
+  const stats = {
+    pending: requests.filter(r => r.status === 'pending').length,
+    approved: requests.filter(r => r.status === 'approved').length,
+    rejected: requests.filter(r => r.status === 'rejected').length,
+    total: requests.length,
+  };
+
+  const handleApprove = async () => {
+    if (!selectedRequest) return;
+    setIsProcessing(true);
+    try {
+      await leaveService.approve(selectedRequest.id, approveComment || undefined);
+      toast.success('Leave request approved successfully');
+      setShowApproveModal(false);
+      setSelectedRequest(null);
+      setApproveComment('');
+      fetchRequests();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to approve request');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!selectedRequest || !rejectReason.trim()) {
+      toast.error('Rejection reason is required');
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      await leaveService.reject(selectedRequest.id, rejectReason);
+      toast.success('Leave request rejected');
+      setShowRejectModal(false);
+      setSelectedRequest(null);
+      setRejectReason('');
+      fetchRequests();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to reject request');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+            Pending
+          </span>
+        );
+      case 'approved':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            Approved
+          </span>
+        );
+      case 'rejected':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            Rejected
+          </span>
+        );
+      default:
+        return null;
+    }
+  };
+
+  const formatDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+  };
+
+  const formatDateTime = (dateStr: string) => {
+    return new Date(dateStr).toLocaleString('id-ID', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const calculateDays = (startDate: string, endDate: string) => {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const diffTime = Math.abs(end.getTime() - start.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    return diffDays;
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header Banner */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-indigo-600 via-blue-600 to-cyan-500 rounded-2xl shadow-lg">
+        <div className="absolute inset-0 bg-grid-white/10 [mask-image:linear-gradient(0deg,transparent,rgba(255,255,255,0.5))]"></div>
+        <div className="absolute -top-24 -right-24 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
+        <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-cyan-400/20 rounded-full blur-3xl"></div>
+
+        <div className="relative px-6 py-8 sm:px-8 sm:py-10">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
+                My Approval
+              </h1>
+              <p className="mt-2 text-blue-100 max-w-xl">
+                Approve or reject leave requests from your team members
+              </p>
+            </div>
+            <button
+              onClick={fetchRequests}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 backdrop-blur-sm text-white rounded-xl transition-all duration-200"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span className="font-medium">Refresh</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center gap-4">
+            <div className="flex-shrink-0 w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
+              <svg className="w-6 h-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500 font-medium">Pending</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.pending}</p>
+            </div>
+          </div>
+          <div className="absolute top-0 right-0 w-20 h-20 bg-amber-50 rounded-full -translate-y-1/2 translate-x-1/2 opacity-50"></div>
+        </div>
+
+        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center gap-4">
+            <div className="flex-shrink-0 w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+              <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500 font-medium">Approved</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.approved}</p>
+            </div>
+          </div>
+          <div className="absolute top-0 right-0 w-20 h-20 bg-green-50 rounded-full -translate-y-1/2 translate-x-1/2 opacity-50"></div>
+        </div>
+
+        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center gap-4">
+            <div className="flex-shrink-0 w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
+              <svg className="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500 font-medium">Rejected</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.rejected}</p>
+            </div>
+          </div>
+          <div className="absolute top-0 right-0 w-20 h-20 bg-red-50 rounded-full -translate-y-1/2 translate-x-1/2 opacity-50"></div>
+        </div>
+
+        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center gap-4">
+            <div className="flex-shrink-0 w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+              <svg className="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500 font-medium">Total</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+            </div>
+          </div>
+          <div className="absolute top-0 right-0 w-20 h-20 bg-blue-50 rounded-full -translate-y-1/2 translate-x-1/2 opacity-50"></div>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+        <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+          {/* Status Filter */}
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-600">Status:</span>
+            <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-lg">
+              {[
+                { value: 'all', label: 'All' },
+                { value: 'pending', label: 'Pending' },
+                { value: 'approved', label: 'Approved' },
+                { value: 'rejected', label: 'Rejected' },
+              ].map(option => (
+                <button
+                  key={option.value}
+                  onClick={() => setFilter(prev => ({ ...prev, status: option.value }))}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                    filter.status === option.value
+                      ? 'bg-white text-blue-600 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Search */}
+          <div className="flex-1 lg:max-w-xs lg:ml-auto">
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search employees..."
+                value={filter.search}
+                onChange={e => setFilter(prev => ({ ...prev, search: e.target.value }))}
+                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+              />
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Request Cards */}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-20">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+            <p className="text-gray-500">Loading data...</p>
+          </div>
+        </div>
+      ) : filteredRequests.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-12 text-center">
+          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900">No requests</h3>
+          <p className="mt-1 text-gray-500">
+            {filter.status === 'pending'
+              ? 'No pending leave requests to approve.'
+              : 'No requests match the current filter.'}
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {filteredRequests.map(request => (
+            <div
+              key={request.id}
+              className="bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden"
+            >
+              <div className="p-5">
+                <div className="flex flex-col lg:flex-row lg:items-start gap-4">
+                  {/* Employee Info */}
+                  <div className="flex items-start gap-4 flex-1">
+                    <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-semibold text-lg shadow-sm">
+                      {request.employee?.name?.charAt(0) || '?'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        <h3 className="text-base font-semibold text-gray-900">
+                          {request.employee?.name || 'Unknown'}
+                        </h3>
+                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                          {request.leaveType?.name || 'Leave'}
+                        </span>
+                        {getStatusBadge(request.status)}
+                      </div>
+                      <p className="text-sm text-gray-500">
+                        {request.employee?.employee_id} • {request.employee?.department?.name || 'No Department'} • {request.employee?.position?.name || request.employee?.job_title || 'No Position'}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Submitted: {formatDateTime(request.created_at)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  {request.status === 'pending' && (
+                    <div className="flex items-center gap-2 lg:flex-shrink-0">
+                      <button
+                        onClick={() => {
+                          setSelectedRequest(request);
+                          setShowApproveModal(true);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Approve
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSelectedRequest(request);
+                          setShowRejectModal(true);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-white hover:bg-red-50 text-red-600 border border-red-200 rounded-lg text-sm font-medium transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        Reject
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Request Details */}
+                <div className="mt-4 pt-4 border-t border-gray-100">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <span className="text-sm text-gray-500">Leave Period</span>
+                      <p className="font-medium text-gray-900">
+                        {formatDate(request.start_date)} - {formatDate(request.end_date)}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-sm text-gray-500">Duration</span>
+                      <p className="font-medium text-gray-900">
+                        <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full text-sm">
+                          {calculateDays(request.start_date, request.end_date)} days
+                        </span>
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-sm text-gray-500">Company</span>
+                      <p className="font-medium text-gray-900">
+                        {request.employee?.company?.name || '-'}
+                      </p>
+                    </div>
+                  </div>
+                  {request.reason && (
+                    <div className="mt-3">
+                      <span className="text-sm text-gray-500">Reason</span>
+                      <p className="text-gray-700 mt-1">{request.reason}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Approval Info */}
+                {request.status !== 'pending' && request.approved_at && (
+                  <div className="mt-4 pt-4 border-t border-gray-100">
+                    <p className="text-xs text-gray-500">
+                      {request.status === 'approved' ? 'Approved' : 'Rejected'} on{' '}
+                      {formatDateTime(request.approved_at)}
+                      {request.approver && ` by ${request.approver.name}`}
+                    </p>
+                    {request.rejection_reason && (
+                      <p className="text-sm text-red-600 mt-1">
+                        Reason: {request.rejection_reason}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Approve Modal */}
+      {showApproveModal && selectedRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden">
+            <div className="p-6">
+              <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 text-center mb-2">Approve Leave Request?</h3>
+              <p className="text-sm text-gray-500 text-center mb-4">
+                You are about to approve the leave request from{' '}
+                <span className="font-medium text-gray-900">{selectedRequest.employee?.name}</span>
+              </p>
+              <div className="bg-gray-50 rounded-lg p-3 mb-4">
+                <div className="text-sm">
+                  <p><span className="text-gray-500">Type:</span> <span className="font-medium">{selectedRequest.leaveType?.name}</span></p>
+                  <p><span className="text-gray-500">Period:</span> <span className="font-medium">{formatDate(selectedRequest.start_date)} - {formatDate(selectedRequest.end_date)}</span></p>
+                  <p><span className="text-gray-500">Duration:</span> <span className="font-medium">{calculateDays(selectedRequest.start_date, selectedRequest.end_date)} days</span></p>
+                </div>
+              </div>
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Comment (Optional)
+                </label>
+                <textarea
+                  value={approveComment}
+                  onChange={e => setApproveComment(e.target.value)}
+                  rows={2}
+                  placeholder="Add a comment..."
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 resize-none"
+                />
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowApproveModal(false);
+                    setSelectedRequest(null);
+                    setApproveComment('');
+                  }}
+                  disabled={isProcessing}
+                  className="flex-1 px-4 py-2.5 border border-gray-200 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleApprove}
+                  disabled={isProcessing}
+                  className="flex-1 px-4 py-2.5 bg-green-600 hover:bg-green-700 rounded-lg text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isProcessing ? 'Processing...' : 'Yes, Approve'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reject Modal */}
+      {showRejectModal && selectedRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden">
+            <div className="p-6">
+              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 text-center mb-2">Reject Leave Request?</h3>
+              <p className="text-sm text-gray-500 text-center mb-4">
+                You are about to reject the leave request from{' '}
+                <span className="font-medium text-gray-900">{selectedRequest.employee?.name}</span>
+              </p>
+              <div className="bg-gray-50 rounded-lg p-3 mb-4">
+                <div className="text-sm">
+                  <p><span className="text-gray-500">Type:</span> <span className="font-medium">{selectedRequest.leaveType?.name}</span></p>
+                  <p><span className="text-gray-500">Period:</span> <span className="font-medium">{formatDate(selectedRequest.start_date)} - {formatDate(selectedRequest.end_date)}</span></p>
+                  <p><span className="text-gray-500">Duration:</span> <span className="font-medium">{calculateDays(selectedRequest.start_date, selectedRequest.end_date)} days</span></p>
+                </div>
+              </div>
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Rejection Reason <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={rejectReason}
+                  onChange={e => setRejectReason(e.target.value)}
+                  rows={3}
+                  placeholder="Enter rejection reason..."
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 resize-none"
+                />
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowRejectModal(false);
+                    setSelectedRequest(null);
+                    setRejectReason('');
+                  }}
+                  disabled={isProcessing}
+                  className="flex-1 px-4 py-2.5 border border-gray-200 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleReject}
+                  disabled={isProcessing || !rejectReason.trim()}
+                  className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 rounded-lg text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isProcessing ? 'Processing...' : 'Yes, Reject'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

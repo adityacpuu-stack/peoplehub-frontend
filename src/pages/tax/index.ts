@@ -1,0 +1,13 @@
+export { PPh21Page } from './PPh21Page';
+export { TaxCalculationPage } from './TaxCalculationPage';
+export { PaymentHistoryPage } from './PaymentHistoryPage';
+export { BPJSKesehatanPage } from './BPJSKesehatanPage';
+export { BPJSKetenagakerjaanPage } from './BPJSKetenagakerjaanPage';
+export { BPJSReportsPage } from './BPJSReportsPage';
+export { ESPTPage } from './ESPTPage';
+export { EBupotPage } from './EBupotPage';
+export { MonthlyReportsPage } from './MonthlyReportsPage';
+export { AnnualReportsPage } from './AnnualReportsPage';
+export { TaxRatesPage } from './TaxRatesPage';
+export { PTKPSettingsPage } from './PTKPSettingsPage';
+export { CompanyNPWPPage } from './CompanyNPWPPage';
