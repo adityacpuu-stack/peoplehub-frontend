@@ -1,4 +1,3 @@
-// @ts-nocheck
 import api from './api';
 import type { ApiResponse, PaginatedResponse, PaginationParams } from '@/types';
 
@@ -136,7 +135,12 @@ export const employeeDocumentService = {
     return {
       success: true,
       data: response.data.data,
-      pagination: response.data.pagination,
+      pagination: {
+        page: response.data.pagination.page,
+        limit: response.data.pagination.limit,
+        total: response.data.pagination.total,
+        totalPages: response.data.pagination.total_pages,
+      },
     };
   },
 

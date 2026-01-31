@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useState, useEffect } from 'react';
 import {
   DollarSign,
@@ -50,7 +49,7 @@ export function CEOPayrollReportPage() {
 
   // Get user's company
   const userCompanyId = user?.employee?.company_id;
-  const userCompanyName = user?.employee?.company?.name || 'Your Company';
+  const userCompanyName = 'Your Company';
 
   const fetchData = async () => {
     try {
@@ -174,7 +173,7 @@ export function CEOPayrollReportPage() {
 
   const handleExport = async () => {
     try {
-      await payrollService.exportExcel(userCompanyId, selectedPeriod);
+      await payrollService.exportExcel(userCompanyId ?? null, selectedPeriod);
     } catch (err) {
       console.error('Failed to export:', err);
     }

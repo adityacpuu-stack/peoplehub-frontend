@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useState, useCallback } from 'react';
 import {
   Users,
@@ -25,11 +24,11 @@ import { toast } from 'react-hot-toast';
 import { employeeService } from '@/services/employee.service';
 import { companyService } from '@/services/company.service';
 
-interface Employee {
+interface ApprovalEmployee {
   id: number;
-  employee_id: string | null;
+  employee_id?: string | null;
   name: string;
-  job_title: string | null;
+  job_title?: string | null;
   company?: { id: number; name: string } | null;
   department?: { id: number; name: string } | null;
   manager_id?: number;
@@ -40,15 +39,15 @@ interface Employee {
   overtimeApprover?: { id: number; name: string } | null;
 }
 
-interface Company {
+interface ApprovalCompany {
   id: number;
   name: string;
 }
 
 export function ApprovalSettingsPage() {
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [allEmployees, setAllEmployees] = useState<Employee[]>([]);
-  const [companies, setCompanies] = useState<Company[]>([]);
+  const [employees, setEmployees] = useState<ApprovalEmployee[]>([]);
+  const [allEmployees, setAllEmployees] = useState<ApprovalEmployee[]>([]);
+  const [companies, setCompanies] = useState<ApprovalCompany[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [companyFilter, setCompanyFilter] = useState<number | ''>('');
@@ -58,7 +57,7 @@ export function ApprovalSettingsPage() {
   const limit = 20;
 
   // Track changes
-  const [changes, setChanges] = useState<Map<number, Partial<Employee>>>(new Map());
+  const [changes, setChanges] = useState<Map<number, Record<string, unknown>>>(new Map());
   const [isSaving, setIsSaving] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -71,7 +70,7 @@ export function ApprovalSettingsPage() {
 
       // Fetch all employees for dropdown options
       const allEmpResponse = await employeeService.getAll({ page: 1, limit: 1000 });
-      setAllEmployees(allEmpResponse.data || []);
+      setAllEmployees(allEmpResponse.data as unknown as ApprovalEmployee[] || []);
 
       // Fetch paginated employees for table
       const params: Record<string, unknown> = {
@@ -82,9 +81,9 @@ export function ApprovalSettingsPage() {
       };
 
       const response = await employeeService.getAll(params);
-      setEmployees(response.data || []);
-      setTotalPages(response.meta?.totalPages || 1);
-      setTotal(response.meta?.total || 0);
+      setEmployees(response.data as unknown as ApprovalEmployee[] || []);
+      setTotalPages(response.pagination?.totalPages || 1);
+      setTotal(response.pagination?.total || 0);
     } catch (error) {
       console.error('Error fetching data:', error);
       toast.error('Failed to load data');

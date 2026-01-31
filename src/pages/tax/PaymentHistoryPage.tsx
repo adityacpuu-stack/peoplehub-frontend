@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useState, useEffect } from 'react';
 import {
   History,
@@ -124,8 +123,8 @@ export function PaymentHistoryPage() {
 
     payrolls.forEach((payroll) => {
       const period = payroll.period || '';
-      const companyId = payroll.employee?.company_id || 0;
-      const companyName = payroll.employee?.company?.name || 'Unknown';
+      const companyId = payroll.company_id || 0;
+      const companyName = 'Company';
       const key = `${companyId}-${period}`;
 
       if (!summaryMap.has(key)) {

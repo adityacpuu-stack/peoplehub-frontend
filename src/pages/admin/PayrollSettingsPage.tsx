@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
@@ -425,7 +424,7 @@ export function PayrollSettingsPage() {
                       {ptkp.is_active ? (
                         <Badge variant="success">Aktif</Badge>
                       ) : (
-                        <Badge variant="secondary">Nonaktif</Badge>
+                        <Badge variant="default">Nonaktif</Badge>
                       )}
                     </div>
                     <p className="text-sm text-gray-600 mb-2">{ptkp.description}</p>

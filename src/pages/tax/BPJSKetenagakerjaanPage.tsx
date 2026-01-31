@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useState, useEffect, useMemo } from 'react';
 import {
   HardHat,
@@ -77,7 +76,7 @@ export function BPJSKetenagakerjaanPage() {
   // Calculate BPJS Ketenagakerjaan for each employee
   const bpjsData = useMemo(() => {
     return payrollData.map((record) => {
-      const baseSalary = record.basicSalary;
+      const baseSalary = record.basic_salary;
       const jpSalary = Math.min(baseSalary, JP_MAX_SALARY);
 
       // JKK - Jaminan Kecelakaan Kerja (company only)
@@ -123,11 +122,12 @@ export function BPJSKetenagakerjaanPage() {
   // Filter data
   const filteredData = useMemo(() => {
     return bpjsData.filter((record) => {
+      const employeeName = record.employee?.name || '';
+      const employeeId = record.employee?.employee_id || '';
       const matchesSearch =
-        record.employee.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        record.employee.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        record.employee.employeeId.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesCompany = selectedCompany === 'all' || record.employee.company?.id === selectedCompany;
+        employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        employeeId.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesCompany = selectedCompany === 'all' || record.company_id === Number(selectedCompany);
       return matchesSearch && matchesCompany;
     });
   }, [bpjsData, searchTerm, selectedCompany]);
@@ -478,14 +478,13 @@ export function BPJSKetenagakerjaanPage() {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white font-semibold text-sm">
-                          {record.employee.firstName[0]}
-                          {record.employee.lastName[0]}
+                          {(record.employee?.name || 'N')[0]}
                         </div>
                         <div>
                           <p className="font-medium text-gray-900">
-                            {record.employee.firstName} {record.employee.lastName}
+                            {record.employee?.name || 'N/A'}
                           </p>
-                          <p className="text-sm text-gray-500">{record.employee.employeeId}</p>
+                          <p className="text-sm text-gray-500">{record.employee?.employee_id}</p>
                         </div>
                       </div>
                     </td>

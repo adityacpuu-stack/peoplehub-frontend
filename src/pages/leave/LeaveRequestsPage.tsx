@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import {
@@ -372,7 +371,7 @@ export function LeaveRequestsPage() {
     const rows = filteredLeaves.map(leave => [
       leave.employee?.name || '-',
       leave.employee?.department?.name || '-',
-      leave.employee?.company?.name || '-',
+      '-',
       leave.leaveType?.name || '-',
       formatDate(leave.start_date),
       formatDate(leave.end_date),
@@ -611,9 +610,6 @@ export function LeaveRequestsPage() {
                           <p className="font-medium text-gray-900">{leave.employee?.name || '-'}</p>
                           <p className="text-xs text-gray-500">
                             {leave.employee?.department?.name || '-'}
-                            {leave.employee?.company?.name && (
-                              <span className="text-gray-400"> • {leave.employee.company.name}</span>
-                            )}
                           </p>
                         </div>
                       </div>
@@ -904,12 +900,6 @@ export function LeaveRequestsPage() {
                         <p className="text-sm text-gray-500">
                           {selectedLeave.employee?.department?.name || '-'}
                         </p>
-                        {selectedLeave.employee?.company?.name && (
-                          <div className="flex items-center gap-1 text-xs text-gray-400 mt-1">
-                            <Building className="w-3 h-3" />
-                            <span>{selectedLeave.employee.company.name}</span>
-                          </div>
-                        )}
                       </div>
                     </div>
                   </div>

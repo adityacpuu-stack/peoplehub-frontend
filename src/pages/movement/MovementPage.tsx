@@ -1,13 +1,12 @@
-// @ts-nocheck
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { employeeMovementService } from '@/services/employee-movement.service';
 import type { EmployeeMovement, CreateEmployeeMovementRequest } from '@/services/employee-movement.service';
-import { companyService } from '@/services/company.service';
+import { companyService, type Company } from '@/services/company.service';
 import { employeeService } from '@/services/employee.service';
 import { departmentService } from '@/services/department.service';
 import { positionService } from '@/services/position.service';
-import type { Company, Employee, Department, Position } from '@/types';
+import type { Employee, Department, Position } from '@/types';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 
 type MovementType = 'promotion' | 'demotion' | 'transfer' | 'mutation' | 'salary_adjustment' | 'grade_change' | 'status_change' | 'department_change' | 'position_change' | 'company_transfer';

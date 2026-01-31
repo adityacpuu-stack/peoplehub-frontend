@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useState, useEffect, useMemo } from 'react';
 import {
   Heart,
@@ -39,15 +38,26 @@ const BPJS_KES_RATE_EMPLOYEE = 0.01; // 1% employee
 const BPJS_KES_RATE_COMPANY = 0.04; // 4% company
 const BPJS_KES_MAX_SALARY = 12000000; // Max salary for BPJS Kesehatan calculation
 
+// Extended type for BPJS data with calculated fields
+type BPJSKesehatanData = Omit<Payroll, 'status'> & {
+  baseSalary: number;
+  employeeContribution: number;
+  companyContribution: number;
+  totalContribution: number;
+  bpjsNumber: string;
+  status: 'paid' | 'pending' | 'overdue';
+  familyMembers: number;
+};
+
 export function BPJSKesehatanPage() {
   const [payrollData, setPayrollData] = useState<Payroll[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCompany, setSelectedCompany] = useState<string>('all');
+  const [selectedCompany, setSelectedCompany] = useState<string | number>('all');
   const [selectedPeriod, setSelectedPeriod] = useState<string>('2025-01');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
-  const [selectedEmployee, setSelectedEmployee] = useState<Payroll | null>(null);
+  const [selectedEmployee, setSelectedEmployee] = useState<BPJSKesehatanData | null>(null);
   const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
@@ -453,14 +463,13 @@ export function BPJSKesehatanPage() {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-rose-400 to-pink-500 flex items-center justify-center text-white font-semibold text-sm">
-                          {record.employee.firstName[0]}
-                          {record.employee.lastName[0]}
+                          {(record.employee?.name || 'N')[0]}
                         </div>
                         <div>
                           <p className="font-medium text-gray-900">
-                            {record.employee.firstName} {record.employee.lastName}
+                            {record.employee?.name || 'N/A'}
                           </p>
-                          <p className="text-sm text-gray-500">{record.employee.employeeId}</p>
+                          <p className="text-sm text-gray-500">{record.employee?.employee_id}</p>
                         </div>
                       </div>
                     </td>
@@ -522,15 +531,13 @@ export function BPJSKesehatanPage() {
               {/* Employee Info */}
               <div className="flex items-center gap-4">
                 <div className="w-16 h-16 rounded-full bg-gradient-to-br from-rose-400 to-pink-500 flex items-center justify-center text-white font-bold text-xl">
-                  {selectedEmployee.employee.firstName[0]}
-                  {selectedEmployee.employee.lastName[0]}
+                  {(selectedEmployee.employee?.name || 'N')[0]}
                 </div>
                 <div>
                   <h4 className="text-xl font-semibold text-gray-900">
-                    {selectedEmployee.employee.firstName} {selectedEmployee.employee.lastName}
+                    {selectedEmployee.employee?.name || 'N/A'}
                   </h4>
-                  <p className="text-gray-500">{selectedEmployee.employee.employeeId}</p>
-                  <p className="text-sm text-gray-400">{selectedEmployee.employee.company?.name}</p>
+                  <p className="text-gray-500">{selectedEmployee.employee?.employee_id}</p>
                 </div>
               </div>
 

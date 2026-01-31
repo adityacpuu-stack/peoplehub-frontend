@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useState, useEffect, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import { companyService, type Company } from '@/services/company.service';
@@ -1418,7 +1417,7 @@ export function PayrollPage() {
                               </div>
                               <div className="flex items-center justify-between text-sm mt-1">
                                 <span className="text-gray-600">Gross Up Final</span>
-                                <span className="font-medium text-orange-700">{formatCurrency(selectedRecord.final_gross_up)}</span>
+                                <span className="font-medium text-orange-700">{formatCurrency(selectedRecord.final_gross_up || 0)}</span>
                               </div>
                               <div className="flex items-center justify-between text-sm">
                                 <span className="text-gray-600">TER Rate Final</span>

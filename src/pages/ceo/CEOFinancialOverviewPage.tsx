@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useState } from 'react';
 import {
   DollarSign,
@@ -14,6 +13,7 @@ import {
   Briefcase,
   CheckCircle,
   Clock,
+  ArrowUpRight,
 } from 'lucide-react';
 import {
   XAxis,
@@ -65,7 +65,7 @@ export function CEOFinancialOverviewPage() {
 
   // Get user's company
   const userCompanyId = user?.employee?.company_id;
-  const userCompanyName = user?.employee?.company?.name || 'Your Company';
+  const userCompanyName = 'Your Company';
 
   useEffect(() => {
     const fetchData = async () => {

@@ -447,7 +447,7 @@ export interface TableColumn<T> {
 }
 
 export interface PaginationParams {
-  page: number;
-  limit: number;
+  page?: number;
+  limit?: number;
   search?: string;
 }

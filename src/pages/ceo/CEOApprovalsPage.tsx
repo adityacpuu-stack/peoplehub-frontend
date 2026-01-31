@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useState, useEffect } from 'react';
 import {
   ClipboardList,
@@ -15,7 +14,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { leaveService } from '@/services/leave.service';
-import type { LeaveRequest } from '@/services/leave.service';
+import type { LeaveRequest } from '@/types';
 import { overtimeService, type Overtime } from '@/services/overtime.service';
 import { PageSpinner } from '@/components/ui';
 import toast from 'react-hot-toast';
@@ -66,10 +65,10 @@ export function CEOApprovalsPage() {
       const leaveItems: ApprovalItem[] = leaveRequests.map((leave) => ({
         id: leave.id,
         type: 'leave' as const,
-        title: `${leave.leave_type?.name || 'Leave'} Request`,
+        title: `${leave.leaveType?.name || 'Leave'} Request`,
         requester: leave.employee?.name || 'Unknown',
         department: leave.employee?.department?.name || '-',
-        company: leave.employee?.company?.name || '-',
+        company: '-',
         status: leave.status as 'pending' | 'approved' | 'rejected',
         priority: leave.total_days > 5 ? 'high' : 'normal',
         submittedDate: leave.created_at,

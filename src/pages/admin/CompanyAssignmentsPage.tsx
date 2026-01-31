@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useState, useEffect } from 'react';
 import { Plus, Trash2, Building2, User, Search, X } from 'lucide-react';
 import { toast } from 'react-hot-toast';
@@ -6,16 +5,16 @@ import { companyAssignmentService } from '@/services/company-assignment.service'
 import type { CompanyAssignment, AvailableEmployee } from '@/services/company-assignment.service';
 import { companyService } from '@/services/company.service';
 
-interface Company {
+interface AssignmentCompany {
   id: number;
   name: string;
   code: string;
-  company_type: string;
+  company_type?: string;
 }
 
 export default function CompanyAssignmentsPage() {
   const [assignments, setAssignments] = useState<CompanyAssignment[]>([]);
-  const [companies, setCompanies] = useState<Company[]>([]);
+  const [companies, setCompanies] = useState<AssignmentCompany[]>([]);
   const [availableEmployees, setAvailableEmployees] = useState<AvailableEmployee[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);

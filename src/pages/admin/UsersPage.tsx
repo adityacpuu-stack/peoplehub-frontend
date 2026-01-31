@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useState, useCallback } from 'react';
 import {
   UserCog,
@@ -47,9 +46,9 @@ interface Role {
   level: number;
 }
 
-interface Employee {
+interface UnlinkedEmployee {
   id: number;
-  employee_id: string;
+  employee_id?: string | null;
   name: string;
 }
 
@@ -65,7 +64,7 @@ export function UsersPage() {
 
   // Roles and employees for form
   const [roles, setRoles] = useState<Role[]>([]);
-  const [unlinkedEmployees, setUnlinkedEmployees] = useState<Employee[]>([]);
+  const [unlinkedEmployees, setUnlinkedEmployees] = useState<UnlinkedEmployee[]>([]);
 
   // Modal states
   const [deleteModal, setDeleteModal] = useState<{ open: boolean; user: User | null }>({

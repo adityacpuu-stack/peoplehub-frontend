@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Search,
   MoreVertical,
@@ -105,7 +104,7 @@ export function MyTeamPage() {
       not_checked_in: 'Not Checked In',
       absent: 'Absent',
     };
-    const icons: Record<string, JSX.Element> = {
+    const icons: Record<string, React.ReactElement> = {
       present: <CheckCircle className="h-3.5 w-3.5" />,
       late: <AlertCircle className="h-3.5 w-3.5" />,
       leave: <Calendar className="h-3.5 w-3.5" />,
