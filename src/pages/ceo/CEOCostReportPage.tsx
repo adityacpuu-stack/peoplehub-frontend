@@ -3,18 +3,12 @@ import {
   DollarSign,
   Building2,
   Users,
-  TrendingUp,
-  TrendingDown,
   Calculator,
   PiggyBank,
   AlertCircle,
   Calendar,
-  ArrowUpRight,
-  ArrowDownRight,
 } from 'lucide-react';
 import {
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -22,10 +16,6 @@ import {
   ResponsiveContainer,
   BarChart,
   Bar,
-  PieChart,
-  Pie,
-  Cell,
-  Legend,
 } from 'recharts';
 import { PageSpinner } from '@/components/ui';
 import {
@@ -87,7 +77,7 @@ export function CEOCostReportPage() {
   };
 
   const companies = groupData?.companies || [];
-  const departmentDistribution = groupData?.department_distribution || [];
+  const _departmentDistribution = groupData?.department_distribution || [];
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('id-ID', {
@@ -123,7 +113,7 @@ export function CEOCostReportPage() {
   }));
 
   // Colors
-  const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4'];
+  const _COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4'];
 
   return (
     <div className="space-y-6">
@@ -226,7 +216,7 @@ export function CEOCostReportPage() {
                     tickFormatter={(value) => `${(value / 1000000000).toFixed(0)}B`}
                   />
                   <Tooltip
-                    formatter={(value: number) => formatCompactCurrency(value)}
+                    formatter={(value: number | undefined) => value !== undefined ? formatCompactCurrency(value) : ''}
                     contentStyle={{
                       backgroundColor: 'white',
                       border: 'none',
@@ -266,7 +256,7 @@ export function CEOCostReportPage() {
                   />
                   <YAxis dataKey="name" type="category" tick={{ fontSize: 10 }} stroke="#9ca3af" width={50} />
                   <Tooltip
-                    formatter={(value: number) => formatCurrency(value)}
+                    formatter={(value: number | undefined) => value !== undefined ? formatCurrency(value) : ''}
                     contentStyle={{
                       backgroundColor: 'white',
                       border: 'none',

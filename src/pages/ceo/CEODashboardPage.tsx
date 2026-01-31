@@ -11,21 +11,15 @@ import {
   Crown,
   Target,
   DollarSign,
-  BarChart2,
   PieChart as PieChartIcon,
   Calendar,
-  Briefcase,
   Award,
   Building2,
   ArrowUpRight,
-  ArrowDownRight,
   Zap,
   AlertCircle,
-  ChevronRight,
 } from 'lucide-react';
 import {
-  AreaChart,
-  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -34,8 +28,6 @@ import {
   PieChart,
   Pie,
   Cell,
-  BarChart,
-  Bar,
   LineChart,
   Line,
   Legend,
@@ -55,7 +47,7 @@ export function CEODashboardPage() {
   const { user } = useAuthStore();
   const [groupData, setGroupData] = useState<GroupDashboard | null>(null);
   const [workforceData, setWorkforceData] = useState<WorkforceAnalytics | null>(null);
-  const [headcountData, setHeadcountData] = useState<HeadcountAnalytics | null>(null);
+  const [_headcountData, setHeadcountData] = useState<HeadcountAnalytics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -147,7 +139,7 @@ export function CEODashboardPage() {
     return 'Good Evening';
   };
 
-  const companyName = user?.companies?.map(c => c.name).join(' & ') || 'Your Companies';
+  const companyName = (user as { companies?: { name: string }[] } | null)?.companies?.map(c => c.name).join(' & ') || 'Your Companies';
 
   // Company overview from real data
   const companies = groupData?.companies || [];

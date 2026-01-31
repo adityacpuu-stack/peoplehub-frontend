@@ -4,11 +4,8 @@ import {
   Users,
   TrendingUp,
   Target,
-  Clock,
   AlertCircle,
   Calendar,
-  BarChart2,
-  CheckCircle,
 } from 'lucide-react';
 import {
   BarChart,

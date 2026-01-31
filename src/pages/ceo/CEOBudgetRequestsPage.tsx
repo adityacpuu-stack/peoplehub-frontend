@@ -3,15 +3,10 @@ import {
   Wallet,
   Clock,
   CheckCircle,
-  XCircle,
-  Calendar,
   User,
   Building2,
   DollarSign,
-  TrendingUp,
-  Filter,
   Search,
-  FileText,
   PieChart as PieChartIcon,
 } from 'lucide-react';
 import {
@@ -255,7 +250,7 @@ export function CEOBudgetRequestsPage() {
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value: number) => formatCompactCurrency(value)} />
+                  <Tooltip formatter={(value: number | undefined) => value !== undefined ? formatCompactCurrency(value) : ''} />
                 </PieChart>
               </ResponsiveContainer>
             ) : (

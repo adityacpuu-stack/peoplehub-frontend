@@ -1,24 +1,17 @@
 import { useEffect, useState } from 'react';
 import {
   TrendingUp,
-  TrendingDown,
   Building2,
   Users,
   Target,
-  Award,
   BarChart2,
-  PieChart as PieChartIcon,
   ArrowUpRight,
   ArrowDownRight,
   AlertCircle,
-  Crown,
   Calendar,
   CheckCircle,
-  Clock,
 } from 'lucide-react';
 import {
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -44,10 +37,10 @@ import { useAuthStore } from '@/stores/auth.store';
 import { formatNumber } from '@/lib/utils';
 
 export function CEOCompanyPerformancePage() {
-  const { user } = useAuthStore();
+  const { user: _user } = useAuthStore();
   const [groupData, setGroupData] = useState<GroupDashboard | null>(null);
-  const [workforceData, setWorkforceData] = useState<WorkforceAnalytics | null>(null);
-  const [headcountData, setHeadcountData] = useState<HeadcountAnalytics | null>(null);
+  const [_workforceData, setWorkforceData] = useState<WorkforceAnalytics | null>(null);
+  const [_headcountData, setHeadcountData] = useState<HeadcountAnalytics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 

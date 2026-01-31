@@ -10,7 +10,6 @@ import {
   CheckCircle,
   AlertCircle,
   Globe,
-  Edit,
 } from 'lucide-react';
 import {
   announcementService,
@@ -48,7 +47,7 @@ export function CEOAnnouncementsPage() {
       setIsLoading(true);
       setError(null);
       const [announcementsRes, statsRes] = await Promise.all([
-        announcementService.getAll({ limit: 100, is_published: true }),
+        announcementService.getAll({ page: 1, limit: 100, is_published: true }),
         announcementService.getStatistics(),
       ]);
       setAnnouncements(announcementsRes.data);

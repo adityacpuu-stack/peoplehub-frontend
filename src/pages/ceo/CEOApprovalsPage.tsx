@@ -13,7 +13,8 @@ import {
   Briefcase,
   Loader2,
 } from 'lucide-react';
-import { leaveService, type LeaveRequest } from '@/services/leave.service';
+import { leaveService } from '@/services/leave.service';
+import type { LeaveRequest } from '@/services/leave.service';
 import { overtimeService, type Overtime } from '@/services/overtime.service';
 import { PageSpinner } from '@/components/ui';
 import toast from 'react-hot-toast';

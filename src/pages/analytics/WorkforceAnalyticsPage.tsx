@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Users,
   Building2,
@@ -75,7 +75,7 @@ export function WorkforceAnalyticsPage() {
   } : null;
 
   // Use real data from analytics
-  const genderDistribution = analytics?.gender_distribution || [];
+  const _genderDistribution = analytics?.gender_distribution || [];
   const employmentTypes = analytics?.employment_type_distribution || [];
   const ageDistribution = analytics?.age_distribution || [];
   const tenureDistribution = analytics?.tenure_distribution || [];
@@ -312,7 +312,7 @@ export function WorkforceAnalyticsPage() {
                   );
                   acc.offset = endAngle;
                   return acc;
-                }, { paths: [] as JSX.Element[], offset: 0 }).paths}
+                }, { paths: [] as React.ReactElement[], offset: 0 }).paths}
                 <circle cx="50" cy="50" r="25" fill="white" />
               </svg>
               <div className="absolute inset-0 flex items-center justify-center">

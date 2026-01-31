@@ -3,18 +3,15 @@ import {
   Target,
   Plus,
   CheckCircle,
-  Clock,
   AlertCircle,
   Calendar,
-  Building2,
   ChevronRight,
   TrendingUp,
   Users,
   DollarSign,
   Award,
-  Filter,
+  Building2,
 } from 'lucide-react';
-import { formatNumber } from '@/lib/utils';
 
 // Mock data for company goals
 const mockGoals = [
@@ -108,7 +105,7 @@ const categoryIcons: Record<string, React.ElementType> = {
 
 export function CEOCompanyGoalsPage() {
   const [filter, setFilter] = useState<string>('all');
-  const [selectedGoal, setSelectedGoal] = useState<typeof mockGoals[0] | null>(null);
+  const [_selectedGoal, setSelectedGoal] = useState<typeof mockGoals[0] | null>(null);
 
   const filteredGoals = filter === 'all'
     ? mockGoals

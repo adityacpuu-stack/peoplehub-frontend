@@ -3,34 +3,24 @@ import {
   Clock,
   Calendar,
   Building2,
-  Users,
   CheckCircle,
   XCircle,
   AlertTriangle,
   TrendingUp,
-  TrendingDown,
   Download,
-  Filter,
   BarChart3,
   Loader2,
-  ChevronLeft,
-  ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { dashboardService, type GroupDashboard } from '@/services/dashboard.service';
 import toast from 'react-hot-toast';
-
-// Chart colors
-const CHART_COLORS = [
-  '#10B981', '#3B82F6', '#F59E0B', '#EF4444', '#8B5CF6',
-];
 
 export function AttendanceReportsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [data, setData] = useState<GroupDashboard | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState('this_week');
   const [selectedCompany, setSelectedCompany] = useState('all');
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [_currentDate, _setCurrentDate] = useState(new Date());
 
   useEffect(() => {
     fetchData();
