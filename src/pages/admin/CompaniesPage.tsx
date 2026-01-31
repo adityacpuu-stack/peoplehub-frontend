@@ -15,8 +15,6 @@ import {
   MoreVertical,
   X,
   Loader2,
-  Hash,
-  FileText,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {

@@ -218,7 +218,7 @@ export function Header() {
     navigate('/login');
   };
 
-  const getInitials = () => {
+  const _getInitials = () => {
     if (user?.employee?.name) {
       const names = user.employee.name.split(' ');
       if (names.length >= 2) {
@@ -233,7 +233,7 @@ export function Header() {
     return user?.employee?.name || user?.email?.split('@')[0] || 'User';
   };
 
-  const getPrimaryRole = () => {
+  const _getPrimaryRole = () => {
     return user?.roles?.[0] || 'Employee';
   };
 
@@ -303,7 +303,7 @@ export function Header() {
                   <Home className="h-4 w-4" />
                   <span className="font-medium">Dashboard</span>
                 </Link>
-                {breadcrumbs.slice(1).map((crumb, index) => (
+                {breadcrumbs.slice(1).map((crumb, _index) => (
                   <div key={crumb.path} className="flex items-center gap-2">
                     <ChevronRight className="h-4 w-4 text-gray-400" />
                     {crumb.isLast ? (

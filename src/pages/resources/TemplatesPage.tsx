@@ -52,9 +52,14 @@ const fileTypes = [
   { value: 'other', label: 'Other' },
 ];
 
+interface CompanyItem {
+  id: number;
+  name: string;
+}
+
 export function TemplatesPage() {
   const { user } = useAuthStore();
-  const companies = user?.companies || [];
+  const companies: CompanyItem[] = (user as { companies?: CompanyItem[] })?.companies || [];
   const [selectedCompanyId, setSelectedCompanyId] = useState<number>(companies[0]?.id || 1);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -96,11 +101,12 @@ export function TemplatesPage() {
       setError(null);
       const [templatesRes, statsRes] = await Promise.all([
         templateService.getAll({
+          page: 1,
+          limit: 100,
           company_id: selectedCompanyId,
           search: searchQuery || undefined,
           category: selectedCategory !== 'all' ? selectedCategory as TemplateCategory : undefined,
           file_type: selectedFileType !== 'all' ? selectedFileType as TemplateFileType : undefined,
-          limit: 100,
         }),
         templateService.getStatistics(selectedCompanyId),
       ]);
@@ -345,7 +351,7 @@ export function TemplatesPage() {
                   onChange={(e) => setSelectedCompanyId(Number(e.target.value))}
                   className="bg-white/20 backdrop-blur-sm border border-white/30 text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-white/50 min-w-[200px]"
                 >
-                  {companies.map((company) => (
+                  {companies.map((company: CompanyItem) => (
                     <option key={company.id} value={company.id} className="text-gray-900">
                       {company.name}
                     </option>

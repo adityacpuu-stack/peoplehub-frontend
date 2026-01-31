@@ -335,7 +335,7 @@ export function RequestsPage() {
                         {getStatusBadge(request.status)}
                       </div>
                       <p className="text-sm text-gray-500">
-                        {request.employee?.employee_id} • {request.employee?.department?.name || 'No Department'} • {request.employee?.position?.name || request.employee?.job_title || 'No Position'}
+                        {request.employee?.employee_id} • {request.employee?.department?.name || 'No Department'} • {request.employee?.position?.name || 'No Position'}
                       </p>
                       <p className="text-xs text-gray-400 mt-1">
                         Submitted: {formatDateTime(request.created_at)}
@@ -392,9 +392,9 @@ export function RequestsPage() {
                       </p>
                     </div>
                     <div>
-                      <span className="text-sm text-gray-500">Company</span>
+                      <span className="text-sm text-gray-500">Leave Type</span>
                       <p className="font-medium text-gray-900">
-                        {request.employee?.company?.name || '-'}
+                        {request.leaveType?.name || '-'}
                       </p>
                     </div>
                   </div>

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { XCircle, X, AlertTriangle, WifiOff, ShieldX, RefreshCw } from 'lucide-react';
+import { X, AlertTriangle, WifiOff, ShieldX, RefreshCw } from 'lucide-react';
 
 interface ErrorModalProps {
   isOpen: boolean;

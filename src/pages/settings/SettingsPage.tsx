@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '@/stores/auth.store';
 import { settingsService, type CompanySettings, type AttendanceSettings, type PayrollSettings, type NotificationPreferences } from '@/services/settings.service';
@@ -70,14 +70,14 @@ export function SettingsPage() {
   const isEmployee = !isSuperAdmin && !isGroupCEO && !isCEO && !isHRManager && !isHRStaff && !isManager && !isFinanceManager;
 
   // CEO can view but not edit company settings (view-only mode)
-  const canEditCompanySettings = isSuperAdmin || isGroupCEO || isHRManager;
-  const canEditAttendanceSettings = isSuperAdmin || isGroupCEO || isHRManager;
-  const canEditPayrollSettings = isSuperAdmin || isGroupCEO || isHRManager || isFinanceManager;
+  const _canEditCompanySettings = isSuperAdmin || isGroupCEO || isHRManager;
+  const _canEditAttendanceSettings = isSuperAdmin || isGroupCEO || isHRManager;
+  const _canEditPayrollSettings = isSuperAdmin || isGroupCEO || isHRManager || isFinanceManager;
   const isViewOnlyMode = isCEO && !isSuperAdmin && !isGroupCEO;
 
   // Get available tabs based on role
   const getAvailableTabs = () => {
-    const tabs: { id: SettingsTab; label: string; icon: JSX.Element }[] = [];
+    const tabs: { id: SettingsTab; label: string; icon: React.ReactElement }[] = [];
 
     // Everyone can access notification settings
     tabs.push({
@@ -342,9 +342,9 @@ export function SettingsPage() {
               )}
 
               {/* Show company name for CEO (can't switch) */}
-              {isCEO && !canSelectCompany && user?.employee?.company_name && (
+              {isCEO && !canSelectCompany && (user?.employee as { company_name?: string })?.company_name && (
                 <div className="px-4 py-2.5 bg-white/20 backdrop-blur-xl text-white rounded-xl border border-white/20">
-                  <span className="font-medium">{user.employee.company_name}</span>
+                  <span className="font-medium">{(user?.employee as { company_name?: string })?.company_name}</span>
                 </div>
               )}
 

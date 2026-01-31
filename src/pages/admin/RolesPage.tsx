@@ -8,7 +8,6 @@ import {
   Key,
   Users,
   Lock,
-  Unlock,
   AlertCircle,
   ChevronDown,
   ChevronRight,
@@ -135,7 +134,7 @@ const permissionModules = [
 ];
 
 export function RolesPage() {
-  const [roles, setRoles] = useState(mockRoles);
+  const [roles, _setRoles] = useState(mockRoles);
   const [search, setSearch] = useState('');
   const [selectedRole, setSelectedRole] = useState<typeof mockRoles[0] | null>(null);
   const [expandedModules, setExpandedModules] = useState<string[]>([]);

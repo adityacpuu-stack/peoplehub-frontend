@@ -8,8 +8,6 @@ import {
   CalendarDays,
   Wallet,
   Target,
-  CheckCircle,
-  XCircle,
   Loader2,
   ToggleLeft,
   ToggleRight,

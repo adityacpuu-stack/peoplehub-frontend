@@ -52,9 +52,14 @@ const priorities = [
   { value: 'urgent', label: 'Urgent' },
 ];
 
+interface CompanyItem {
+  id: number;
+  name: string;
+}
+
 export function AnnouncementsPage() {
   const { user } = useAuthStore();
-  const companies = user?.companies || [];
+  const companies: CompanyItem[] = (user as { companies?: CompanyItem[] })?.companies || [];
   const [selectedCompanyId, setSelectedCompanyId] = useState<number>(companies[0]?.id || 1);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -108,6 +113,7 @@ export function AnnouncementsPage() {
 
       const [announcementsRes, statsRes] = await Promise.all([
         announcementService.getAll({
+          page: 1,
           company_id: selectedCompanyId,
           search: searchQuery || undefined,
           category: selectedCategory !== 'all' ? selectedCategory as AnnouncementCategory : undefined,
@@ -254,7 +260,7 @@ export function AnnouncementsPage() {
     setActiveDropdown(null);
   };
 
-  const handleUnpublish = async (announcement: Announcement) => {
+  const _handleUnpublish = async (announcement: Announcement) => {
     try {
       await announcementService.unpublish(announcement.id);
       fetchAnnouncements();
@@ -366,7 +372,7 @@ export function AnnouncementsPage() {
                 onChange={(e) => setSelectedCompanyId(Number(e.target.value))}
                 className="md:hidden bg-white/20 backdrop-blur-sm border border-white/30 text-white text-sm rounded-lg px-2 py-1.5 focus:outline-none"
               >
-                {companies.map((company) => (
+                {companies.map((company: CompanyItem) => (
                   <option key={company.id} value={company.id} className="text-gray-900">
                     {company.name}
                   </option>
@@ -405,7 +411,7 @@ export function AnnouncementsPage() {
                 onChange={(e) => setSelectedCompanyId(Number(e.target.value))}
                 className="hidden md:block bg-white/20 backdrop-blur-sm border border-white/30 text-white text-sm rounded-lg px-3 py-1.5 focus:outline-none ml-2"
               >
-                {companies.map((company) => (
+                {companies.map((company: CompanyItem) => (
                   <option key={company.id} value={company.id} className="text-gray-900">
                     {company.name}
                   </option>
@@ -746,7 +752,7 @@ export function AnnouncementsPage() {
                         <Building2 className="h-5 w-5 mx-auto mb-1" />
                         <span className="text-sm font-medium">Current Company</span>
                         <p className="text-xs text-gray-500 mt-0.5">
-                          {companies.find(c => c.id === selectedCompanyId)?.name || 'Selected'}
+                          {companies.find((c: CompanyItem) => c.id === selectedCompanyId)?.name || 'Selected'}
                         </p>
                       </button>
                       <button
@@ -782,7 +788,7 @@ export function AnnouncementsPage() {
                       <div className="mt-3 p-3 bg-gray-50 rounded-lg">
                         <label className="block text-xs font-medium text-gray-600 mb-2">Select target companies:</label>
                         <div className="space-y-2">
-                          {companies.map((company) => (
+                          {companies.map((company: CompanyItem) => (
                             <label key={company.id} className="flex items-center gap-2 cursor-pointer">
                               <input
                                 type="checkbox"

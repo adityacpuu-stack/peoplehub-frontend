@@ -459,7 +459,7 @@ export function LeaveEntitlementsPage() {
 
     try {
       // Fetch ALL employees (not just current page)
-      const params: { limit: number; company_id?: number } = { limit: 1000 };
+      const params: { page: number; limit: number; company_id?: number } = { page: 1, limit: 1000 };
       if (filterCompany !== 'all') {
         params.company_id = Number(filterCompany);
       }

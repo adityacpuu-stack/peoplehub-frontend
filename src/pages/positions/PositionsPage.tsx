@@ -90,9 +90,10 @@ export function PositionsPage() {
       const response = await positionService.getAll({
         company_id: selectedCompanyId,
         limit: 100,
+        page: 1,
         status: 'active'
       });
-      setPositions(response.data as Position[]);
+      setPositions(response.data as unknown as Position[]);
     } catch {
       toast.error('Failed to load position data');
     } finally {

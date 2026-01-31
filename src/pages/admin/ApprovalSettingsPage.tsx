@@ -3,7 +3,6 @@ import {
   Users,
   Search,
   Save,
-  Building,
   ChevronLeft,
   ChevronRight,
   Filter,

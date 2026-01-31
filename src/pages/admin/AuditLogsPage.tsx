@@ -143,7 +143,7 @@ const actions = ['All', 'login', 'logout', 'create', 'update', 'delete'];
 const statuses = ['All', 'success', 'failed'];
 
 export function AuditLogsPage() {
-  const [logs, setLogs] = useState(mockAuditLogs);
+  const [logs, _setLogs] = useState(mockAuditLogs);
   const [search, setSearch] = useState('');
   const [selectedModule, setSelectedModule] = useState('All');
   const [selectedAction, setSelectedAction] = useState('All');
