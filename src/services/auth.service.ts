@@ -28,6 +28,7 @@ export const authService = {
   },
 
   resetPassword: async (data: {
+    email: string;
     token: string;
     password: string;
     password_confirmation: string;

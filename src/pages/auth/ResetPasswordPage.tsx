@@ -29,6 +29,7 @@ export function ResetPasswordPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
+  const email = searchParams.get('email');
   const isMobile = useIsMobile();
 
   const [isLoading, setIsLoading] = useState(false);
@@ -55,7 +56,7 @@ export function ResetPasswordPage() {
   ];
 
   const onSubmit = async (data: ResetPasswordFormData) => {
-    if (!token) {
+    if (!token || !email) {
       toast.error('Invalid reset link');
       return;
     }
@@ -63,6 +64,7 @@ export function ResetPasswordPage() {
     setIsLoading(true);
     try {
       await authService.resetPassword({
+        email,
         token,
         password: data.password,
         password_confirmation: data.password_confirmation,
@@ -81,8 +83,8 @@ export function ResetPasswordPage() {
     navigate('/login');
   };
 
-  // Invalid token state
-  if (!token) {
+  // Invalid token or email state
+  if (!token || !email) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50 p-6">
         <div className="w-full max-w-md text-center">
