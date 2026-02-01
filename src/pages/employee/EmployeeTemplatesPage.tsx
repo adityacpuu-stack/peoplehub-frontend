@@ -44,10 +44,10 @@ export function EmployeeTemplatesPage() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const companyId = user?.employee?.company_id;
+      // Fetch all active templates (no company filter for employees)
       const [templatesRes, stats] = await Promise.all([
-        templateService.getAll({ company_id: companyId, is_active: true }),
-        templateService.getStatistics(companyId),
+        templateService.getAll({ is_active: true }),
+        templateService.getStatistics(),
       ]);
       setTemplates(templatesRes.data);
       setStatistics(stats);
