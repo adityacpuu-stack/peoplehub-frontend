@@ -318,9 +318,10 @@ export const documentService = {
   uploadFile: async (file: File, folder?: string): Promise<{ file_path: string; file_name: string; file_size: number; mime_type: string }> => {
     const formData = new FormData();
     formData.append('file', file);
-    if (folder) formData.append('folder', folder);
 
-    const response = await api.post<ApiResponse<{ file_path: string; file_name: string; file_size: number; mime_type: string }>>('/upload', formData, {
+    // Backend expects folder in URL path: /upload/:folder
+    const uploadFolder = folder || 'documents';
+    const response = await api.post<ApiResponse<{ file_path: string; file_name: string; file_size: number; mime_type: string }>>(`/upload/${uploadFolder}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
     return response.data.data;

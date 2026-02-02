@@ -234,7 +234,7 @@ export const employeeDocumentService = {
   }> => {
     const formData = new FormData();
     formData.append('file', file);
-    const response = await api.post('/upload/document', formData, {
+    const response = await api.post('/upload/documents', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
     return response.data.data;
