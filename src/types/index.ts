@@ -281,7 +281,10 @@ export interface Department {
   head_id?: number;
   parent?: Department;
   head?: Employee;
-  is_active: boolean;
+  status: 'active' | 'inactive';
+  company_id?: number;
+  company?: { id: number; name: string };
+  employee_count?: number;
   created_at: string;
   updated_at: string;
 }

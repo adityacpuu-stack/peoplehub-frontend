@@ -20,7 +20,7 @@ export function DepartmentsPage() {
     description: '',
     head_id: undefined as number | undefined,
     parent_id: undefined as number | undefined,
-    is_active: true,
+    status: 'active' as 'active' | 'inactive',
   });
 
   useEffect(() => {
@@ -35,7 +35,7 @@ export function DepartmentsPage() {
 
   const fetchCompanies = async () => {
     try {
-      const response = await companyService.getAll({ is_active: true });
+      const response = await companyService.getAll({ status: true });
       setCompanies(response.data);
       if (response.data.length > 0) {
         setSelectedCompanyId(response.data[0].id);
@@ -66,8 +66,8 @@ export function DepartmentsPage() {
 
   const stats = {
     total: filteredDepartments.length,
-    active: filteredDepartments.filter(d => d.is_active).length,
-    inactive: filteredDepartments.filter(d => !d.is_active).length,
+    active: filteredDepartments.filter(d => d.status === 'active').length,
+    inactive: filteredDepartments.filter(d => d.status === 'inactive').length,
   };
 
   const handleOpenModal = (department?: Department) => {
@@ -79,7 +79,7 @@ export function DepartmentsPage() {
         description: department.description || '',
         head_id: department.head_id,
         parent_id: department.parent_id,
-        is_active: department.is_active,
+        status: department.status,
       });
     } else {
       setEditingDepartment(null);
@@ -89,7 +89,7 @@ export function DepartmentsPage() {
         description: '',
         head_id: undefined,
         parent_id: undefined,
-        is_active: true,
+        status: 'active' as 'active' | 'inactive',
       });
     }
     setShowModal(true);
@@ -357,7 +357,7 @@ export function DepartmentsPage() {
                       </p>
                     </td>
                     <td className="px-6 py-4 text-center">
-                      {dept.is_active ? (
+                      {dept.status === 'active' ? (
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
                           <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
                           Active
@@ -472,8 +472,8 @@ export function DepartmentsPage() {
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="radio"
-                        checked={formData.is_active}
-                        onChange={() => setFormData({ ...formData, is_active: true })}
+                        checked={formData.status === 'active'}
+                        onChange={() => setFormData({ ...formData, status: 'active' })}
                         className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
                       />
                       <span className="text-sm text-gray-700">Active</span>
@@ -481,8 +481,8 @@ export function DepartmentsPage() {
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="radio"
-                        checked={!formData.is_active}
-                        onChange={() => setFormData({ ...formData, is_active: false })}
+                        checked={formData.status === 'inactive'}
+                        onChange={() => setFormData({ ...formData, status: 'inactive' })}
                         className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
                       />
                       <span className="text-sm text-gray-700">Inactive</span>
