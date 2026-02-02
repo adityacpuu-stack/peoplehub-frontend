@@ -35,7 +35,7 @@ export function DepartmentsPage() {
 
   const fetchCompanies = async () => {
     try {
-      const response = await companyService.getAll({ status: true });
+      const response = await companyService.getAll({ status: 'active' });
       setCompanies(response.data);
       if (response.data.length > 0) {
         setSelectedCompanyId(response.data[0].id);
