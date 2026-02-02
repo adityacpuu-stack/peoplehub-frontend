@@ -120,9 +120,8 @@ export function EmployeeTemplatesPage() {
       // Track download
       await templateService.trackDownload(template.id);
 
-      // Download file
-      const url = `${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/uploads/${template.file_path}`;
-      const response = await fetch(url);
+      // Download file directly from S3 URL
+      const response = await fetch(template.file_path);
       const blob = await response.blob();
       const downloadUrl = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -144,7 +143,8 @@ export function EmployeeTemplatesPage() {
 
   const handlePreview = (template: Template) => {
     if (template.file_path) {
-      window.open(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/uploads/${template.file_path}`, '_blank');
+      // Open S3 URL directly
+      window.open(template.file_path, '_blank');
     }
   };
 
