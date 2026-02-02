@@ -107,7 +107,7 @@ export function AttendancePage() {
 
   const fetchEmployees = async () => {
     try {
-      const response = await employeeService.getAll({ page: 1, limit: 500 });
+      const response = await employeeService.getAll({ page: 1, limit: 500, employment_status: 'active' });
       setEmployees(response.data);
     } catch (error) {
       console.error('Failed to fetch employees:', error);

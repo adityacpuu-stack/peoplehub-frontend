@@ -62,9 +62,17 @@ export const leaveService = {
   // MANAGER ROUTES
   // ==========================================
 
-  // Get pending approvals
-  getPendingApprovals: async (): Promise<LeaveRequest[]> => {
-    const response = await api.get<ApiResponse<LeaveRequest[]>>('/leaves/pending-approvals');
+  // Get pending approvals (or all team leaves with status filter)
+  getPendingApprovals: async (status?: string): Promise<LeaveRequest[]> => {
+    const params = status ? { status } : {};
+    const response = await api.get<ApiResponse<LeaveRequest[]>>('/leaves/pending-approvals', { params });
+    return response.data.data;
+  },
+
+  // Get all team leaves
+  getTeamLeaves: async (status?: string): Promise<LeaveRequest[]> => {
+    const params = status && status !== 'all' ? { status } : {};
+    const response = await api.get<ApiResponse<LeaveRequest[]>>('/leaves/pending-approvals', { params });
     return response.data.data;
   },
 

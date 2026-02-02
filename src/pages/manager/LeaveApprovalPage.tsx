@@ -61,7 +61,8 @@ export function LeaveApprovalPage() {
   const fetchLeaveRequests = async () => {
     setIsLoading(true);
     try {
-      const data = await leaveService.getPendingApprovals();
+      // Fetch all team leaves (no status filter = get all)
+      const data = await leaveService.getTeamLeaves();
       setLeaveRequests(data);
     } catch (error: any) {
       console.error('Failed to fetch leave requests:', error);
@@ -360,15 +361,15 @@ export function LeaveApprovalPage() {
         {filteredRequests.map((request) => (
           <div
             key={request.id}
-            className={`bg-white rounded-xl border hover:shadow-lg transition-all ${
-              request.status === 'pending' ? 'border-amber-200 ring-1 ring-amber-100' : 'border-gray-200'
+            className={`bg-white rounded-2xl border overflow-hidden hover:shadow-lg transition-all ${
+              request.status === 'pending' ? 'border-amber-200 shadow-amber-100/50 shadow-md' : 'border-gray-200'
             }`}
           >
-            <div className="p-5">
-              <div className="flex items-start justify-between gap-4">
-                {/* Employee Info */}
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-violet-600 rounded-xl flex items-center justify-center text-white font-bold">
+            {/* Card Header - Employee Info */}
+            <div className={`px-5 py-4 ${request.status === 'pending' ? 'bg-gradient-to-r from-amber-50 to-orange-50' : 'bg-gray-50'}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 bg-gradient-to-br from-purple-500 to-violet-600 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-purple-500/30">
                     {request.employee?.name
                       ?.split(' ')
                       .map((n) => n[0])
@@ -377,29 +378,25 @@ export function LeaveApprovalPage() {
                   </div>
                   <div>
                     <h3 className="font-semibold text-gray-900">{request.employee?.name || 'Unknown'}</h3>
-                    <p className="text-sm text-gray-500">
+                    <p className="text-xs text-gray-500">
                       {request.employee?.employee_id} • {request.employee?.position?.name || '-'}
                     </p>
                   </div>
                 </div>
-
-                {/* Status & Actions */}
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                   {getStatusBadge(request.status)}
                   <div className="relative">
                     <button
                       onClick={() => setActiveDropdown(activeDropdown === request.id ? null : request.id)}
-                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                      className="p-1.5 hover:bg-white/80 rounded-lg transition-colors"
                     >
                       <MoreVertical className="h-4 w-4 text-gray-500" />
                     </button>
-
-                    {/* Dropdown Menu */}
                     {activeDropdown === request.id && (
-                      <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-xl border border-gray-200 py-1 z-10">
+                      <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-xl shadow-xl border border-gray-200 py-1 z-10">
                         <button
                           onClick={() => handleViewDetail(request)}
-                          className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
                         >
                           <Eye className="h-4 w-4" />
                           View Details
@@ -409,7 +406,7 @@ export function LeaveApprovalPage() {
                             <button
                               onClick={() => handleApprove(request)}
                               disabled={isProcessing}
-                              className="w-full flex items-center gap-2 px-4 py-2 text-sm text-green-700 hover:bg-green-50 disabled:opacity-50"
+                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-green-700 hover:bg-green-50 disabled:opacity-50"
                             >
                               <Check className="h-4 w-4" />
                               Approve
@@ -417,7 +414,7 @@ export function LeaveApprovalPage() {
                             <button
                               onClick={() => openRejectModal(request)}
                               disabled={isProcessing}
-                              className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-50"
+                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-50"
                             >
                               <X className="h-4 w-4" />
                               Reject
@@ -429,64 +426,104 @@ export function LeaveApprovalPage() {
                   </div>
                 </div>
               </div>
+            </div>
 
-              {/* Request Details */}
-              <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Card Body */}
+            <div className="px-5 py-4">
+              {/* Request Details Grid */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 pb-4 border-b border-gray-100">
                 <div>
-                  <p className="text-xs text-gray-500 mb-1">Leave Type</p>
+                  <p className="text-[11px] uppercase tracking-wider text-gray-400 font-medium mb-1">Leave Type</p>
                   {getLeaveTypeBadge(request.leaveType)}
                 </div>
-                <div className="flex items-start gap-2">
-                  <CalendarRange className="h-4 w-4 text-gray-400 mt-0.5" />
-                  <div>
-                    <p className="text-xs text-gray-500">Date</p>
-                    <p className="text-sm font-medium text-gray-900">
-                      {formatDateRange(request.start_date, request.end_date)}
-                    </p>
-                  </div>
+                <div>
+                  <p className="text-[11px] uppercase tracking-wider text-gray-400 font-medium mb-1">Date</p>
+                  <p className="text-sm font-semibold text-gray-900">
+                    {formatDateRange(request.start_date, request.end_date)}
+                  </p>
                 </div>
-                <div className="flex items-start gap-2">
-                  <CalendarDays className="h-4 w-4 text-gray-400 mt-0.5" />
-                  <div>
-                    <p className="text-xs text-gray-500">Duration</p>
-                    <p className="text-sm font-medium text-gray-900">
-                      {request.total_days} day{request.total_days > 1 ? 's' : ''}
-                      {request.start_half_day || request.end_half_day ? ' (half day)' : ''}
-                    </p>
-                  </div>
+                <div>
+                  <p className="text-[11px] uppercase tracking-wider text-gray-400 font-medium mb-1">Duration</p>
+                  <p className="text-sm font-semibold text-gray-900">
+                    {request.total_days} day{request.total_days > 1 ? 's' : ''}
+                    {(request.start_half_day || request.end_half_day) && (
+                      <span className="text-xs text-gray-500 font-normal ml-1">(half day)</span>
+                    )}
+                  </p>
                 </div>
-                <div className="flex items-start gap-2">
-                  <Clock className="h-4 w-4 text-gray-400 mt-0.5" />
-                  <div>
-                    <p className="text-xs text-gray-500">Submitted</p>
-                    <p className="text-sm font-medium text-gray-900">{formatDateTime(request.created_at)}</p>
-                  </div>
+                <div>
+                  <p className="text-[11px] uppercase tracking-wider text-gray-400 font-medium mb-1">Submitted</p>
+                  <p className="text-sm font-semibold text-gray-900">{formatDateTime(request.created_at)}</p>
                 </div>
               </div>
 
-              {/* Reason */}
-              {request.reason && (
-                <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-                  <p className="text-xs text-gray-500 mb-1">Reason</p>
-                  <p className="text-sm text-gray-700">{request.reason}</p>
-                  {request.document_name && (
-                    <div className="mt-2 flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-purple-500" />
-                      <span className="text-sm text-purple-600 hover:underline cursor-pointer">
-                        {request.document_name}
-                      </span>
+              {/* Additional Info Section */}
+              <div className="mt-4 space-y-3">
+                {/* Reason */}
+                {request.reason && (
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <FileText className="h-4 w-4 text-gray-500" />
                     </div>
-                  )}
-                </div>
-              )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[11px] uppercase tracking-wider text-gray-400 font-medium">Reason</p>
+                      <p className="text-sm text-gray-700 mt-0.5">{request.reason}</p>
+                      {request.document_name && (
+                        <div className="mt-1.5 inline-flex items-center gap-1.5 px-2 py-1 bg-purple-50 rounded-md">
+                          <FileText className="h-3.5 w-3.5 text-purple-500" />
+                          <span className="text-xs text-purple-600 hover:underline cursor-pointer">
+                            {request.document_name}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
-              {/* Quick Actions for Pending */}
+                {/* Task Handover & Emergency Contact Row */}
+                {(request.work_handover || request.contact_during_leave) && (
+                  <div className="flex flex-wrap gap-3">
+                    {request.work_handover && (
+                      <div className="flex items-start gap-3 flex-1 min-w-[200px]">
+                        <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                          <Briefcase className="h-4 w-4 text-blue-600" />
+                        </div>
+                        <div>
+                          <p className="text-[11px] uppercase tracking-wider text-blue-500 font-medium">Task Handover</p>
+                          <p className="text-sm font-medium text-gray-900 mt-0.5">{request.work_handover}</p>
+                        </div>
+                      </div>
+                    )}
+                    {request.contact_during_leave && (
+                      <div className="flex items-start gap-3 flex-1 min-w-[200px]">
+                        <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                          <AlertCircle className="h-4 w-4 text-orange-600" />
+                        </div>
+                        <div>
+                          <p className="text-[11px] uppercase tracking-wider text-orange-500 font-medium">Emergency Contact</p>
+                          <p className="text-sm font-medium text-gray-900 mt-0.5">{request.contact_during_leave}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Emergency Badge */}
+                {request.is_emergency && (
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-red-100 rounded-lg">
+                    <AlertCircle className="h-4 w-4 text-red-600" />
+                    <span className="text-sm font-medium text-red-700">Emergency Leave Request</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons for Pending */}
               {request.status === 'pending' && (
-                <div className="mt-4 flex items-center gap-3 pt-4 border-t border-gray-100">
+                <div className="mt-4 pt-4 border-t border-gray-100 flex items-center gap-3">
                   <button
                     onClick={() => handleApprove(request)}
                     disabled={isProcessing}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors disabled:opacity-50"
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl hover:from-green-700 hover:to-emerald-700 transition-all shadow-lg shadow-green-500/30 disabled:opacity-50 font-medium"
                   >
                     {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                     Approve
@@ -494,7 +531,7 @@ export function LeaveApprovalPage() {
                   <button
                     onClick={() => openRejectModal(request)}
                     disabled={isProcessing}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 border border-red-200 text-red-600 rounded-xl hover:bg-red-50 transition-colors disabled:opacity-50"
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-white border-2 border-red-200 text-red-600 rounded-xl hover:bg-red-50 hover:border-red-300 transition-all disabled:opacity-50 font-medium"
                   >
                     <X className="h-4 w-4" />
                     Reject
@@ -502,24 +539,35 @@ export function LeaveApprovalPage() {
                 </div>
               )}
 
-              {/* Approval Info */}
+              {/* Approval/Rejection Info */}
               {request.status !== 'pending' && request.approver && (
-                <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between text-sm">
-                  <span className="text-gray-500">
-                    {request.status === 'approved' ? 'Approved' : 'Rejected'} by {request.approver.name}
-                  </span>
-                  <span className="text-gray-400">
-                    {request.approved_at ? formatDateTime(request.approved_at) : ''}
-                    {request.rejected_at ? formatDateTime(request.rejected_at) : ''}
-                  </span>
-                </div>
-              )}
-
-              {/* Rejection Reason */}
-              {request.status === 'rejected' && request.rejection_reason && (
-                <div className="mt-2 p-3 bg-red-50 rounded-lg border border-red-100">
-                  <p className="text-xs text-red-600 mb-1">Rejection Reason</p>
-                  <p className="text-sm text-red-700">{request.rejection_reason}</p>
+                <div className="mt-4 pt-4 border-t border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                        request.status === 'approved' ? 'bg-green-100' : 'bg-red-100'
+                      }`}>
+                        {request.status === 'approved' ? (
+                          <Check className="h-3.5 w-3.5 text-green-600" />
+                        ) : (
+                          <X className="h-3.5 w-3.5 text-red-600" />
+                        )}
+                      </div>
+                      <span className="text-sm text-gray-600">
+                        {request.status === 'approved' ? 'Approved' : 'Rejected'} by <span className="font-medium text-gray-900">{request.approver.name}</span>
+                      </span>
+                    </div>
+                    <span className="text-xs text-gray-400">
+                      {request.approved_at ? formatDateTime(request.approved_at) : ''}
+                      {request.rejected_at ? formatDateTime(request.rejected_at) : ''}
+                    </span>
+                  </div>
+                  {request.status === 'rejected' && request.rejection_reason && (
+                    <div className="mt-3 p-3 bg-red-50 rounded-lg border border-red-100">
+                      <p className="text-xs font-medium text-red-600 mb-1">Rejection Reason</p>
+                      <p className="text-sm text-red-700">{request.rejection_reason}</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -544,87 +592,104 @@ export function LeaveApprovalPage() {
 
       {/* Team Leave Summary */}
       {leaveRequests.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h3 className="text-lg font-bold text-gray-900 mb-4">Team Leave Summary</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="p-4 bg-green-50 rounded-xl border border-green-100">
-              <div className="flex items-center gap-2 mb-2">
-                <Palmtree className="h-5 w-5 text-green-600" />
-                <span className="text-sm font-medium text-green-700">Annual Leave</span>
+        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+          <div className="px-5 py-4 bg-gradient-to-r from-purple-50 to-violet-50 border-b border-gray-100">
+            <h3 className="text-base font-bold text-gray-900">Team Leave Summary</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Approved leave statistics for your team</p>
+          </div>
+          <div className="p-5">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="relative overflow-hidden p-4 bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl border border-green-100">
+                <div className="absolute -top-4 -right-4 w-16 h-16 bg-green-200/30 rounded-full blur-xl" />
+                <div className="relative">
+                  <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center mb-3">
+                    <Palmtree className="h-5 w-5 text-green-600" />
+                  </div>
+                  <p className="text-2xl font-bold text-green-700">
+                    {leaveRequests
+                      .filter(
+                        (r) =>
+                          (r.leaveType?.code?.toLowerCase() === 'annual' ||
+                            r.leaveType?.name?.toLowerCase().includes('annual') ||
+                            r.leaveType?.name?.toLowerCase().includes('tahunan')) &&
+                          r.status === 'approved'
+                      )
+                      .reduce((sum, r) => sum + (r.total_days || 0), 0)}
+                    <span className="text-sm font-normal text-green-600 ml-1">days</span>
+                  </p>
+                  <p className="text-xs font-medium text-green-600 mt-1">Annual Leave</p>
+                </div>
               </div>
-              <p className="text-2xl font-bold text-green-700">
-                {leaveRequests
-                  .filter(
-                    (r) =>
-                      (r.leaveType?.code?.toLowerCase() === 'annual' ||
-                        r.leaveType?.name?.toLowerCase().includes('annual') ||
-                        r.leaveType?.name?.toLowerCase().includes('tahunan')) &&
-                      r.status === 'approved'
-                  )
-                  .reduce((sum, r) => sum + (r.total_days || 0), 0)}{' '}
-                days
-              </p>
-            </div>
-            <div className="p-4 bg-red-50 rounded-xl border border-red-100">
-              <div className="flex items-center gap-2 mb-2">
-                <Stethoscope className="h-5 w-5 text-red-600" />
-                <span className="text-sm font-medium text-red-700">Sick Leave</span>
+              <div className="relative overflow-hidden p-4 bg-gradient-to-br from-red-50 to-rose-50 rounded-xl border border-red-100">
+                <div className="absolute -top-4 -right-4 w-16 h-16 bg-red-200/30 rounded-full blur-xl" />
+                <div className="relative">
+                  <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center mb-3">
+                    <Stethoscope className="h-5 w-5 text-red-600" />
+                  </div>
+                  <p className="text-2xl font-bold text-red-700">
+                    {leaveRequests
+                      .filter(
+                        (r) =>
+                          (r.leaveType?.code?.toLowerCase() === 'sick' ||
+                            r.leaveType?.name?.toLowerCase().includes('sick') ||
+                            r.leaveType?.name?.toLowerCase().includes('sakit')) &&
+                          r.status === 'approved'
+                      )
+                      .reduce((sum, r) => sum + (r.total_days || 0), 0)}
+                    <span className="text-sm font-normal text-red-600 ml-1">days</span>
+                  </p>
+                  <p className="text-xs font-medium text-red-600 mt-1">Sick Leave</p>
+                </div>
               </div>
-              <p className="text-2xl font-bold text-red-700">
-                {leaveRequests
-                  .filter(
-                    (r) =>
-                      (r.leaveType?.code?.toLowerCase() === 'sick' ||
-                        r.leaveType?.name?.toLowerCase().includes('sick') ||
-                        r.leaveType?.name?.toLowerCase().includes('sakit')) &&
-                      r.status === 'approved'
-                  )
-                  .reduce((sum, r) => sum + (r.total_days || 0), 0)}{' '}
-                days
-              </p>
-            </div>
-            <div className="p-4 bg-purple-50 rounded-xl border border-purple-100">
-              <div className="flex items-center gap-2 mb-2">
-                <GraduationCap className="h-5 w-5 text-purple-600" />
-                <span className="text-sm font-medium text-purple-700">Study Leave</span>
+              <div className="relative overflow-hidden p-4 bg-gradient-to-br from-purple-50 to-violet-50 rounded-xl border border-purple-100">
+                <div className="absolute -top-4 -right-4 w-16 h-16 bg-purple-200/30 rounded-full blur-xl" />
+                <div className="relative">
+                  <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center mb-3">
+                    <GraduationCap className="h-5 w-5 text-purple-600" />
+                  </div>
+                  <p className="text-2xl font-bold text-purple-700">
+                    {leaveRequests
+                      .filter(
+                        (r) =>
+                          (r.leaveType?.code?.toLowerCase() === 'study' ||
+                            r.leaveType?.name?.toLowerCase().includes('study') ||
+                            r.leaveType?.name?.toLowerCase().includes('belajar')) &&
+                          r.status === 'approved'
+                      )
+                      .reduce((sum, r) => sum + (r.total_days || 0), 0)}
+                    <span className="text-sm font-normal text-purple-600 ml-1">days</span>
+                  </p>
+                  <p className="text-xs font-medium text-purple-600 mt-1">Study Leave</p>
+                </div>
               </div>
-              <p className="text-2xl font-bold text-purple-700">
-                {leaveRequests
-                  .filter(
-                    (r) =>
-                      (r.leaveType?.code?.toLowerCase() === 'study' ||
-                        r.leaveType?.name?.toLowerCase().includes('study') ||
-                        r.leaveType?.name?.toLowerCase().includes('belajar')) &&
-                      r.status === 'approved'
-                  )
-                  .reduce((sum, r) => sum + (r.total_days || 0), 0)}{' '}
-                days
-              </p>
-            </div>
-            <div className="p-4 bg-rose-50 rounded-xl border border-rose-100">
-              <div className="flex items-center gap-2 mb-2">
-                <Heart className="h-5 w-5 text-rose-600" />
-                <span className="text-sm font-medium text-rose-700">Other Leave</span>
+              <div className="relative overflow-hidden p-4 bg-gradient-to-br from-rose-50 to-pink-50 rounded-xl border border-rose-100">
+                <div className="absolute -top-4 -right-4 w-16 h-16 bg-rose-200/30 rounded-full blur-xl" />
+                <div className="relative">
+                  <div className="w-10 h-10 bg-rose-100 rounded-xl flex items-center justify-center mb-3">
+                    <Heart className="h-5 w-5 text-rose-600" />
+                  </div>
+                  <p className="text-2xl font-bold text-rose-700">
+                    {leaveRequests
+                      .filter((r) => {
+                        const code = r.leaveType?.code?.toLowerCase() || '';
+                        const name = r.leaveType?.name?.toLowerCase() || '';
+                        return (
+                          !['annual', 'sick', 'study'].includes(code) &&
+                          !name.includes('annual') &&
+                          !name.includes('tahunan') &&
+                          !name.includes('sick') &&
+                          !name.includes('sakit') &&
+                          !name.includes('study') &&
+                          !name.includes('belajar') &&
+                          r.status === 'approved'
+                        );
+                      })
+                      .reduce((sum, r) => sum + (r.total_days || 0), 0)}
+                    <span className="text-sm font-normal text-rose-600 ml-1">days</span>
+                  </p>
+                  <p className="text-xs font-medium text-rose-600 mt-1">Other Leave</p>
+                </div>
               </div>
-              <p className="text-2xl font-bold text-rose-700">
-                {leaveRequests
-                  .filter((r) => {
-                    const code = r.leaveType?.code?.toLowerCase() || '';
-                    const name = r.leaveType?.name?.toLowerCase() || '';
-                    return (
-                      !['annual', 'sick', 'study'].includes(code) &&
-                      !name.includes('annual') &&
-                      !name.includes('tahunan') &&
-                      !name.includes('sick') &&
-                      !name.includes('sakit') &&
-                      !name.includes('study') &&
-                      !name.includes('belajar') &&
-                      r.status === 'approved'
-                    );
-                  })
-                  .reduce((sum, r) => sum + (r.total_days || 0), 0)}{' '}
-                days
-              </p>
             </div>
           </div>
         </div>

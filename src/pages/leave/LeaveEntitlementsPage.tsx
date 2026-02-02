@@ -116,12 +116,16 @@ export function LeaveEntitlementsPage() {
   const fetchEntitlements = useCallback(async () => {
     setLoading(true);
     try {
-      const params: { page: number; limit: number; company_id?: number } = { page, limit };
+      const params: { page: number; limit: number; company_id?: number; employment_status?: string } = {
+        page,
+        limit,
+        employment_status: 'active'
+      };
       if (filterCompany !== 'all') {
         params.company_id = Number(filterCompany);
       }
 
-      // Fetch employees
+      // Fetch employees (only active)
       const response = await employeeService.getAll(params);
       setEmployees(response.data.map(emp => ({
         id: emp.id,
@@ -458,8 +462,12 @@ export function LeaveEntitlementsPage() {
     const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
     try {
-      // Fetch ALL employees (not just current page)
-      const params: { page: number; limit: number; company_id?: number } = { page: 1, limit: 1000 };
+      // Fetch ALL active employees (not just current page)
+      const params: { page: number; limit: number; company_id?: number; employment_status?: string } = {
+        page: 1,
+        limit: 1000,
+        employment_status: 'active'
+      };
       if (filterCompany !== 'all') {
         params.company_id = Number(filterCompany);
       }

@@ -51,10 +51,12 @@ export function EmployeesPage() {
   const [total, setTotal] = useState(0);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [showFilters, setShowFilters] = useState(false);
+  const [activeTab, setActiveTab] = useState<'active' | 'inactive'>('active');
   const [filters, setFilters] = useState({
     status: '',
     department: '',
   });
+  const [inactiveTotal, setInactiveTotal] = useState(0);
   const [deleteModal, setDeleteModal] = useState<{ open: boolean; employee: Employee | null }>({
     open: false,
     employee: null,
@@ -64,10 +66,26 @@ export function EmployeesPage() {
   const fetchEmployees = async () => {
     setIsLoading(true);
     try {
-      const response = await employeeService.getAll({ page, limit: 10, search });
+      // Fetch based on active tab
+      const response = await employeeService.getAll({
+        page,
+        limit: 10,
+        search,
+        employment_status: activeTab === 'active' ? 'active' : 'inactive'
+      });
       setEmployees(response.data);
       setTotalPages(response.pagination.totalPages);
       setTotal(response.pagination.total);
+
+      // Also fetch inactive count for the badge (only when on active tab)
+      if (activeTab === 'active') {
+        const inactiveResponse = await employeeService.getAll({
+          page: 1,
+          limit: 1,
+          employment_status: 'inactive'
+        });
+        setInactiveTotal(inactiveResponse.pagination.total);
+      }
     } catch (error) {
       console.error('Failed to fetch employees:', error);
     } finally {
@@ -76,8 +94,12 @@ export function EmployeesPage() {
   };
 
   useEffect(() => {
+    setPage(1); // Reset to page 1 when tab changes
+  }, [activeTab]);
+
+  useEffect(() => {
     fetchEmployees();
-  }, [page, search]);
+  }, [page, search, activeTab]);
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearch(e.target.value);
@@ -104,11 +126,27 @@ export function EmployeesPage() {
     setSearch('');
   };
 
-  const hasActiveFilters = search || filters.status || filters.department;
+  // Get active count when on inactive tab (for the tab badge)
+  const [activeTotal, setActiveTotal] = useState(0);
+  useEffect(() => {
+    const fetchActiveCount = async () => {
+      if (activeTab === 'inactive') {
+        try {
+          const activeResponse = await employeeService.getAll({
+            page: 1,
+            limit: 1,
+            employment_status: 'active'
+          });
+          setActiveTotal(activeResponse.pagination.total);
+        } catch (error) {
+          console.error('Failed to fetch active count:', error);
+        }
+      }
+    };
+    fetchActiveCount();
+  }, [activeTab]);
 
-  // Calculate stats
-  const activeCount = employees.filter(e => e.employment_status === 'active').length;
-  const inactiveCount = employees.filter(e => e.employment_status !== 'active').length;
+  const hasActiveFilters = search || filters.department;
 
   if (isLoading && employees.length === 0) {
     return <PageSpinner />;
@@ -139,18 +177,32 @@ export function EmployeesPage() {
                 </div>
                 <div>
                   <h1 className="text-2xl md:text-3xl font-bold text-white">Employee Directory</h1>
-                  <p className="text-blue-100 text-sm mt-1">Manage your workforce • {formatNumber(total)} Total Employees</p>
+                  <p className="text-blue-100 text-sm mt-1">Manage your workforce</p>
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-3 mt-4">
-                <span className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-xl rounded-xl text-sm text-white font-medium">
+                <button
+                  onClick={() => setActiveTab('active')}
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                    activeTab === 'active'
+                      ? 'bg-white text-green-600 shadow-lg'
+                      : 'bg-white/20 backdrop-blur-xl text-white hover:bg-white/30'
+                  }`}
+                >
                   <UserCheck className="h-4 w-4" />
-                  {formatNumber(activeCount)} Active
-                </span>
-                <span className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-xl rounded-xl text-sm text-white font-medium">
-                  <Building2 className="h-4 w-4" />
-                  {formatNumber(employees.length > 0 ? new Set(employees.map(e => e.department?.name)).size : 0)} Departments
-                </span>
+                  Active ({formatNumber(activeTab === 'active' ? total : activeTotal)})
+                </button>
+                <button
+                  onClick={() => setActiveTab('inactive')}
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                    activeTab === 'inactive'
+                      ? 'bg-white text-red-600 shadow-lg'
+                      : 'bg-white/20 backdrop-blur-xl text-white hover:bg-white/30'
+                  }`}
+                >
+                  <Users className="h-4 w-4" />
+                  Inactive ({formatNumber(activeTab === 'inactive' ? total : inactiveTotal)})
+                </button>
               </div>
             </div>
 
@@ -175,60 +227,86 @@ export function EmployeesPage() {
         </div>
       </div>
 
-      {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
-          <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
-              <Users className="h-5 w-5 text-white" />
+      {/* Quick Stats - Only show for Active tab */}
+      {activeTab === 'active' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg">
+                <UserCheck className="h-5 w-5 text-white" />
+              </div>
+              <span className="text-xs font-semibold text-green-600 bg-green-50 px-2 py-1 rounded-lg">Active</span>
             </div>
-            <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-1 rounded-lg">Total</span>
+            <p className="text-3xl font-bold text-gray-900 mb-1">{formatNumber(total)}</p>
+            <p className="text-sm text-gray-500">Active Employees</p>
           </div>
-          <p className="text-3xl font-bold text-gray-900 mb-1">{formatNumber(total)}</p>
-          <p className="text-sm text-gray-500">All Employees</p>
-        </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
-          <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg">
-              <UserCheck className="h-5 w-5 text-white" />
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-red-600 rounded-xl flex items-center justify-center shadow-lg">
+                <Users className="h-5 w-5 text-white" />
+              </div>
+              <button
+                onClick={() => setActiveTab('inactive')}
+                className="text-xs font-semibold text-red-600 hover:text-red-700 flex items-center gap-1"
+              >
+                View →
+              </button>
             </div>
-            <span className="inline-flex items-center px-2 py-1 bg-green-50 text-green-700 text-xs font-bold rounded-lg">
-              {total > 0 ? Math.round((activeCount / employees.length) * 100) : 0}%
-            </span>
+            <p className="text-3xl font-bold text-gray-900 mb-1">{formatNumber(inactiveTotal)}</p>
+            <p className="text-sm text-gray-500">Inactive Employees</p>
           </div>
-          <p className="text-3xl font-bold text-gray-900 mb-1">{formatNumber(activeCount)}</p>
-          <p className="text-sm text-gray-500">Active Status</p>
-        </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
-          <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-              <Building2 className="h-5 w-5 text-white" />
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+                <Building2 className="h-5 w-5 text-white" />
+              </div>
+              <Link to="/departments" className="text-xs font-semibold text-purple-600 hover:text-purple-700 flex items-center gap-1">
+                View →
+              </Link>
             </div>
-            <Link to="/departments" className="text-xs font-semibold text-purple-600 hover:text-purple-700 flex items-center gap-1">
-              View →
-            </Link>
+            <p className="text-3xl font-bold text-gray-900 mb-1">
+              {employees.length > 0 ? new Set(employees.filter(e => e.department).map(e => e.department?.id)).size : 0}
+            </p>
+            <p className="text-sm text-gray-500">Departments</p>
           </div>
-          <p className="text-3xl font-bold text-gray-900 mb-1">
-            {employees.length > 0 ? new Set(employees.filter(e => e.department).map(e => e.department?.id)).size : 0}
-          </p>
-          <p className="text-sm text-gray-500">Departments</p>
-        </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
-          <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl flex items-center justify-center shadow-lg">
-              <UserCog className="h-5 w-5 text-white" />
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl flex items-center justify-center shadow-lg">
+                <UserCog className="h-5 w-5 text-white" />
+              </div>
+              <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-1 rounded-lg">Managers</span>
             </div>
-            <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-1 rounded-lg">Managers</span>
+            <p className="text-3xl font-bold text-gray-900 mb-1">
+              {employees.filter(e => e.manager).length > 0 ? new Set(employees.filter(e => e.manager).map(e => e.manager?.id)).size : 0}
+            </p>
+            <p className="text-sm text-gray-500">Line Managers</p>
           </div>
-          <p className="text-3xl font-bold text-gray-900 mb-1">
-            {employees.filter(e => e.manager).length > 0 ? new Set(employees.filter(e => e.manager).map(e => e.manager?.id)).size : 0}
-          </p>
-          <p className="text-sm text-gray-500">Line Managers</p>
         </div>
-      </div>
+      )}
+
+      {/* Inactive Stats Banner */}
+      {activeTab === 'inactive' && (
+        <div className="bg-gradient-to-r from-red-50 to-orange-50 rounded-2xl border-2 border-red-200 p-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-red-600 rounded-xl flex items-center justify-center shadow-lg">
+                <Users className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Inactive Employees</h3>
+                <p className="text-sm text-gray-600">Employees who are no longer active (terminated, resigned, retired)</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-3xl font-bold text-red-600">{formatNumber(total)}</p>
+              <p className="text-sm text-gray-500">Total Inactive</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Search & Filter */}
       <Card className="border-0 shadow-sm">
@@ -254,32 +332,19 @@ export function EmployeesPage() {
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-            <div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+            <div className="lg:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="Name or email..."
+                  placeholder="Search by name or email..."
                   value={search}
                   onChange={handleSearch}
                   className="w-full h-10 pl-10 pr-4 rounded-xl border border-gray-300 text-sm transition-all focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                 />
               </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-              <select
-                value={filters.status}
-                onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-                className="w-full h-10 px-4 rounded-xl border border-gray-300 text-sm transition-all focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-              >
-                <option value="">All Status</option>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-              </select>
             </div>
 
             <div>
@@ -292,13 +357,6 @@ export function EmployeesPage() {
                 <option value="">All Departments</option>
                 {/* Departments would be fetched from API */}
               </select>
-            </div>
-
-            <div className="flex items-end">
-              <button className="w-full h-10 px-6 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-xl hover:from-indigo-700 hover:to-indigo-800 transition-all font-medium shadow-lg flex items-center justify-center gap-2">
-                <Search className="h-4 w-4" />
-                Apply Filters
-              </button>
             </div>
           </div>
 
@@ -315,13 +373,11 @@ export function EmployeesPage() {
                   </button>
                 </span>
               )}
-              {filters.status && (
-                <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium ${
-                  filters.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                }`}>
-                  <div className={`w-1.5 h-1.5 rounded-full ${filters.status === 'active' ? 'bg-green-500' : 'bg-red-500'}`} />
-                  {filters.status.charAt(0).toUpperCase() + filters.status.slice(1)}
-                  <button onClick={() => setFilters({ ...filters, status: '' })} className="hover:opacity-70">
+              {filters.department && (
+                <span className="inline-flex items-center gap-2 px-3 py-1.5 bg-purple-100 text-purple-800 rounded-lg text-xs font-medium">
+                  <Building2 className="h-3 w-3" />
+                  {filters.department}
+                  <button onClick={() => setFilters({ ...filters, department: '' })} className="hover:opacity-70">
                     <X className="h-3 w-3" />
                   </button>
                 </span>
@@ -336,9 +392,11 @@ export function EmployeesPage() {
         <CardHeader className="pb-2 border-b border-gray-200">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <CardTitle className="text-lg font-bold text-gray-900">Employee List</CardTitle>
+              <CardTitle className="text-lg font-bold text-gray-900">
+                {activeTab === 'active' ? 'Active Employees' : 'Inactive Employees'}
+              </CardTitle>
               <p className="text-sm text-gray-500 mt-1">
-                Showing {employees.length > 0 ? ((page - 1) * 10) + 1 : 0} - {Math.min(page * 10, total)} of {total} employees
+                Showing {employees.length > 0 ? ((page - 1) * 10) + 1 : 0} - {Math.min(page * 10, total)} of {total} {activeTab} employees
               </p>
             </div>
             <div className="flex items-center gap-3">

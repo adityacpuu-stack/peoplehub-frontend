@@ -222,18 +222,20 @@ export function FreelanceInternshipPayrollPage() {
   const fetchPayrollData = async () => {
     setIsLoading(true);
     try {
-      // Fetch freelance employees
+      // Fetch freelance employees (only active)
       const freelanceResponse = await employeeService.getAll({
         company_id: selectedCompanyId || undefined,
         employment_type: 'freelance',
+        employment_status: 'active',
         page: 1,
         limit: 100,
       });
 
-      // Fetch internship employees
+      // Fetch internship employees (only active)
       const internshipResponse = await employeeService.getAll({
         company_id: selectedCompanyId || undefined,
         employment_type: 'internship',
+        employment_status: 'active',
         page: 1,
         limit: 100,
       });

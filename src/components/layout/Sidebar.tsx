@@ -257,7 +257,8 @@ const managerDashboardItem: MenuItem = {
   label: 'Dashboard',
 };
 
-const managerMenuItems: MenuItem[] = [
+// Manager menu items - badge is set dynamically in component
+const getManagerMenuItems = (pendingLeaveCount: number): MenuItem[] => [
   {
     path: '/my-team',
     icon: UsersRound,
@@ -277,7 +278,7 @@ const managerMenuItems: MenuItem[] = [
     path: '/leave-approval',
     icon: CalendarCheck,
     label: 'Leave Approval',
-    badge: 3,
+    badge: pendingLeaveCount > 0 ? pendingLeaveCount : undefined,
   },
   {
     path: '/my-leave',
@@ -591,6 +592,7 @@ export function Sidebar() {
   const { user, logout } = useAuthStore();
   const [openDropdowns, setOpenDropdowns] = useState<string[]>([]);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
+  const [managerPendingLeaveCount, setManagerPendingLeaveCount] = useState(0);
 
   const userRoles = user?.roles || ['Employee'];
   const isSuperAdmin = userRoles.includes('Super Admin');
@@ -629,10 +631,30 @@ export function Sidebar() {
     fetchPendingCount();
   }, [isGroupCEO, isCEO]);
 
+  // Fetch pending leave approvals count for Manager
+  useEffect(() => {
+    const fetchManagerPendingCount = async () => {
+      if (!isManager) return;
+      try {
+        const leaves = await leaveService.getPendingApprovals().catch(() => []);
+        setManagerPendingLeaveCount(leaves.length);
+      } catch {
+        setManagerPendingLeaveCount(0);
+      }
+    };
+    fetchManagerPendingCount();
+  }, [isManager]);
+
   // Get CEO approvals items with dynamic badge
   const ceoApprovalsItems = useMemo(
     () => getCeoApprovalsItems(pendingApprovalsCount),
     [pendingApprovalsCount]
+  );
+
+  // Get Manager menu items with dynamic badge
+  const managerMenuItems = useMemo(
+    () => getManagerMenuItems(managerPendingLeaveCount),
+    [managerPendingLeaveCount]
   );
 
   const hasAccess = (roles?: string[]) => {

@@ -63,7 +63,7 @@ export function MovementPage() {
     try {
       const [companiesRes, employeesRes, departmentsRes, positionsRes] = await Promise.all([
         companyService.getAll({ page: 1, limit: 100 }),
-        employeeService.getAll({ page: 1, limit: 500 }),
+        employeeService.getAll({ page: 1, limit: 500, employment_status: 'active' }),
         departmentService.getAll({ page: 1, limit: 100 }),
         positionService.getAll({ page: 1, limit: 100 }),
       ]);

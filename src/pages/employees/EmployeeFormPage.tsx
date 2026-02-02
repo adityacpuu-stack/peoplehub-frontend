@@ -37,10 +37,9 @@ import type { CreateEmployeeRequest, Department, Employee } from '@/types';
 const STEPS = [
   { id: 1, title: 'Personal Info', subtitle: 'Basic details', icon: User },
   { id: 2, title: 'Employment', subtitle: 'Job info', icon: Briefcase },
-  { id: 3, title: 'Payroll', subtitle: 'Salary', icon: Wallet },
+  { id: 3, title: 'Payroll', subtitle: 'Salary & Tax', icon: Wallet },
   { id: 4, title: 'Contact', subtitle: 'Address', icon: MapPin },
-  { id: 5, title: 'Documents', subtitle: 'ID & Tax', icon: FileText },
-  { id: 6, title: 'Review', subtitle: 'Confirm', icon: Check },
+  { id: 5, title: 'Review', subtitle: 'Confirm', icon: Check },
 ];
 
 export function EmployeeFormPage() {
@@ -88,7 +87,6 @@ export function EmployeeFormPage() {
     overtime_approver_id: undefined,
     employment_type: 'permanent',
     employment_status: 'active',
-    hire_date: '',
     join_date: '',
     basic_salary: undefined,
     transport_allowance: undefined,
@@ -152,7 +150,6 @@ export function EmployeeFormPage() {
             overtime_approver_id: employee.overtime_approver_id,
             employment_type: employee.employment_type || 'permanent',
             employment_status: employee.employment_status || 'active',
-            hire_date: employee.hire_date?.split('T')[0] || '',
             join_date: employee.join_date?.split('T')[0] || '',
             basic_salary: employee.basic_salary,
             transport_allowance: employee.transport_allowance,
@@ -183,7 +180,7 @@ export function EmployeeFormPage() {
   // Fetch next employee ID when company is selected (only for new employees)
   useEffect(() => {
     const fetchNextEmployeeId = async () => {
-      if (!isEdit && formData.company_id && !formData.employee_id) {
+      if (!isEdit && formData.company_id) {
         setIsLoadingEmployeeId(true);
         try {
           const nextId = await employeeService.getNextEmployeeId(formData.company_id);
@@ -199,6 +196,25 @@ export function EmployeeFormPage() {
 
     fetchNextEmployeeId();
   }, [formData.company_id, isEdit]);
+
+  // Auto-calculate probation dates when join_date changes
+  useEffect(() => {
+    if (formData.join_date) {
+      // Set probation_start_date = join_date
+      const probationStart = formData.join_date;
+
+      // Set probation_end_date = join_date + 3 months
+      const joinDate = new Date(formData.join_date);
+      joinDate.setMonth(joinDate.getMonth() + 3);
+      const probationEnd = joinDate.toISOString().split('T')[0];
+
+      setFormData(prev => ({
+        ...prev,
+        probation_start_date: probationStart,
+        probation_end_date: probationEnd,
+      }));
+    }
+  }, [formData.join_date]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
@@ -754,37 +770,47 @@ export function EmployeeFormPage() {
               <div className="bg-white rounded-lg p-5 border border-orange-100">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <FormInput
-                    label="Hire Date"
-                    name="hire_date"
-                    type="date"
-                    value={formData.hire_date || ''}
-                    onChange={handleChange}
-                    icon={<Calendar className="h-4 w-4 text-orange-600" />}
-                  />
-                  <FormInput
                     label="Join Date"
                     name="join_date"
                     type="date"
                     value={formData.join_date || ''}
                     onChange={handleChange}
+                    hint="Tanggal mulai bekerja. Probation akan dihitung otomatis."
                     icon={<Calendar className="h-4 w-4 text-amber-600" />}
                   />
-                  <FormInput
-                    label="Probation Start"
-                    name="probation_start_date"
-                    type="date"
-                    value={formData.probation_start_date || ''}
-                    onChange={handleChange}
-                    icon={<Calendar className="h-4 w-4 text-blue-600" />}
-                  />
-                  <FormInput
-                    label="Probation End"
-                    name="probation_end_date"
-                    type="date"
-                    value={formData.probation_end_date || ''}
-                    onChange={handleChange}
-                    icon={<Calendar className="h-4 w-4 text-green-600" />}
-                  />
+                  <div className="lg:col-span-1" />
+                  <div>
+                    <label className="block text-sm font-bold text-gray-900 mb-2">
+                      <span className="inline-flex mr-1"><Calendar className="h-4 w-4 text-blue-600" /></span>
+                      Probation Start
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.probation_start_date || ''}
+                      readOnly
+                      className="block w-full rounded-xl border-gray-300 bg-gray-50 shadow-sm sm:text-sm cursor-not-allowed"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      <AlertCircle className="h-3 w-3 inline mr-1" />
+                      Otomatis sama dengan Join Date
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-900 mb-2">
+                      <span className="inline-flex mr-1"><Calendar className="h-4 w-4 text-green-600" /></span>
+                      Probation End
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.probation_end_date || ''}
+                      readOnly
+                      className="block w-full rounded-xl border-gray-300 bg-gray-50 shadow-sm sm:text-sm cursor-not-allowed"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      <AlertCircle className="h-3 w-3 inline mr-1" />
+                      Otomatis Join Date + 3 bulan
+                    </p>
+                  </div>
                   <FormInput
                     label="Contract Start"
                     name="contract_start_date"
@@ -943,29 +969,40 @@ export function EmployeeFormPage() {
               </div>
 
               <div className="bg-white rounded-lg p-5 border border-purple-100">
-                <FormSelect
-                  label="Status PTKP"
-                  name="ptkp_status"
-                  value={formData.ptkp_status || ''}
-                  onChange={handleChange}
-                  options={[
-                    { value: '', label: '-- Pilih Status PTKP --' },
-                    { value: 'TK/0', label: 'TK/0 - Tidak Kawin, Tanpa Tanggungan' },
-                    { value: 'TK/1', label: 'TK/1 - Tidak Kawin, 1 Tanggungan' },
-                    { value: 'TK/2', label: 'TK/2 - Tidak Kawin, 2 Tanggungan' },
-                    { value: 'TK/3', label: 'TK/3 - Tidak Kawin, 3 Tanggungan' },
-                    { value: 'K/0', label: 'K/0 - Kawin, Tanpa Tanggungan' },
-                    { value: 'K/1', label: 'K/1 - Kawin, 1 Tanggungan' },
-                    { value: 'K/2', label: 'K/2 - Kawin, 2 Tanggungan' },
-                    { value: 'K/3', label: 'K/3 - Kawin, 3 Tanggungan' },
-                    { value: 'K/I/0', label: 'K/I/0 - Kawin, Penghasilan Istri Digabung' },
-                    { value: 'K/I/1', label: 'K/I/1 - Kawin, Penghasilan Istri Digabung, 1 Tanggungan' },
-                    { value: 'K/I/2', label: 'K/I/2 - Kawin, Penghasilan Istri Digabung, 2 Tanggungan' },
-                    { value: 'K/I/3', label: 'K/I/3 - Kawin, Penghasilan Istri Digabung, 3 Tanggungan' },
-                  ]}
-                  hint="Penghasilan Tidak Kena Pajak untuk perhitungan PPh 21"
-                  icon={<FileText className="h-4 w-4 text-purple-600" />}
-                />
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <FormInput
+                    label="NPWP Number"
+                    name="npwp_number"
+                    value={formData.npwp_number || ''}
+                    onChange={handleChange}
+                    placeholder="XX.XXX.XXX.X-XXX.XXX"
+                    hint="Nomor Pokok Wajib Pajak"
+                    icon={<FileText className="h-4 w-4 text-blue-600" />}
+                  />
+                  <FormSelect
+                    label="Status PTKP"
+                    name="ptkp_status"
+                    value={formData.ptkp_status || ''}
+                    onChange={handleChange}
+                    options={[
+                      { value: '', label: '-- Pilih Status PTKP --' },
+                      { value: 'TK/0', label: 'TK/0 - Tidak Kawin, Tanpa Tanggungan' },
+                      { value: 'TK/1', label: 'TK/1 - Tidak Kawin, 1 Tanggungan' },
+                      { value: 'TK/2', label: 'TK/2 - Tidak Kawin, 2 Tanggungan' },
+                      { value: 'TK/3', label: 'TK/3 - Tidak Kawin, 3 Tanggungan' },
+                      { value: 'K/0', label: 'K/0 - Kawin, Tanpa Tanggungan' },
+                      { value: 'K/1', label: 'K/1 - Kawin, 1 Tanggungan' },
+                      { value: 'K/2', label: 'K/2 - Kawin, 2 Tanggungan' },
+                      { value: 'K/3', label: 'K/3 - Kawin, 3 Tanggungan' },
+                      { value: 'K/I/0', label: 'K/I/0 - Kawin, Penghasilan Istri Digabung' },
+                      { value: 'K/I/1', label: 'K/I/1 - Kawin, Penghasilan Istri Digabung, 1 Tanggungan' },
+                      { value: 'K/I/2', label: 'K/I/2 - Kawin, Penghasilan Istri Digabung, 2 Tanggungan' },
+                      { value: 'K/I/3', label: 'K/I/3 - Kawin, Penghasilan Istri Digabung, 3 Tanggungan' },
+                    ]}
+                    hint="Penghasilan Tidak Kena Pajak untuk perhitungan PPh 21"
+                    icon={<FileText className="h-4 w-4 text-purple-600" />}
+                  />
+                </div>
               </div>
             </div>
 
@@ -1216,58 +1253,8 @@ export function EmployeeFormPage() {
           </div>
         )}
 
-        {/* Step 5: Documents */}
+        {/* Step 5: Review */}
         {currentStep === 5 && (
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/50 p-8 transition-all">
-            <div className="flex items-center mb-8">
-              <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-600 rounded-xl flex items-center justify-center mr-4 shadow-md">
-                <FileText className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <h3 className="text-2xl font-bold text-gray-900">Documents & Tax</h3>
-                <p className="text-sm text-gray-600">Identity documents and tax information</p>
-              </div>
-            </div>
-
-            {/* Tax Information */}
-            <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl border-2 border-purple-200 p-6">
-              <div className="flex items-center mb-6">
-                <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center mr-3 shadow-md">
-                  <FileText className="h-5 w-5 text-white" />
-                </div>
-                <div>
-                  <h4 className="text-base font-bold text-gray-900">Tax Information</h4>
-                  <p className="text-xs text-gray-600">Tax identification numbers</p>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-lg p-5 border border-purple-100">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <FormInput
-                    label="Tax ID"
-                    name="tax_id"
-                    value={formData.tax_id || ''}
-                    onChange={handleChange}
-                    placeholder="Tax identification number"
-                    icon={<FileText className="h-4 w-4 text-purple-600" />}
-                  />
-                  <FormInput
-                    label="NPWP Number"
-                    name="npwp_number"
-                    value={formData.npwp_number || ''}
-                    onChange={handleChange}
-                    placeholder="XX.XXX.XXX.X-XXX.XXX"
-                    hint="Nomor Pokok Wajib Pajak"
-                    icon={<FileText className="h-4 w-4 text-blue-600" />}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Step 6: Review */}
-        {currentStep === 6 && (
           <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/50 p-8 transition-all">
             <div className="flex items-center mb-8">
               <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl flex items-center justify-center mr-4 shadow-md">
@@ -1400,8 +1387,8 @@ export function EmployeeFormPage() {
             </button>
 
             <div className="flex items-center gap-3">
-              {/* Show Next Step button for steps 1-5 */}
-              {currentStep < 6 && (
+              {/* Show Next Step button for steps 1-4 */}
+              {currentStep < 5 && (
                 <button
                   type="button"
                   onClick={nextStep}
@@ -1411,8 +1398,8 @@ export function EmployeeFormPage() {
                   <ArrowRight className="h-4 w-4" />
                 </button>
               )}
-              {/* Show Submit button only on step 6 (Review) */}
-              {currentStep === 6 && (
+              {/* Show Submit button only on step 5 (Review) */}
+              {currentStep === 5 && (
                 <button
                   type="submit"
                   disabled={isSaving}

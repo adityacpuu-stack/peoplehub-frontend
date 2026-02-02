@@ -70,9 +70,11 @@ export function PayrollPage() {
         period: selectedPeriod,
         limit: 500, // Get all for this period
       });
-      // Filter out freelance and internship - they have separate payroll page
+      // Filter out freelance/internship (separate page) and inactive employees
       const permanentRecords = response.data.filter(
-        record => !['freelance', 'internship'].includes(record.employee.employment_type || '')
+        record =>
+          !['freelance', 'internship'].includes(record.employee.employment_type || '') &&
+          record.employee.employment_status === 'active'
       );
       setRecords(permanentRecords);
     } catch {
