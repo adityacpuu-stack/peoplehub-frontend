@@ -23,6 +23,7 @@ export interface PayrollEmployee {
   name: string;
   employee_id: string;
   employment_type?: string;
+  employment_status?: string;
   department?: { id: number; name: string };
   position?: { id: number; name: string };
 }
