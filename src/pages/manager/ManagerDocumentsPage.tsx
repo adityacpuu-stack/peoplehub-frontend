@@ -249,7 +249,8 @@ export function ManagerDocumentsPage() {
 
   const handleDownload = (doc: EmployeeDocument) => {
     if (doc.file_path) {
-      window.open(`${import.meta.env.VITE_API_URL || ''}/uploads/${doc.file_path}`, '_blank');
+      // file_path is already full S3 URL
+      window.open(doc.file_path, '_blank');
     }
   };
 
