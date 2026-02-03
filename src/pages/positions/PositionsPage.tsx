@@ -74,9 +74,8 @@ export function PositionsPage() {
   };
 
   const fetchDepartments = async () => {
-    if (!selectedCompanyId) return;
     try {
-      const data = await departmentService.getByCompany(selectedCompanyId);
+      const data = await departmentService.getAllDepartments();
       setDepartments(data);
     } catch {
       toast.error('Failed to load department data');

@@ -25,13 +25,8 @@ export function DepartmentsPage() {
 
   useEffect(() => {
     fetchCompanies();
+    fetchDepartments(); // Departments are global, fetch immediately
   }, []);
-
-  useEffect(() => {
-    if (selectedCompanyId) {
-      fetchDepartments();
-    }
-  }, [selectedCompanyId]);
 
   const fetchCompanies = async () => {
     try {
@@ -99,10 +94,10 @@ export function DepartmentsPage() {
     e.preventDefault();
     try {
       if (editingDepartment) {
-        await departmentService.update(editingDepartment.id, { ...formData, company_id: selectedCompanyId! });
+        await departmentService.update(editingDepartment.id, formData);
         toast.success('Department updated successfully');
       } else {
-        await departmentService.create({ ...formData, company_id: selectedCompanyId! });
+        await departmentService.create(formData);
         toast.success('Department created successfully');
       }
       setShowModal(false);

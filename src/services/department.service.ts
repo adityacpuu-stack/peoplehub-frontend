@@ -11,7 +11,7 @@ interface CreateDepartmentRequest {
   name: string;
   code?: string;
   description?: string;
-  company_id: number;
+  company_id?: number; // Optional - departments are now global
   parent_id?: number;
   head_id?: number;
 }
@@ -49,15 +49,23 @@ export const departmentService = {
     };
   },
 
-  // Get departments by company
-  getByCompany: async (companyId: number): Promise<Department[]> => {
-    const response = await api.get<ApiResponse<Department[]>>(`/departments/company/${companyId}`);
+  // Get all departments (global - no company filter)
+  getAllDepartments: async (): Promise<Department[]> => {
+    const response = await api.get<BackendPaginatedResponse<Department>>('/departments', {
+      params: { limit: 1000 } // Get all departments
+    });
     return response.data.data;
   },
 
-  // Get department hierarchy by company
-  getHierarchy: async (companyId: number): Promise<DepartmentHierarchy[]> => {
-    const response = await api.get<ApiResponse<DepartmentHierarchy[]>>(`/departments/company/${companyId}/hierarchy`);
+  // Get departments by company (legacy - returns all global departments)
+  getByCompany: async (companyId?: number): Promise<Department[]> => {
+    const response = await api.get<ApiResponse<Department[]>>(`/departments/company/${companyId || 1}`);
+    return response.data.data;
+  },
+
+  // Get department hierarchy (global)
+  getHierarchy: async (companyId?: number): Promise<DepartmentHierarchy[]> => {
+    const response = await api.get<ApiResponse<DepartmentHierarchy[]>>(`/departments/company/${companyId || 1}/hierarchy`);
     return response.data.data;
   },
 
