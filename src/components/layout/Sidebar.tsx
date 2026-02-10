@@ -47,6 +47,7 @@ import {
   Coins,
   BadgeDollarSign,
   UserCheck,
+  MinusCircle,
 } from 'lucide-react';
 
 interface MenuItem {
@@ -211,6 +212,7 @@ const compensationDropdown: DropdownMenu = {
   items: [
     { path: '/overtime', label: 'Overtime', icon: Timer },
     { path: '/allowances', label: 'Allowances', icon: Coins },
+    { path: '/deductions', label: 'Deductions', icon: MinusCircle },
   ],
 };
 

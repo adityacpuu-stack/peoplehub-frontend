@@ -40,6 +40,17 @@ const categories = [
   { value: 'policy', label: 'Policies' },
   { value: 'form', label: 'Forms' },
   { value: 'report', label: 'Reports' },
+  { value: 'sop', label: 'SOP' },
+  { value: 'guideline', label: 'Guidelines' },
+  { value: 'manual', label: 'Manuals' },
+  { value: 'memo', label: 'Memos' },
+  { value: 'circular', label: 'Circulars' },
+  { value: 'checklist', label: 'Checklists' },
+  { value: 'announcement', label: 'Announcements' },
+  { value: 'onboarding', label: 'Onboarding' },
+  { value: 'offboarding', label: 'Offboarding' },
+  { value: 'evaluation', label: 'Evaluations' },
+  { value: 'training', label: 'Training' },
   { value: 'other', label: 'Other' },
 ];
 
@@ -132,25 +143,47 @@ export function TemplatesPage() {
   };
 
   const getCategoryBadge = (category: Template['category']) => {
-    const styles = {
+    const styles: Record<string, string> = {
       contract: 'bg-blue-100 text-blue-700',
       letter: 'bg-purple-100 text-purple-700',
       policy: 'bg-amber-100 text-amber-700',
       form: 'bg-green-100 text-green-700',
       report: 'bg-cyan-100 text-cyan-700',
+      sop: 'bg-indigo-100 text-indigo-700',
+      guideline: 'bg-teal-100 text-teal-700',
+      manual: 'bg-rose-100 text-rose-700',
+      memo: 'bg-orange-100 text-orange-700',
+      circular: 'bg-pink-100 text-pink-700',
+      checklist: 'bg-lime-100 text-lime-700',
+      announcement: 'bg-sky-100 text-sky-700',
+      onboarding: 'bg-emerald-100 text-emerald-700',
+      offboarding: 'bg-red-100 text-red-700',
+      evaluation: 'bg-violet-100 text-violet-700',
+      training: 'bg-fuchsia-100 text-fuchsia-700',
       other: 'bg-gray-100 text-gray-700',
     };
-    const labels = {
+    const labels: Record<string, string> = {
       contract: 'Contract',
       letter: 'Letter',
       policy: 'Policy',
       form: 'Form',
       report: 'Report',
+      sop: 'SOP',
+      guideline: 'Guideline',
+      manual: 'Manual',
+      memo: 'Memo',
+      circular: 'Circular',
+      checklist: 'Checklist',
+      announcement: 'Announcement',
+      onboarding: 'Onboarding',
+      offboarding: 'Offboarding',
+      evaluation: 'Evaluation',
+      training: 'Training',
       other: 'Other',
     };
     return (
-      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${styles[category]}`}>
-        {labels[category]}
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${styles[category] || styles.other}`}>
+        {labels[category] || category}
       </span>
     );
   };

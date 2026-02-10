@@ -26,6 +26,8 @@ import {
   Key,
   Shield,
   Heart,
+  LogOut,
+  X,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { PageSpinner, SearchableSelect } from '@/components/ui';
@@ -55,6 +57,14 @@ export function EmployeeFormPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [generatedEmployeeId, setGeneratedEmployeeId] = useState<string>('');
   const [isLoadingEmployeeId, setIsLoadingEmployeeId] = useState(false);
+  const [showResignModal, setShowResignModal] = useState(false);
+  const [isResigning, setIsResigning] = useState(false);
+  const [resignData, setResignData] = useState({
+    resign_date: '',
+    resign_type: '',
+    resign_reason: '',
+    resign_notes: '',
+  });
   const [formData, setFormData] = useState<CreateEmployeeRequest>({
     name: '',
     employee_id: '',
@@ -274,6 +284,36 @@ export function EmployeeFormPage() {
     }
   };
 
+  const handleResign = async () => {
+    if (!resignData.resign_date) {
+      toast.error('Tanggal resign harus diisi');
+      return;
+    }
+    if (!resignData.resign_type) {
+      toast.error('Tipe resign harus dipilih');
+      return;
+    }
+
+    setIsResigning(true);
+    try {
+      await employeeService.update(parseInt(id!), {
+        ...formData,
+        resign_date: resignData.resign_date,
+        resign_type: resignData.resign_type,
+        resign_reason: resignData.resign_reason,
+        resign_notes: resignData.resign_notes,
+        employment_status: 'resigned',
+      });
+      toast.success('Karyawan berhasil di-resign');
+      setShowResignModal(false);
+      navigate('/employees');
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Gagal memproses resign');
+    } finally {
+      setIsResigning(false);
+    }
+  };
+
   if (isLoading) {
     return <PageSpinner />;
   }
@@ -312,13 +352,26 @@ export function EmployeeFormPage() {
               </div>
             </div>
 
-            <Link
-              to="/employees"
-              className="px-5 py-3 bg-white/20 backdrop-blur-xl text-white rounded-xl hover:bg-white/30 transition-all duration-200 flex items-center gap-2 font-bold border-2 border-white/30 shadow-lg"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              <span>Back to List</span>
-            </Link>
+            <div className="flex items-center gap-3">
+              {/* Resign Button - Only show for existing active employees */}
+              {isEdit && formData.employment_status === 'active' && (
+                <button
+                  type="button"
+                  onClick={() => setShowResignModal(true)}
+                  className="px-5 py-3 bg-red-500/80 backdrop-blur-xl text-white rounded-xl hover:bg-red-600 transition-all duration-200 flex items-center gap-2 font-bold border-2 border-red-400/50 shadow-lg"
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span>Resign</span>
+                </button>
+              )}
+              <Link
+                to="/employees"
+                className="px-5 py-3 bg-white/20 backdrop-blur-xl text-white rounded-xl hover:bg-white/30 transition-all duration-200 flex items-center gap-2 font-bold border-2 border-white/30 shadow-lg"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                <span>Back to List</span>
+              </Link>
+            </div>
           </div>
         </div>
       </div>
@@ -1422,6 +1475,150 @@ export function EmployeeFormPage() {
           </div>
         </div>
       </form>
+
+      {/* Resign Modal */}
+      {showResignModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-screen items-center justify-center p-4">
+            {/* Backdrop */}
+            <div
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
+              onClick={() => setShowResignModal(false)}
+            />
+
+            {/* Modal */}
+            <div className="relative w-full max-w-lg transform rounded-2xl bg-white shadow-2xl transition-all">
+              {/* Header */}
+              <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-orange-600 rounded-xl flex items-center justify-center shadow-md">
+                    <LogOut className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900">Resign Karyawan</h3>
+                    <p className="text-sm text-gray-500">{formData.name}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowResignModal(false)}
+                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-6 space-y-5">
+                {/* Warning */}
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <h5 className="font-bold text-amber-800">Perhatian</h5>
+                    <p className="text-sm text-amber-700 mt-1">
+                      Status karyawan akan diubah menjadi <strong>Resigned</strong>. Data resign akan disimpan dan karyawan tidak akan tampil di daftar aktif.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Resign Date */}
+                <div>
+                  <label className="block text-sm font-bold text-gray-900 mb-2">
+                    <span className="inline-flex mr-1"><Calendar className="h-4 w-4 text-red-600" /></span>
+                    Tanggal Resign <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={resignData.resign_date}
+                    onChange={(e) => setResignData(prev => ({ ...prev, resign_date: e.target.value }))}
+                    className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-red-500 focus:ring-4 focus:ring-red-100 sm:text-sm transition-all"
+                  />
+                </div>
+
+                {/* Resign Type */}
+                <div>
+                  <label className="block text-sm font-bold text-gray-900 mb-2">
+                    <span className="inline-flex mr-1"><FileText className="h-4 w-4 text-orange-600" /></span>
+                    Tipe Resign <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={resignData.resign_type}
+                    onChange={(e) => setResignData(prev => ({ ...prev, resign_type: e.target.value }))}
+                    className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-red-500 focus:ring-4 focus:ring-red-100 sm:text-sm transition-all"
+                  >
+                    <option value="">-- Pilih Tipe Resign --</option>
+                    <option value="voluntary">Voluntary (Mengundurkan Diri)</option>
+                    <option value="involuntary">Involuntary (PHK)</option>
+                    <option value="retirement">Retirement (Pensiun)</option>
+                    <option value="contract_end">Contract End (Kontrak Berakhir)</option>
+                    <option value="mutual_agreement">Mutual Agreement (Kesepakatan Bersama)</option>
+                    <option value="other">Other (Lainnya)</option>
+                  </select>
+                </div>
+
+                {/* Resign Reason */}
+                <div>
+                  <label className="block text-sm font-bold text-gray-900 mb-2">
+                    <span className="inline-flex mr-1"><FileText className="h-4 w-4 text-purple-600" /></span>
+                    Alasan Resign
+                  </label>
+                  <input
+                    type="text"
+                    value={resignData.resign_reason}
+                    onChange={(e) => setResignData(prev => ({ ...prev, resign_reason: e.target.value }))}
+                    placeholder="Contoh: Pindah ke perusahaan lain, Melanjutkan pendidikan, dll"
+                    className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-red-500 focus:ring-4 focus:ring-red-100 sm:text-sm transition-all"
+                  />
+                </div>
+
+                {/* Resign Notes */}
+                <div>
+                  <label className="block text-sm font-bold text-gray-900 mb-2">
+                    <span className="inline-flex mr-1"><FileText className="h-4 w-4 text-gray-600" /></span>
+                    Catatan Tambahan
+                  </label>
+                  <textarea
+                    value={resignData.resign_notes}
+                    onChange={(e) => setResignData(prev => ({ ...prev, resign_notes: e.target.value }))}
+                    placeholder="Catatan tambahan mengenai proses resign..."
+                    rows={3}
+                    className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-red-500 focus:ring-4 focus:ring-red-100 sm:text-sm transition-all resize-none"
+                  />
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-end gap-3 border-t border-gray-200 px-6 py-4">
+                <button
+                  type="button"
+                  onClick={() => setShowResignModal(false)}
+                  className="px-5 py-2.5 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl font-bold transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResign}
+                  disabled={isResigning}
+                  className="px-5 py-2.5 bg-gradient-to-r from-red-500 to-orange-600 text-white rounded-xl font-bold hover:from-red-600 hover:to-orange-700 transition-all shadow-lg shadow-red-500/25 disabled:opacity-50 flex items-center gap-2"
+                >
+                  {isResigning ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <LogOut className="h-4 w-4" />
+                      Konfirmasi Resign
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

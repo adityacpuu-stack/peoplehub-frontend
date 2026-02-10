@@ -2,7 +2,32 @@ import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { companyService, type Company } from '@/services/company.service';
 import { employeeService } from '@/services/employee.service';
+import { payrollSettingService } from '@/services/payroll-setting.service';
+import { payrollService } from '@/services/payroll.service';
 import type { Employee } from '@/types';
+
+// Helper to calculate period dates based on cutoff
+const calculatePeriodDates = (period: string, cutoffDate: number = 20): { start: Date; end: Date; label: string } => {
+  const [year, month] = period.split('-').map(Number);
+  const startCutoff = cutoffDate + 1;
+
+  // Period start: (cutoff + 1) of previous month
+  const periodStart = new Date(year, month - 2, startCutoff);
+
+  // Period end: cutoffDate of current month
+  const periodEnd = new Date(year, month - 1, cutoffDate);
+
+  // Format label
+  const formatDate = (d: Date) => {
+    return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+  };
+
+  return {
+    start: periodStart,
+    end: periodEnd,
+    label: `${formatDate(periodStart)} - ${formatDate(periodEnd)} ${year}`,
+  };
+};
 
 type EmploymentType = 'freelance' | 'internship';
 
@@ -188,17 +213,43 @@ export function FreelanceInternshipPayrollPage() {
   const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'processing' | 'validation' | 'processed'>('processing');
-  const [selectedPeriod, setSelectedPeriod] = useState('2026-01');
+  const [selectedPeriod, setSelectedPeriod] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
   const [search, setSearch] = useState('');
   const [employmentTypeFilter, setEmploymentTypeFilter] = useState<EmploymentType | 'all'>('all');
   const [selectedRecord, setSelectedRecord] = useState<PayrollRecord | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [cutoffDate, setCutoffDate] = useState<number>(20);
+  const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
     fetchCompanies();
   }, []);
+
+  // Fetch payroll settings when company changes
+  useEffect(() => {
+    if (selectedCompanyId) {
+      fetchPayrollSettings();
+    }
+  }, [selectedCompanyId]);
+
+  const fetchPayrollSettings = async () => {
+    try {
+      const settings = await payrollSettingService.getByCompany(selectedCompanyId!);
+      if (settings && settings.payroll_cutoff_date) {
+        setCutoffDate(settings.payroll_cutoff_date);
+      } else {
+        setCutoffDate(20); // Default cutoff
+      }
+    } catch {
+      console.error('Failed to fetch payroll settings, using default cutoff');
+      setCutoffDate(20);
+    }
+  };
 
   useEffect(() => {
     if (selectedCompanyId) {
@@ -360,6 +411,25 @@ export function FreelanceInternshipPayrollPage() {
     }
   };
 
+  // Export to Excel (all companies)
+  const handleExport = async () => {
+    setIsExporting(true);
+
+    try {
+      await payrollService.exportFreelanceInternship(selectedPeriod, cutoffDate);
+      toast.success('Export berhasil! File Excel sedang didownload.');
+    } catch (error: any) {
+      console.error('Export error:', error);
+      if (error.response?.status === 404) {
+        toast.error('Tidak ada data freelance/internship untuk diexport');
+      } else {
+        toast.error('Gagal export data');
+      }
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('id-ID', {
       style: 'currency',
@@ -373,6 +443,12 @@ export function FreelanceInternshipPayrollPage() {
     const [year, month] = period.split('-');
     const date = new Date(parseInt(year), parseInt(month) - 1);
     return date.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+  };
+
+  // Format period with cutoff dates
+  const formatPeriodWithCutoff = (period: string) => {
+    const periodDates = calculatePeriodDates(period, cutoffDate);
+    return periodDates.label;
   };
 
   const formatDateTime = (dateString: string) => {
@@ -534,11 +610,23 @@ export function FreelanceInternshipPayrollPage() {
                 <select
                   value={selectedPeriod}
                   onChange={(e) => setSelectedPeriod(e.target.value)}
-                  className="appearance-none pl-10 pr-10 py-2.5 bg-white/20 backdrop-blur-xl text-white rounded-xl border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50 text-sm font-medium cursor-pointer"
+                  className="appearance-none pl-10 pr-10 py-2.5 bg-white/20 backdrop-blur-xl text-white rounded-xl border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50 text-sm font-medium cursor-pointer min-w-[220px]"
                 >
-                  <option value="2026-01" className="text-gray-900">Januari 2026</option>
-                  <option value="2025-12" className="text-gray-900">Desember 2025</option>
-                  <option value="2025-11" className="text-gray-900">November 2025</option>
+                  {(() => {
+                    const periods = [];
+                    const currentDate = new Date();
+                    for (let i = 0; i < 12; i++) {
+                      const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
+                      const periodValue = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                      const periodLabel = date.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+                      periods.push(
+                        <option key={periodValue} value={periodValue} className="text-gray-900">
+                          {periodLabel}
+                        </option>
+                      );
+                    }
+                    return periods;
+                  })()}
                 </select>
                 <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -548,11 +636,20 @@ export function FreelanceInternshipPayrollPage() {
                 </svg>
               </div>
 
-              <button className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-orange-700 rounded-xl hover:bg-orange-50 transition-all duration-200 font-semibold shadow-lg">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                </svg>
-                <span>Export</span>
+              <button
+                onClick={handleExport}
+                disabled={isExporting}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-orange-700 rounded-xl hover:bg-orange-50 transition-all duration-200 font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Export semua company ke Excel"
+              >
+                {isExporting ? (
+                  <div className="w-5 h-5 border-2 border-orange-300 border-t-orange-700 rounded-full animate-spin" />
+                ) : (
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                  </svg>
+                )}
+                <span>{isExporting ? 'Exporting...' : 'Export Excel'}</span>
               </button>
             </div>
           </div>
@@ -734,6 +831,9 @@ export function FreelanceInternshipPayrollPage() {
           <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
             <div className="flex items-center gap-4 text-sm text-gray-500">
               <span>Periode: <span className="font-semibold text-gray-900">{formatPeriod(selectedPeriod)}</span></span>
+              <span className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded-lg">
+                Cutoff: {formatPeriodWithCutoff(selectedPeriod)}
+              </span>
             </div>
             <span className="text-sm text-gray-500">{filteredRecords.length} data</span>
           </div>
@@ -912,12 +1012,12 @@ export function FreelanceInternshipPayrollPage() {
                     </svg>
                   </button>
                 </div>
-                <div className="flex items-center gap-2 mt-4">
+                <div className="flex flex-wrap items-center gap-2 mt-4">
                   <span className="inline-flex items-center gap-1 px-3 py-1.5 bg-white/20 rounded-lg text-sm text-white">
                     {selectedRecord.employment_type === 'freelance' ? '💻 Freelance' : '🎓 Internship'}
                   </span>
                   <span className="inline-flex items-center gap-2 px-3 py-1.5 bg-white/20 rounded-lg text-sm text-white">
-                    Periode: {formatPeriod(selectedRecord.period)}
+                    {formatPeriod(selectedRecord.period)} ({formatPeriodWithCutoff(selectedRecord.period)})
                   </span>
                   {getStatusBadge(selectedRecord.status)}
                 </div>

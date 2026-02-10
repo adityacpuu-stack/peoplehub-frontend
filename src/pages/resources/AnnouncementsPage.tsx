@@ -33,6 +33,7 @@ import {
   type AnnouncementStatistics,
   type CreateAnnouncementRequest,
 } from '@/services/announcement.service';
+import { companyService, type Company } from '@/services/company.service';
 
 
 const categories = [
@@ -52,15 +53,10 @@ const priorities = [
   { value: 'urgent', label: 'Urgent' },
 ];
 
-interface CompanyItem {
-  id: number;
-  name: string;
-}
-
 export function AnnouncementsPage() {
   const { user } = useAuthStore();
-  const companies: CompanyItem[] = (user as { companies?: CompanyItem[] })?.companies || [];
-  const [selectedCompanyId, setSelectedCompanyId] = useState<number>(companies[0]?.id || 1);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<number | undefined>(undefined);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedPriority, setSelectedPriority] = useState('all');
@@ -103,8 +99,27 @@ export function AnnouncementsPage() {
     target_company_ids: [],
   });
 
+  // Fetch companies on mount
+  useEffect(() => {
+    const fetchCompanies = async () => {
+      try {
+        const response = await companyService.getAll({ page: 1, limit: 100, is_active: true });
+        const activeCompanies = response.data;
+        setCompanies(activeCompanies);
+        if (activeCompanies.length > 0 && !selectedCompanyId) {
+          setSelectedCompanyId(activeCompanies[0].id);
+        }
+      } catch (err) {
+        console.error('Failed to fetch companies:', err);
+      }
+    };
+    fetchCompanies();
+  }, []);
+
   // Fetch announcements
   const fetchAnnouncements = useCallback(async () => {
+    if (!selectedCompanyId) return;
+
     try {
       setLoading(true);
       setError(null);
@@ -372,7 +387,7 @@ export function AnnouncementsPage() {
                 onChange={(e) => setSelectedCompanyId(Number(e.target.value))}
                 className="md:hidden bg-white/20 backdrop-blur-sm border border-white/30 text-white text-sm rounded-lg px-2 py-1.5 focus:outline-none"
               >
-                {companies.map((company: CompanyItem) => (
+                {companies.map((company: Company) => (
                   <option key={company.id} value={company.id} className="text-gray-900">
                     {company.name}
                   </option>
@@ -411,7 +426,7 @@ export function AnnouncementsPage() {
                 onChange={(e) => setSelectedCompanyId(Number(e.target.value))}
                 className="hidden md:block bg-white/20 backdrop-blur-sm border border-white/30 text-white text-sm rounded-lg px-3 py-1.5 focus:outline-none ml-2"
               >
-                {companies.map((company: CompanyItem) => (
+                {companies.map((company: Company) => (
                   <option key={company.id} value={company.id} className="text-gray-900">
                     {company.name}
                   </option>
@@ -752,7 +767,7 @@ export function AnnouncementsPage() {
                         <Building2 className="h-5 w-5 mx-auto mb-1" />
                         <span className="text-sm font-medium">Current Company</span>
                         <p className="text-xs text-gray-500 mt-0.5">
-                          {companies.find((c: CompanyItem) => c.id === selectedCompanyId)?.name || 'Selected'}
+                          {companies.find((c: Company) => c.id === selectedCompanyId)?.name || 'Selected'}
                         </p>
                       </button>
                       <button
@@ -788,7 +803,7 @@ export function AnnouncementsPage() {
                       <div className="mt-3 p-3 bg-gray-50 rounded-lg">
                         <label className="block text-xs font-medium text-gray-600 mb-2">Select target companies:</label>
                         <div className="space-y-2">
-                          {companies.map((company: CompanyItem) => (
+                          {companies.map((company: Company) => (
                             <label key={company.id} className="flex items-center gap-2 cursor-pointer">
                               <input
                                 type="checkbox"

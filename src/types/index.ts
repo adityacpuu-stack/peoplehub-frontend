@@ -140,6 +140,10 @@ export interface Employee {
   confirmation_date?: string;
   contract_start_date?: string;
   contract_end_date?: string;
+  resign_date?: string;
+  resign_type?: string;
+  resign_reason?: string;
+  resign_notes?: string;
   employment_status: string | null;
   employment_type?: string;
   work_schedule?: string;
@@ -247,6 +251,10 @@ export interface CreateEmployeeRequest {
   probation_end_date?: string;
   contract_start_date?: string;
   contract_end_date?: string;
+  resign_date?: string;
+  resign_type?: string;
+  resign_reason?: string;
+  resign_notes?: string;
   employment_type?: string;
   employment_status?: string;
   work_schedule?: string;

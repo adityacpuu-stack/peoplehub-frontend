@@ -519,6 +519,28 @@ export const payrollService = {
     window.URL.revokeObjectURL(url);
   },
 
+  // Export freelance/internship payroll to Excel
+  // Exports all accessible companies
+  exportFreelanceInternship: async (period: string, cutoffDate: number = 20): Promise<void> => {
+    const response = await api.get('/payroll/export/freelance-internship', {
+      params: { period, cutoff_date: cutoffDate },
+      responseType: 'blob',
+    });
+
+    // Create download link
+    const periodFormatted = period.replace('-', '');
+    const filename = `Freelance_Internship_Payroll_${periodFormatted}.xlsx`;
+
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
   // ==========================================
   // UTILITY FUNCTIONS
   // ==========================================

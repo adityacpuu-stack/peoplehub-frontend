@@ -71,6 +71,7 @@ import {
   HolidayCalendarPage,
   OvertimePage,
   AllowancesPage,
+  DeductionsPage,
   LeaveRequestsPage,
   LeavePolicyPage,
   LeaveEntitlementsPage,
@@ -268,6 +269,7 @@ function App() {
           <Route path="/holiday-calendar" element={<HolidayCalendarPage />} />
           <Route path="/overtime" element={<OvertimePage />} />
           <Route path="/allowances" element={<AllowancesPage />} />
+          <Route path="/deductions" element={<DeductionsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/requests" element={<RequestsPage />} />

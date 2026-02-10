@@ -99,6 +99,9 @@ export { OvertimePage } from './overtime/OvertimePage';
 // Allowances
 export { AllowancesPage } from './allowances/AllowancesPage';
 
+// Deductions
+export { DeductionsPage } from './deductions/DeductionsPage';
+
 // Leave Management
 export { LeaveRequestsPage, LeavePolicyPage, LeaveEntitlementsPage, LeaveAnalyticsPage } from './leave';
 

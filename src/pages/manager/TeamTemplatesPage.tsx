@@ -78,21 +78,27 @@ export function TeamTemplatesPage() {
     }
   };
 
-  const getCategoryConfig = (category: TemplateCategory) => {
-    switch (category) {
-      case 'form':
-        return { label: 'Form', color: 'bg-blue-100 text-blue-700' };
-      case 'report':
-        return { label: 'Report', color: 'bg-purple-100 text-purple-700' };
-      case 'letter':
-        return { label: 'Letter', color: 'bg-amber-100 text-amber-700' };
-      case 'policy':
-        return { label: 'Policy', color: 'bg-green-100 text-green-700' };
-      case 'contract':
-        return { label: 'Contract', color: 'bg-indigo-100 text-indigo-700' };
-      default:
-        return { label: 'Other', color: 'bg-gray-100 text-gray-700' };
-    }
+  const getCategoryConfig = (category: TemplateCategory | string) => {
+    const configs: Record<string, { label: string; color: string }> = {
+      contract: { label: 'Contract', color: 'bg-blue-100 text-blue-700' },
+      letter: { label: 'Letter', color: 'bg-purple-100 text-purple-700' },
+      policy: { label: 'Policy', color: 'bg-amber-100 text-amber-700' },
+      form: { label: 'Form', color: 'bg-green-100 text-green-700' },
+      report: { label: 'Report', color: 'bg-cyan-100 text-cyan-700' },
+      sop: { label: 'SOP', color: 'bg-indigo-100 text-indigo-700' },
+      guideline: { label: 'Guideline', color: 'bg-teal-100 text-teal-700' },
+      manual: { label: 'Manual', color: 'bg-rose-100 text-rose-700' },
+      memo: { label: 'Memo', color: 'bg-orange-100 text-orange-700' },
+      circular: { label: 'Circular', color: 'bg-pink-100 text-pink-700' },
+      checklist: { label: 'Checklist', color: 'bg-lime-100 text-lime-700' },
+      announcement: { label: 'Announcement', color: 'bg-sky-100 text-sky-700' },
+      onboarding: { label: 'Onboarding', color: 'bg-emerald-100 text-emerald-700' },
+      offboarding: { label: 'Offboarding', color: 'bg-red-100 text-red-700' },
+      evaluation: { label: 'Evaluation', color: 'bg-violet-100 text-violet-700' },
+      training: { label: 'Training', color: 'bg-fuchsia-100 text-fuchsia-700' },
+      other: { label: 'Other', color: 'bg-gray-100 text-gray-700' },
+    };
+    return configs[category] || configs.other;
   };
 
   const filteredTemplates = templates.filter((template) => {

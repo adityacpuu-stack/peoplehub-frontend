@@ -5,7 +5,25 @@ import type { ApiResponse, PaginatedResponse, PaginationParams } from '@/types';
 // TEMPLATE TYPES
 // ==========================================
 
-export const TEMPLATE_CATEGORIES = ['contract', 'letter', 'policy', 'form', 'report', 'other'] as const;
+export const TEMPLATE_CATEGORIES = [
+  'contract',      // Kontrak kerja, perjanjian
+  'letter',        // Surat-surat (offering, warning, reference)
+  'policy',        // Kebijakan perusahaan
+  'form',          // Form/formulir
+  'report',        // Laporan
+  'sop',           // Standard Operating Procedure
+  'guideline',     // Pedoman/panduan
+  'manual',        // Manual/buku panduan
+  'memo',          // Memorandum internal
+  'circular',      // Surat edaran
+  'checklist',     // Checklist/daftar periksa
+  'announcement',  // Template pengumuman
+  'onboarding',    // Dokumen onboarding
+  'offboarding',   // Dokumen offboarding/resign
+  'evaluation',    // Form evaluasi/penilaian
+  'training',      // Materi/dokumen training
+  'other',         // Lainnya
+] as const;
 export type TemplateCategory = (typeof TEMPLATE_CATEGORIES)[number];
 
 export const TEMPLATE_FILE_TYPES = ['docx', 'pdf', 'xlsx', 'pptx', 'other'] as const;
@@ -214,11 +232,22 @@ export const templateService = {
 
 export const getCategoryLabel = (category: TemplateCategory): string => {
   const labels: Record<TemplateCategory, string> = {
-    contract: 'Contract',
-    letter: 'Letter',
-    policy: 'Policy',
-    form: 'Form',
-    report: 'Report',
+    contract: 'Contracts',
+    letter: 'Letters',
+    policy: 'Policies',
+    form: 'Forms',
+    report: 'Reports',
+    sop: 'SOP',
+    guideline: 'Guidelines',
+    manual: 'Manuals',
+    memo: 'Memos',
+    circular: 'Circulars',
+    checklist: 'Checklists',
+    announcement: 'Announcements',
+    onboarding: 'Onboarding',
+    offboarding: 'Offboarding',
+    evaluation: 'Evaluations',
+    training: 'Training',
     other: 'Other',
   };
   return labels[category] || category;

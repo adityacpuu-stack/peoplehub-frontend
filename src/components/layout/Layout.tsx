@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
+import { AnnouncementPopup } from '@/components/AnnouncementPopup';
 import { useSidebarStore } from '@/stores/sidebar.store';
 import { cn } from '@/lib/utils';
 
@@ -32,6 +33,9 @@ export function Layout() {
           onClick={() => useSidebarStore.getState().setOpen(false)}
         />
       )}
+
+      {/* Announcement Popup */}
+      <AnnouncementPopup />
     </div>
   );
 }

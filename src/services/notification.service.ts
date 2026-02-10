@@ -37,6 +37,29 @@ export interface UnreadCountResponse {
   };
 }
 
+export interface AnnouncementPopup {
+  notification_id: number;
+  type: string;
+  announcement: {
+    id: number;
+    title: string;
+    content: string;
+    category: string;
+    priority: string;
+    published_at: string;
+    creator: {
+      id: number;
+      name: string;
+    };
+  };
+  created_at: string;
+}
+
+export interface AnnouncementPopupsResponse {
+  success: boolean;
+  data: AnnouncementPopup[];
+}
+
 // ==========================================
 // SERVICE
 // ==========================================
@@ -73,5 +96,21 @@ export const notificationService = {
   // Delete all read notifications
   deleteAllRead: async (): Promise<void> => {
     await api.delete('/notifications/read');
+  },
+
+  // Get announcement popups (unread announcements for popup display)
+  getAnnouncementPopups: async (): Promise<AnnouncementPopup[]> => {
+    const response = await api.get<AnnouncementPopupsResponse>('/notifications/announcement-popups');
+    return response.data.data;
+  },
+
+  // Dismiss single announcement popup
+  dismissAnnouncementPopup: async (notificationId: number): Promise<void> => {
+    await api.post(`/notifications/announcement-popups/${notificationId}/dismiss`);
+  },
+
+  // Dismiss all announcement popups
+  dismissAllAnnouncementPopups: async (): Promise<void> => {
+    await api.post('/notifications/announcement-popups/dismiss-all');
   },
 };

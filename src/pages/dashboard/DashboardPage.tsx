@@ -146,6 +146,20 @@ interface DashboardOverview {
   }>;
 }
 
+// Payroll summary type for HR dashboard
+interface PayrollSummaryData {
+  current_period: {
+    period: string;
+    status: string;
+    total_employees: number;
+    total_gross: number;
+    total_deductions: number;
+    total_net: number;
+  } | null;
+  pending_adjustments: number;
+  pending_overtime: number;
+}
+
 export function DashboardPage() {
   const { user } = useAuthStore();
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -154,6 +168,7 @@ export function DashboardPage() {
   const [groupDashboard, setGroupDashboard] = useState<GroupDashboard | null>(null);
   const [myDashboard, setMyDashboard] = useState<MyDashboard | null>(null);
   const [pendingApprovals, setPendingApprovals] = useState<LeaveRequest[]>([]);
+  const [payrollSummary, setPayrollSummary] = useState<PayrollSummaryData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // Check user roles
@@ -182,6 +197,7 @@ export function DashboardPage() {
 
           if (isHR) {
             promises.push(dashboardService.getOverview());
+            promises.push(dashboardService.getPayrollSummary());
           }
 
           const results = await Promise.all(promises);
@@ -189,6 +205,9 @@ export function DashboardPage() {
 
           if (isHR && results[1]) {
             setOverview(results[1] as DashboardOverview);
+          }
+          if (isHR && results[2]) {
+            setPayrollSummary(results[2] as PayrollSummaryData);
           }
         }
 
@@ -221,15 +240,29 @@ export function DashboardPage() {
     return <PageSpinner />;
   }
 
-  const attendanceToday = stats?.attendance_today || {
-    present: 0,
-    absent: 0,
-    late: 0,
-    on_leave: 0,
+  // Format currency for payroll display
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(value);
   };
 
-  const totalAttendance = attendanceToday.present + attendanceToday.absent + attendanceToday.late + attendanceToday.on_leave;
-  const attendanceRate = totalAttendance > 0 ? Math.round((attendanceToday.present / totalAttendance) * 100) : 0;
+  // Format compact currency (e.g., 125M, 1.2B)
+  const formatCompactCurrency = (value: number) => {
+    if (value >= 1_000_000_000) {
+      return `${(value / 1_000_000_000).toFixed(1)}B`;
+    }
+    if (value >= 1_000_000) {
+      return `${(value / 1_000_000).toFixed(0)}M`;
+    }
+    if (value >= 1_000) {
+      return `${(value / 1_000).toFixed(0)}K`;
+    }
+    return value.toString();
+  };
 
   const greeting = () => {
     const hour = new Date().getHours();
@@ -1672,8 +1705,13 @@ export function DashboardPage() {
     percent: totalDeptEmployees > 0 ? Math.round((d.value / totalDeptEmployees) * 100) : 0,
   }));
 
-  // Compute attendance data from overview
-  const attendanceOverview = overview?.attendance?.today;
+  // Compute payroll data for display
+  const payrollPeriod = payrollSummary?.current_period;
+  const payrollChartData = payrollPeriod ? [
+    { name: 'Gross Salary', value: payrollPeriod.total_gross, fill: '#3b82f6' },
+    { name: 'Deductions', value: payrollPeriod.total_deductions, fill: '#ef4444' },
+    { name: 'Net Salary', value: payrollPeriod.total_net, fill: '#22c55e' },
+  ] : [];
 
   return (
     <div className="space-y-6">
@@ -1764,49 +1802,52 @@ export function DashboardPage() {
           <p className="text-sm text-gray-500">New Hires</p>
         </div>
 
-        {/* Attendance Rate */}
+        {/* Monthly Payroll */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
           <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl flex items-center justify-center shadow-lg">
-              <TrendingUp className="h-5 w-5 text-white" />
+            <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-lg">
+              <DollarSign className="h-5 w-5 text-white" />
             </div>
-            <span className="inline-flex items-center px-2 py-1 bg-amber-50 text-amber-700 text-xs font-bold rounded-lg">
-              Today
+            <span className="inline-flex items-center px-2 py-1 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-lg">
+              This Month
             </span>
           </div>
-          <p className="text-3xl font-bold text-gray-900 mb-1">{attendanceRate}%</p>
-          <p className="text-sm text-gray-500">Attendance Rate</p>
+          <p className="text-3xl font-bold text-gray-900 mb-1">
+            {payrollPeriod ? formatCompactCurrency(payrollPeriod.total_net) : '-'}
+          </p>
+          <p className="text-sm text-gray-500">Net Payroll</p>
         </div>
       </div>
 
       {/* Charts Row */}
       <div className="grid lg:grid-cols-3 gap-6">
-        {/* Attendance Overview Chart */}
+        {/* Payroll Overview Chart */}
         <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-shadow">
           <div className="flex items-start justify-between mb-6">
             <div>
-              <h3 className="text-lg font-bold text-gray-900">Today's Attendance Overview</h3>
-              <p className="text-xs text-gray-500 mt-1">Real-time attendance breakdown</p>
+              <h3 className="text-lg font-bold text-gray-900">Payroll Overview</h3>
+              <p className="text-xs text-gray-500 mt-1">
+                {payrollPeriod ? `Period: ${payrollPeriod.period} • ${payrollPeriod.total_employees} employees` : 'Current month breakdown'}
+              </p>
             </div>
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-md">
-              <Activity className="h-5 w-5 text-white" />
+            <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-md">
+              <Wallet className="h-5 w-5 text-white" />
             </div>
           </div>
-          {attendanceOverview ? (
+          {payrollPeriod ? (
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
-                  data={[
-                    { name: 'Checked In', value: attendanceOverview.checked_in, fill: '#22c55e' },
-                    { name: 'Late', value: attendanceOverview.late, fill: '#f59e0b' },
-                    { name: 'On Leave', value: attendanceOverview.on_leave, fill: '#3b82f6' },
-                    { name: 'Absent', value: attendanceOverview.absent, fill: '#ef4444' },
-                  ]}
+                  data={payrollChartData}
                   margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                   <XAxis dataKey="name" tick={{ fontSize: 12 }} stroke="#9ca3af" />
-                  <YAxis tick={{ fontSize: 12 }} stroke="#9ca3af" />
+                  <YAxis
+                    tick={{ fontSize: 12 }}
+                    stroke="#9ca3af"
+                    tickFormatter={(value) => formatCompactCurrency(value)}
+                  />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: 'white',
@@ -1814,15 +1855,10 @@ export function DashboardPage() {
                       borderRadius: '12px',
                       boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)',
                     }}
-                    formatter={(value) => [`${value ?? 0} employees`, 'Count']}
+                    formatter={(value) => [formatCurrency(value as number), 'Amount']}
                   />
                   <Bar dataKey="value" radius={[8, 8, 0, 0]}>
-                    {[
-                      { name: 'Checked In', value: attendanceOverview.checked_in, fill: '#22c55e' },
-                      { name: 'Late', value: attendanceOverview.late, fill: '#f59e0b' },
-                      { name: 'On Leave', value: attendanceOverview.on_leave, fill: '#3b82f6' },
-                      { name: 'Absent', value: attendanceOverview.absent, fill: '#ef4444' },
-                    ].map((entry, index) => (
+                    {payrollChartData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.fill} />
                     ))}
                   </Bar>
@@ -1830,41 +1866,10 @@ export function DashboardPage() {
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={[
-                    { name: 'Present', value: attendanceToday.present, fill: '#22c55e' },
-                    { name: 'Late', value: attendanceToday.late, fill: '#f59e0b' },
-                    { name: 'On Leave', value: attendanceToday.on_leave, fill: '#3b82f6' },
-                    { name: 'Absent', value: attendanceToday.absent, fill: '#ef4444' },
-                  ]}
-                  margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="name" tick={{ fontSize: 12 }} stroke="#9ca3af" />
-                  <YAxis tick={{ fontSize: 12 }} stroke="#9ca3af" />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'white',
-                      border: 'none',
-                      borderRadius: '12px',
-                      boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)',
-                    }}
-                    formatter={(value) => [`${value ?? 0} employees`, 'Count']}
-                  />
-                  <Bar dataKey="value" radius={[8, 8, 0, 0]}>
-                    {[
-                      { name: 'Present', value: attendanceToday.present, fill: '#22c55e' },
-                      { name: 'Late', value: attendanceToday.late, fill: '#f59e0b' },
-                      { name: 'On Leave', value: attendanceToday.on_leave, fill: '#3b82f6' },
-                      { name: 'Absent', value: attendanceToday.absent, fill: '#ef4444' },
-                    ].map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.fill} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+            <div className="h-64 flex flex-col items-center justify-center text-gray-400">
+              <Wallet className="h-12 w-12 mb-3 opacity-50" />
+              <p className="text-sm">No payroll data for current period</p>
+              <p className="text-xs mt-1">Payroll data will appear once processed</p>
             </div>
           )}
         </div>
@@ -1922,45 +1927,53 @@ export function DashboardPage() {
 
       {/* Bottom Row */}
       <div className="grid lg:grid-cols-3 gap-6">
-        {/* Today's Attendance Summary */}
+        {/* Payroll Summary */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-shadow">
           <div className="flex items-start justify-between mb-4">
             <div>
-              <h3 className="text-lg font-bold text-gray-900">Today's Attendance</h3>
-              <p className="text-xs text-gray-500 mt-1">Real-time attendance status</p>
+              <h3 className="text-lg font-bold text-gray-900">Payroll Summary</h3>
+              <p className="text-xs text-gray-500 mt-1">{payrollPeriod?.period || 'Current period'}</p>
             </div>
-            <Link to="/attendance" className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1">
+            <Link to="/payroll" className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1">
               View All <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
           <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 rounded-xl bg-green-50 border border-green-100">
+            <div className="flex items-center justify-between p-3 rounded-xl bg-blue-50 border border-blue-100">
               <div className="flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full bg-green-500" />
-                <span className="text-sm font-medium text-gray-700">Checked In</span>
+                <div className="w-2 h-2 rounded-full bg-blue-500" />
+                <span className="text-sm font-medium text-gray-700">Gross Salary</span>
               </div>
-              <span className="font-bold text-green-600">{attendanceOverview?.checked_in ?? attendanceToday.present}</span>
+              <span className="font-bold text-blue-600 text-sm">
+                {payrollPeriod ? formatCurrency(payrollPeriod.total_gross) : '-'}
+              </span>
             </div>
             <div className="flex items-center justify-between p-3 rounded-xl bg-red-50 border border-red-100">
               <div className="flex items-center gap-3">
                 <div className="w-2 h-2 rounded-full bg-red-500" />
-                <span className="text-sm font-medium text-gray-700">Absent</span>
+                <span className="text-sm font-medium text-gray-700">Total Deductions</span>
               </div>
-              <span className="font-bold text-red-600">{attendanceOverview?.absent ?? attendanceToday.absent}</span>
+              <span className="font-bold text-red-600 text-sm">
+                {payrollPeriod ? formatCurrency(payrollPeriod.total_deductions) : '-'}
+              </span>
             </div>
-            <div className="flex items-center justify-between p-3 rounded-xl bg-amber-50 border border-amber-100">
+            <div className="flex items-center justify-between p-3 rounded-xl bg-green-50 border border-green-100">
               <div className="flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full bg-amber-500" />
-                <span className="text-sm font-medium text-gray-700">Late</span>
+                <div className="w-2 h-2 rounded-full bg-green-500" />
+                <span className="text-sm font-medium text-gray-700">Net Salary</span>
               </div>
-              <span className="font-bold text-amber-600">{attendanceOverview?.late ?? attendanceToday.late}</span>
+              <span className="font-bold text-green-600 text-sm">
+                {payrollPeriod ? formatCurrency(payrollPeriod.total_net) : '-'}
+              </span>
             </div>
-            <div className="flex items-center justify-between p-3 rounded-xl bg-blue-50 border border-blue-100">
+            <div className="flex items-center justify-between p-3 rounded-xl bg-purple-50 border border-purple-100">
               <div className="flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full bg-blue-500" />
-                <span className="text-sm font-medium text-gray-700">On Leave</span>
+                <div className="w-2 h-2 rounded-full bg-purple-500" />
+                <span className="text-sm font-medium text-gray-700">Employees</span>
               </div>
-              <span className="font-bold text-blue-600">{attendanceOverview?.on_leave ?? attendanceToday.on_leave}</span>
+              <span className="font-bold text-purple-600">
+                {payrollPeriod?.total_employees ?? '-'}
+              </span>
             </div>
           </div>
         </div>

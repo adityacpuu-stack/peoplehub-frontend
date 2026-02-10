@@ -83,11 +83,12 @@ export function PayrollPage() {
         period: selectedPeriod,
         limit: 500, // Get all for this period
       });
-      // Filter out freelance/internship (separate page) and inactive employees
+      // Filter out freelance/internship (separate page)
+      // Include active and resigned employees (resigned employees with payroll in this period are valid)
       const permanentRecords = response.data.filter(
         record =>
           !['freelance', 'internship'].includes(record.employee.employment_type || '') &&
-          record.employee.employment_status === 'active'
+          ['active', 'resigned'].includes(record.employee.employment_status || '')
       );
       setRecords(permanentRecords);
     } catch {
@@ -352,6 +353,12 @@ export function PayrollPage() {
       return;
     }
 
+    // Check if there are approved payrolls
+    if (tabCounts.approved === 0) {
+      toast.error('Tidak ada payroll dengan status Approved. Approve payroll terlebih dahulu sebelum export.');
+      return;
+    }
+
     setShowExportMenu(false);
 
     setIsExporting(true);
@@ -597,11 +604,12 @@ export function PayrollPage() {
                 </svg>
               </div>
 
-              {/* Export Dropdown */}
+              {/* Export Dropdown - Only enabled when there are approved payrolls */}
               <div className="relative">
                 <button
                   onClick={() => setShowExportMenu(!showExportMenu)}
-                  disabled={isExporting}
+                  disabled={isExporting || tabCounts.approved === 0}
+                  title={tabCounts.approved === 0 ? 'Approve payroll terlebih dahulu' : 'Export Excel'}
                   className="inline-flex items-center gap-2 px-4 py-2.5 bg-white/20 backdrop-blur-xl text-white rounded-xl border border-white/30 hover:bg-white/30 transition-all duration-200 font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isExporting ? (
@@ -1358,6 +1366,46 @@ export function PayrollPage() {
 
                   {/* Right Column - Deductions */}
                   <div className="space-y-4">
+                    {/* Attendance Info */}
+                    {(selectedRecord.working_days || selectedRecord.absent_days || selectedRecord.late_days) && (
+                      <div className="bg-gray-50 rounded-xl p-4">
+                        <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                          <div className="w-8 h-8 bg-gray-200 rounded-lg flex items-center justify-center">
+                            <svg className="w-4 h-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                          </div>
+                          Info Kehadiran
+                        </h3>
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                          {selectedRecord.working_days && (
+                            <div>
+                              <span className="text-gray-500">Hari Kerja</span>
+                              <p className="font-medium">{selectedRecord.working_days} hari</p>
+                            </div>
+                          )}
+                          {selectedRecord.actual_working_days && (
+                            <div>
+                              <span className="text-gray-500">Hari Hadir</span>
+                              <p className="font-medium">{selectedRecord.actual_working_days} hari</p>
+                            </div>
+                          )}
+                          {(selectedRecord.absent_days || 0) > 0 && (
+                            <div>
+                              <span className="text-gray-500">Tidak Hadir</span>
+                              <p className="font-medium text-red-600">{selectedRecord.absent_days} hari</p>
+                            </div>
+                          )}
+                          {(selectedRecord.late_days || 0) > 0 && (
+                            <div>
+                              <span className="text-gray-500">Terlambat</span>
+                              <p className="font-medium text-orange-600">{selectedRecord.late_days} hari</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     {/* BPJS */}
                     <div className="bg-blue-50 rounded-xl p-4">
                       <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
@@ -1486,6 +1534,12 @@ export function PayrollPage() {
                             <div className="flex items-center justify-between text-sm">
                               <span className="text-gray-600">Potongan Pinjaman</span>
                               <span className="font-medium text-red-600">-{formatCurrency(selectedRecord.loan_deduction!)}</span>
+                            </div>
+                          )}
+                          {(selectedRecord.other_deductions || 0) > 0 && (
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-gray-600">Potongan Lainnya</span>
+                              <span className="font-medium text-red-600">-{formatCurrency(selectedRecord.other_deductions!)}</span>
                             </div>
                           )}
                         </div>
