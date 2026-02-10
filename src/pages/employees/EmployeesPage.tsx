@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   Plus,
   Search,
@@ -43,10 +43,17 @@ import type { Employee } from '@/types';
 import { formatDate, formatNumber } from '@/lib/utils';
 
 export function EmployeesPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
+  const page = Number(searchParams.get('page')) || 1;
+  const setPage = (newPage: number) => {
+    setSearchParams(prev => {
+      prev.set('page', String(newPage));
+      return prev;
+    });
+  };
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
