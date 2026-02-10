@@ -9,10 +9,15 @@ import {
   PAYROLL_STATUS,
 } from '@/services/payroll.service';
 
+const PAYROLL_COMPANY_KEY = 'payroll_selected_company';
+
 export function PayrollPage() {
   const [records, setRecords] = useState<Payroll[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
-  const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(() => {
+    const saved = localStorage.getItem(PAYROLL_COMPANY_KEY);
+    return saved ? Number(saved) : null;
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'processing' | 'validation' | 'approved' | 'paid'>('processing');
   const [selectedPeriod, setSelectedPeriod] = useState(() => {
@@ -46,6 +51,7 @@ export function PayrollPage() {
 
   useEffect(() => {
     if (selectedCompanyId) {
+      localStorage.setItem(PAYROLL_COMPANY_KEY, String(selectedCompanyId));
       fetchPayrollData();
     }
   }, [selectedPeriod, selectedCompanyId]);
@@ -55,7 +61,14 @@ export function PayrollPage() {
       const response = await companyService.getAll({ limit: 100 });
       setCompanies(response.data);
       if (response.data.length > 0) {
-        setSelectedCompanyId(response.data[0].id);
+        // Check if saved company exists in list, otherwise use first
+        const savedId = localStorage.getItem(PAYROLL_COMPANY_KEY);
+        const savedCompany = savedId ? response.data.find(c => c.id === Number(savedId)) : null;
+        if (savedCompany) {
+          setSelectedCompanyId(savedCompany.id);
+        } else {
+          setSelectedCompanyId(response.data[0].id);
+        }
       }
     } catch {
       toast.error('Gagal memuat data company');
