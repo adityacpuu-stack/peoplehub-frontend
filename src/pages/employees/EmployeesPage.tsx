@@ -38,6 +38,7 @@ import {
   getStatusVariant,
   PageSpinner,
 } from '@/components/ui';
+import toast from 'react-hot-toast';
 import { employeeService } from '@/services/employee.service';
 import type { Employee } from '@/types';
 import { formatDate, formatNumber } from '@/lib/utils';
@@ -69,6 +70,7 @@ export function EmployeesPage() {
     employee: null,
   });
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   const fetchEmployees = async () => {
     setIsLoading(true);
@@ -131,6 +133,22 @@ export function EmployeesPage() {
   const clearFilters = () => {
     setFilters({ status: '', department: '' });
     setSearch('');
+  };
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      await employeeService.exportExcel({
+        search: search || undefined,
+        employment_status: activeTab === 'active' ? 'active' : 'inactive',
+      });
+      toast.success('Employee data exported successfully');
+    } catch (error: any) {
+      console.error('Export failed:', error);
+      toast.error(error?.response?.data?.message || 'Failed to export employee data');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   // Get active count when on inactive tab (for the tab badge)
@@ -214,9 +232,13 @@ export function EmployeesPage() {
             </div>
 
             <div className="flex flex-wrap gap-3">
-              <button className="px-5 py-2.5 bg-white/20 backdrop-blur-xl text-white rounded-xl hover:bg-white/30 transition text-sm font-medium border border-white/30 shadow-lg flex items-center gap-2">
-                <Download className="h-4 w-4" />
-                Export
+              <button
+                onClick={handleExport}
+                disabled={isExporting}
+                className="px-5 py-2.5 bg-white/20 backdrop-blur-xl text-white rounded-xl hover:bg-white/30 transition text-sm font-medium border border-white/30 shadow-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Download className={`h-4 w-4 ${isExporting ? 'animate-bounce' : ''}`} />
+                {isExporting ? 'Exporting...' : 'Export'}
               </button>
               <button className="px-5 py-2.5 bg-white/20 backdrop-blur-xl text-white rounded-xl hover:bg-white/30 transition text-sm font-medium border border-white/30 shadow-lg flex items-center gap-2">
                 <Upload className="h-4 w-4" />

@@ -102,6 +102,33 @@ export const employeeService = {
     return response.data.data.employee_id;
   },
 
+  // Export employees to Excel
+  exportExcel: async (params?: {
+    search?: string;
+    company_id?: number;
+    department_id?: number;
+    employment_status?: string;
+    employment_type?: string;
+  }): Promise<void> => {
+    const response = await api.get('/employees/export', {
+      params,
+      responseType: 'blob',
+    });
+
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    const filename = `Employee_Export_${dateStr}.xlsx`;
+
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
   // Get leadership team - employees who have direct reports
   getLeadershipTeam: async (companyId?: number): Promise<LeadershipMember[]> => {
     const params = companyId ? { company_id: companyId } : undefined;
