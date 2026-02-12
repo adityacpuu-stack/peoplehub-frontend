@@ -939,7 +939,7 @@ export function ContractsPage() {
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                   </svg>
-                  Upload HR Doc
+                  Upload P&C Doc
                 </button>
               </div>
             </div>
@@ -1394,7 +1394,7 @@ export function ContractsPage() {
               }`}>
                 <div className="flex items-center justify-between">
                   <h2 className="text-xl font-bold text-white">
-                    {documentCategory === 'employee' ? 'Upload Employee Document' : 'Upload HR Document'}
+                    {documentCategory === 'employee' ? 'Upload Employee Document' : 'Upload P&C Document'}
                   </h2>
                   <button
                     onClick={() => setShowDocModal(false)}
@@ -1408,7 +1408,7 @@ export function ContractsPage() {
                 <p className="text-white/80 text-sm mt-1">
                   {documentCategory === 'employee'
                     ? 'Documents to be uploaded by employees (ID card, Tax ID, Diploma, etc.)'
-                    : 'Documents from HR for employees (Offer Letter, Contract, Letters, etc.)'}
+                    : 'Documents from P&C for employees (Offer Letter, Contract, Letters, etc.)'}
                 </p>
               </div>
 

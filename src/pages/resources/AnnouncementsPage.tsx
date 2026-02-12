@@ -41,7 +41,7 @@ const categories = [
   { value: 'general', label: 'General' },
   { value: 'policy', label: 'Policy Update' },
   { value: 'event', label: 'Event' },
-  { value: 'hr', label: 'HR Notice' },
+  { value: 'hr', label: 'P&C Notice' },
   { value: 'urgent', label: 'Urgent' },
 ];
 
@@ -171,7 +171,7 @@ export function AnnouncementsPage() {
       general: 'General',
       policy: 'Policy',
       event: 'Event',
-      hr: 'HR Notice',
+      hr: 'P&C Notice',
       urgent: 'Urgent',
     };
     return (

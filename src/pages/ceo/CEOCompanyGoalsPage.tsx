@@ -26,7 +26,7 @@ const mockGoals = [
     current: 8.5,
     unit: '%',
     dueDate: '2024-12-31',
-    owner: 'HR Department',
+    owner: 'P&C Department',
     priority: 'high',
   },
   {

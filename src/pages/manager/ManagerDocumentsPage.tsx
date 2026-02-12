@@ -430,11 +430,11 @@ export function ManagerDocumentsPage() {
                   )}
                 </div>
                 <h3 className="text-lg font-semibold text-gray-900">
-                  {activeTab === 'from-hr' ? 'No documents from HR' : 'No uploaded documents'}
+                  {activeTab === 'from-hr' ? 'No documents from P&C' : 'No uploaded documents'}
                 </h3>
                 <p className="mt-1 text-gray-500">
                   {activeTab === 'from-hr'
-                    ? 'HR has not uploaded any documents for you yet'
+                    ? 'P&C has not uploaded any documents for you yet'
                     : 'Upload your first document to get started'}
                 </p>
                 {activeTab === 'my-uploads' && (
@@ -679,7 +679,7 @@ export function ManagerDocumentsPage() {
 
                 <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
                   <p className="text-sm text-indigo-800">
-                    <strong>Note:</strong> Documents will be reviewed by HR before being marked as verified.
+                    <strong>Note:</strong> Documents will be reviewed by P&C before being marked as verified.
                   </p>
                 </div>
 

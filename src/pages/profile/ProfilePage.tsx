@@ -356,7 +356,7 @@ export function ProfilePage() {
       {isEditing && (
         <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 flex items-center gap-3">
           <p className="text-sm text-blue-800">
-            Edit mode is active. You can edit <strong>Contact Information</strong>, <strong>Emergency Contact</strong>, <strong>Education</strong>, and <strong>Family Information</strong>. Other data can only be modified by HR.
+            Edit mode is active. You can edit <strong>Contact Information</strong>, <strong>Emergency Contact</strong>, <strong>Education</strong>, and <strong>Family Information</strong>. Other data can only be modified by P&C.
           </p>
         </div>
       )}

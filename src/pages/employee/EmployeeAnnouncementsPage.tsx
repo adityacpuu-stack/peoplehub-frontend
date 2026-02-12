@@ -78,7 +78,7 @@ export function EmployeeAnnouncementsPage() {
       case 'urgent':
         return { label: 'Urgent', color: 'bg-red-100 text-red-700', icon: AlertCircle };
       case 'hr':
-        return { label: 'HR Notice', color: 'bg-green-100 text-green-700', icon: Users };
+        return { label: 'P&C Notice', color: 'bg-green-100 text-green-700', icon: Users };
       default:
         return { label: category, color: 'bg-gray-100 text-gray-700', icon: Info };
     }

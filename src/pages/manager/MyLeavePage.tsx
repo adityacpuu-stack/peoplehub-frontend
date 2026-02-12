@@ -607,7 +607,7 @@ export function MyLeavePage() {
                     </p>
                   ) : (
                     <p className="text-sm text-indigo-700">
-                      Belum ada leave approver. Request akan dikirim ke HR.
+                      Belum ada leave approver. Request akan dikirim ke P&C.
                     </p>
                   )}
                 </div>

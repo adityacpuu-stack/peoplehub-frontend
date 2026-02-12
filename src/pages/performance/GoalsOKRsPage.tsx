@@ -142,8 +142,8 @@ export function GoalsOKRsPage() {
     {
       id: '5',
       title: 'Enhance employee engagement and culture',
-      owner: 'HR Team',
-      ownerDept: 'HR',
+      owner: 'P&C Team',
+      ownerDept: 'P&C',
       progress: 92,
       status: 'completed',
       dueDate: '2024-03-31',

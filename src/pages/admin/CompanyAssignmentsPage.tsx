@@ -111,7 +111,7 @@ export default function CompanyAssignmentsPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Company Assignments</h1>
           <p className="text-gray-600 mt-1">
-            Kelola akses karyawan HR ke masing-masing company untuk proses payroll, dll
+            Kelola akses karyawan P&C ke masing-masing company untuk proses payroll, dll
           </p>
         </div>
       </div>
@@ -255,11 +255,11 @@ export default function CompanyAssignmentsPage() {
             <div className="p-4 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Pilih Karyawan HR
+                  Pilih Karyawan P&C
                 </label>
                 {availableEmployees.length === 0 ? (
                   <p className="text-sm text-gray-500 bg-gray-50 p-4 rounded-lg text-center">
-                    Tidak ada karyawan HR yang tersedia untuk di-assign
+                    Tidak ada karyawan P&C yang tersedia untuk di-assign
                   </p>
                 ) : (
                   <div className="space-y-2 max-h-64 overflow-y-auto">

@@ -218,7 +218,7 @@ export const getAnnouncementCategoryLabel = (category: AnnouncementCategory): st
     general: 'General',
     policy: 'Policy Update',
     event: 'Event',
-    hr: 'HR Notice',
+    hr: 'P&C Notice',
     urgent: 'Urgent',
   };
   return labels[category] || category;

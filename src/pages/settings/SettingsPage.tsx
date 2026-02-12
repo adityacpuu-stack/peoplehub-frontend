@@ -319,7 +319,7 @@ export function SettingsPage() {
                     {isEmployee ? 'Preferensi' : 'Settings'}
                   </h1>
                   <p className="text-blue-100 text-sm mt-1">
-                    {isEmployee ? 'Kelola preferensi notifikasi Anda' : 'Kelola pengaturan sistem HR'}
+                    {isEmployee ? 'Kelola preferensi notifikasi Anda' : 'Kelola pengaturan sistem P&C'}
                   </p>
                 </div>
               </div>
@@ -425,7 +425,7 @@ export function SettingsPage() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                       <p className="text-sm text-amber-800">
-                        Anda dapat melihat pengaturan perusahaan. Untuk melakukan perubahan, silakan hubungi HR Manager.
+                        Anda dapat melihat pengaturan perusahaan. Untuk melakukan perubahan, silakan hubungi P&C Manager.
                       </p>
                     </div>
                   </div>
@@ -562,7 +562,7 @@ export function SettingsPage() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                       <p className="text-sm text-amber-800">
-                        Anda dapat melihat pengaturan absensi. Untuk melakukan perubahan, silakan hubungi HR Manager.
+                        Anda dapat melihat pengaturan absensi. Untuk melakukan perubahan, silakan hubungi P&C Manager.
                       </p>
                     </div>
                   </div>
@@ -717,7 +717,7 @@ export function SettingsPage() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                       <p className="text-sm text-amber-800">
-                        Anda dapat melihat pengaturan payroll. Untuk melakukan perubahan, silakan hubungi HR Manager atau Finance Manager.
+                        Anda dapat melihat pengaturan payroll. Untuk melakukan perubahan, silakan hubungi P&C Manager atau Finance Manager.
                       </p>
                     </div>
                   </div>

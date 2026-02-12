@@ -252,7 +252,7 @@ export function CEOAnnouncementsPage() {
                 <div className="flex flex-wrap items-center gap-3 text-sm text-gray-500">
                   <span className="flex items-center gap-1.5">
                     <Users className="h-4 w-4" />
-                    {announcement.creator?.name || 'HR Team'}
+                    {announcement.creator?.name || 'P&C Team'}
                   </span>
                   <span className="flex items-center gap-1.5">
                     <Calendar className="h-4 w-4" />
@@ -305,7 +305,7 @@ export function CEOAnnouncementsPage() {
                   <div className="flex flex-wrap items-center gap-3 text-sm text-gray-500">
                     <span className="flex items-center gap-1.5">
                       <Users className="h-4 w-4" />
-                      {announcement.creator?.name || 'HR Team'}
+                      {announcement.creator?.name || 'P&C Team'}
                     </span>
                     <span className="flex items-center gap-1.5">
                       <Calendar className="h-4 w-4" />

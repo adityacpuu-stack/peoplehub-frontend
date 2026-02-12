@@ -753,7 +753,7 @@ export function LeaveRequestsPage() {
                       disabled={loadingEmployees}
                     >
                       <option value="">
-                        {loadingEmployees ? 'Loading...' : 'Select Employee (Optional for HR)'}
+                        {loadingEmployees ? 'Loading...' : 'Select Employee (Optional for P&C)'}
                       </option>
                       {employees.map(emp => (
                         <option key={emp.id} value={emp.id}>
