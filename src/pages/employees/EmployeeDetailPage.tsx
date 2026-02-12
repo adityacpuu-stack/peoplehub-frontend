@@ -324,7 +324,6 @@ export function EmployeeDetailPage() {
             </div>
             <div className="p-6 space-y-3">
               <InfoItem label="National ID (KTP)" value={employee.national_id} />
-              <InfoItem label="Tax ID" value={employee.tax_id} />
               <InfoItem label="NPWP" value={employee.npwp_number} />
               <InfoItem label="Passport Number" value={employee.passport_number} />
               <InfoItem label="Passport Expiry" value={employee.passport_expiry ? formatDate(employee.passport_expiry) : null} />
