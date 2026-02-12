@@ -309,7 +309,7 @@ export function ManagerDocumentsPage() {
             <div className="flex flex-wrap items-center gap-3">
               <span className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-500/20 backdrop-blur-xl rounded-lg text-sm text-blue-100 font-medium border border-blue-500/20">
                 <Building2 className="h-4 w-4" />
-                {stats.fromHR} From HR
+                {stats.fromHR} From P&C
               </span>
               <span className="inline-flex items-center gap-2 px-3 py-1.5 bg-purple-500/20 backdrop-blur-xl rounded-lg text-sm text-purple-100 font-medium border border-purple-500/20">
                 <FolderUp className="h-4 w-4" />
@@ -339,7 +339,7 @@ export function ManagerDocumentsPage() {
             >
               <div className="flex items-center justify-center gap-2">
                 <Building2 className="w-5 h-5" />
-                <span>From HR</span>
+                <span>From P&C</span>
                 {stats.fromHR > 0 && (
                   <span className={`px-2 py-0.5 rounded-full text-xs ${
                     activeTab === 'from-hr' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'

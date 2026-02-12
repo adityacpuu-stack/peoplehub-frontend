@@ -871,7 +871,7 @@ export function ContractsPage() {
                 </div>
               </div>
               <p className="text-3xl font-bold text-gray-900 mb-1">{docStats.hrDocs}</p>
-              <p className="text-sm text-gray-500">From HR</p>
+              <p className="text-sm text-gray-500">From P&C</p>
             </div>
 
             <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
@@ -910,7 +910,7 @@ export function ContractsPage() {
                 >
                   <option value="all">All Categories</option>
                   <option value="employee">From Employee</option>
-                  <option value="hr">From HR</option>
+                  <option value="hr">From P&C</option>
                 </select>
                 <select
                   value={docFilterStatus}
@@ -1007,7 +1007,7 @@ export function ContractsPage() {
                               ? 'bg-blue-100 text-blue-700'
                               : 'bg-purple-100 text-purple-700'
                           }`}>
-                            {doc.category === 'employee' ? 'From Employee' : 'From HR'}
+                            {doc.category === 'employee' ? 'From Employee' : 'From P&C'}
                           </span>
                         </td>
                         <td className="px-6 py-4">
@@ -1587,7 +1587,7 @@ export function ContractsPage() {
                         ? 'bg-blue-100 text-blue-700'
                         : 'bg-purple-100 text-purple-700'
                     }`}>
-                      {viewingDocument.category === 'employee' ? 'From Employee' : 'From HR'}
+                      {viewingDocument.category === 'employee' ? 'From Employee' : 'From P&C'}
                     </span>
                   </div>
                   <div className="p-4 bg-gray-50 rounded-xl">
