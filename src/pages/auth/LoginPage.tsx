@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -19,7 +19,6 @@ type LoginFormData = z.infer<typeof loginSchema>;
 
 export function LoginPage() {
   const navigate = useNavigate();
-  const location = useLocation();
   const { login } = useAuthStore();
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -31,8 +30,6 @@ export function LoginPage() {
     message: string;
     type: 'error' | 'network';
   }>({ isOpen: false, message: '', type: 'error' });
-
-  const from = location.state?.from?.pathname || '/dashboard';
 
   const {
     register,
@@ -47,7 +44,9 @@ export function LoginPage() {
     try {
       await login(data.email, data.password);
       toast.success('Welcome back!');
-      navigate(from, { replace: true });
+      // Always redirect to dashboard after login for security
+      // This prevents users from being redirected to pages they don't have access to
+      navigate('/dashboard', { replace: true });
     } catch (error: any) {
       const isNetworkError = !error.response || error.message === 'Network Error';
       const errorMessage = isNetworkError
