@@ -20,6 +20,7 @@ import {
   Mail,
   Briefcase,
   MapPin,
+  CalendarX,
 } from 'lucide-react';
 import {
   Button,
@@ -509,9 +510,20 @@ export function EmployeesPage() {
                     </div>
 
                     <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-                      <Badge variant={getStatusVariant(employee.employment_status || 'active')}>
-                        {employee.employment_status || 'Active'}
-                      </Badge>
+                      <div>
+                        <Badge variant={getStatusVariant(employee.employment_status || 'active')}>
+                          {employee.employment_status || 'Active'}
+                        </Badge>
+                        {activeTab === 'inactive' && employee.resign_date && (
+                          <div className="flex items-center gap-1 mt-2 text-xs text-red-600">
+                            <CalendarX className="h-3 w-3" />
+                            <span>{formatDate(employee.resign_date)}</span>
+                            {employee.resign_type && (
+                              <span className="text-gray-400">({employee.resign_type})</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
                       <div className="flex items-center gap-1">
                         <Link
                           to={`/employees/${employee.id}`}
@@ -520,13 +532,15 @@ export function EmployeesPage() {
                         >
                           <Eye className="h-4 w-4" />
                         </Link>
-                        <Link
-                          to={`/employees/${employee.id}/edit`}
-                          className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
-                          title="Edit"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Link>
+                        {activeTab !== 'inactive' && (
+                          <Link
+                            to={`/employees/${employee.id}/edit`}
+                            className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
+                            title="Edit"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Link>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -544,6 +558,9 @@ export function EmployeesPage() {
                 <TableHead className="hidden lg:table-cell font-bold text-gray-700 uppercase text-xs tracking-wider">Department</TableHead>
                 <TableHead className="hidden xl:table-cell font-bold text-gray-700 uppercase text-xs tracking-wider">Position</TableHead>
                 <TableHead className="font-bold text-gray-700 uppercase text-xs tracking-wider">Status</TableHead>
+                {activeTab === 'inactive' && (
+                  <TableHead className="hidden lg:table-cell font-bold text-gray-700 uppercase text-xs tracking-wider">Resign Date</TableHead>
+                )}
                 <TableHead className="font-bold text-gray-700 uppercase text-xs tracking-wider text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -583,6 +600,23 @@ export function EmployeesPage() {
                         {employee.employment_status || 'Active'}
                       </Badge>
                     </TableCell>
+                    {activeTab === 'inactive' && (
+                      <TableCell className="hidden lg:table-cell">
+                        {employee.resign_date ? (
+                          <div>
+                            <div className="flex items-center gap-1.5 text-sm text-red-600 font-medium">
+                              <CalendarX className="h-3.5 w-3.5" />
+                              {formatDate(employee.resign_date)}
+                            </div>
+                            {employee.resign_type && (
+                              <span className="text-xs text-gray-500 capitalize">{employee.resign_type.replace('_', ' ')}</span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 text-sm">-</span>
+                        )}
+                      </TableCell>
+                    )}
                     <TableCell>
                       <div className="flex items-center justify-end gap-1">
                         <Link
@@ -592,20 +626,15 @@ export function EmployeesPage() {
                         >
                           <Eye className="h-4 w-4 text-gray-400 group-hover:text-blue-600" />
                         </Link>
-                        <Link
-                          to={`/employees/${employee.id}/edit`}
-                          className="p-2 rounded-lg hover:bg-indigo-50 transition-colors group"
-                          title="Edit"
-                        >
-                          <Edit className="h-4 w-4 text-gray-400 group-hover:text-indigo-600" />
-                        </Link>
-                        <button
-                          className="p-2 rounded-lg hover:bg-red-50 transition-colors group"
-                          title="Delete"
-                          onClick={() => setDeleteModal({ open: true, employee })}
-                        >
-                          <Trash2 className="h-4 w-4 text-gray-400 group-hover:text-red-600" />
-                        </button>
+                        {activeTab !== 'inactive' && (
+                          <Link
+                            to={`/employees/${employee.id}/edit`}
+                            className="p-2 rounded-lg hover:bg-indigo-50 transition-colors group"
+                            title="Edit"
+                          >
+                            <Edit className="h-4 w-4 text-gray-400 group-hover:text-indigo-600" />
+                          </Link>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

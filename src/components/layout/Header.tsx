@@ -31,6 +31,8 @@ import { useAuthStore } from '@/stores/auth.store';
 import { useSidebarStore } from '@/stores/sidebar.store';
 import { cn } from '@/lib/utils';
 import { notificationService, type Notification } from '@/services/notification.service';
+import { employeeService } from '@/services/employee.service';
+import type { Employee } from '@/types';
 
 // Breadcrumb configuration
 const breadcrumbLabels: Record<string, string> = {
@@ -581,6 +583,35 @@ function SearchModal({
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [filterType, setFilterType] = useState('all');
+  const [searchResults, setSearchResults] = useState<Employee[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+
+  // Debounced employee search
+  useEffect(() => {
+    if (!query || query.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const response = await employeeService.getAll({
+          search: query,
+          limit: 8,
+          employment_status: 'all',
+        });
+        setSearchResults(response.data);
+      } catch (error) {
+        console.error('Search failed:', error);
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [query]);
 
   const filters = isEmployee
     ? [
@@ -748,6 +779,46 @@ function SearchModal({
                     </button>
                   ))}
                 </div>
+              </div>
+            ) : isSearching ? (
+              <div className="p-8 text-center">
+                <Loader2 className="h-8 w-8 text-blue-500 animate-spin mx-auto mb-3" />
+                <p className="text-sm text-gray-500">Searching...</p>
+              </div>
+            ) : searchResults.length > 0 ? (
+              <div className="p-2">
+                <p className="text-xs font-semibold text-gray-500 uppercase px-3 py-2">
+                  Employees ({searchResults.length})
+                </p>
+                {searchResults.map((emp) => (
+                  <button
+                    key={emp.id}
+                    onClick={() => {
+                      navigate(`/employees/${emp.id}`);
+                      onClose();
+                    }}
+                    className="flex items-center gap-3 w-full p-3 rounded-xl hover:bg-blue-50 transition text-left"
+                  >
+                    <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-xs shadow-md flex-shrink-0">
+                      {emp.name?.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase() || 'NA'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{emp.name}</p>
+                      <p className="text-xs text-gray-500 truncate">
+                        {emp.employee_id} {emp.company?.name ? `· ${emp.company.name}` : ''}
+                      </p>
+                    </div>
+                    <div className="flex-shrink-0">
+                      <span className={cn(
+                        'text-xs font-medium px-2 py-1 rounded-lg',
+                        emp.employment_status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                      )}>
+                        {emp.employment_status}
+                      </span>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-gray-300 flex-shrink-0" />
+                  </button>
+                ))}
               </div>
             ) : (
               <div className="p-8 text-center">
