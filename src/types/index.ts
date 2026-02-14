@@ -58,6 +58,7 @@ export interface User {
     company_id: number;
     department_id: number;
     position_id: number;
+    position?: { name: string };
     employment_status: string;
     profile_completed: boolean;
   };

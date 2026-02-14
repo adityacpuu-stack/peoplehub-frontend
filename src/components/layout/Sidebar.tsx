@@ -794,7 +794,7 @@ export function Sidebar() {
                 "text-xs truncate",
                 isSuperAdmin ? "text-slate-600 font-medium" : isGroupCEO ? "text-amber-600 font-medium" : isCEO ? "text-indigo-600 font-medium" : isTax ? "text-emerald-600 font-medium" : "text-gray-500"
               )}>
-                {user.roles?.[0] || 'Employee'}
+                {user.employee?.position?.name || '-'}
               </p>
             </div>
           </div>
