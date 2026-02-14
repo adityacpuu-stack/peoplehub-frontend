@@ -308,7 +308,7 @@ export function HolidayCalendarPage() {
   }, [currentDate, holidays]);
 
   function getHolidaysForDate(date: Date): Holiday[] {
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
     return holidays.filter(h => h.date === dateStr && h.is_active);
   }
 
