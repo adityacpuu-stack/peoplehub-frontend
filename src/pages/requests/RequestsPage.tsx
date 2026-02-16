@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { leaveService } from '@/services/leave.service';
 import type { LeaveRequest } from '@/types';
@@ -355,7 +356,11 @@ function ActivityFeed() {
 // ==========================================
 
 export function RequestsPage() {
-  const [activeTab, setActiveTab] = useState<TabType>('approvals');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = (searchParams.get('tab') === 'activity' ? 'activity' : 'approvals') as TabType;
+  const setActiveTab = useCallback((tab: TabType) => {
+    setSearchParams({ tab }, { replace: true });
+  }, [setSearchParams]);
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState({
