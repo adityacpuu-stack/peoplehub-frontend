@@ -197,7 +197,7 @@ const leaveDropdown: DropdownMenu = {
 const payrollDropdown: DropdownMenu = {
   icon: DollarSign,
   label: 'Payroll',
-  roles: ['Group CEO', 'CEO', 'HR Manager', 'Finance Manager'],
+  roles: ['Group CEO', 'CEO', 'HR Manager', 'HR Staff', 'Finance Manager'],
   items: [
     { path: '/payroll', label: 'Regular Employees' },
     { path: '/payroll/freelance', label: 'Freelance & Internship' },

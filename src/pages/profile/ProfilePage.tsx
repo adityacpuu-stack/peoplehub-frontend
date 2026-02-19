@@ -559,7 +559,6 @@ export function ProfilePage() {
             <InfoItem label="Department" value={employee?.department?.name} />
             <InfoItem label="Position" value={employee?.position?.name} />
             <InfoItem label="Company" value={employee?.company?.name} />
-            <InfoItem label="Division" value={employee?.division} />
             <InfoItem label="Work Location" value={employee?.workLocationRef?.name} />
             <InfoItem label="Employment Type" value={getEmploymentTypeLabel(employee?.employment_type)} />
             <InfoItem label="Join Date" value={formatDate(employee?.join_date)} />

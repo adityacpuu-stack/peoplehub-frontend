@@ -34,6 +34,7 @@ import { PageSpinner, SearchableSelect } from '@/components/ui';
 import { employeeService } from '@/services/employee.service';
 import { departmentService } from '@/services/department.service';
 import { companyService, type Company } from '@/services/company.service';
+import { workLocationService, type WorkLocation } from '@/services/work-location.service';
 import type { CreateEmployeeRequest, Department, Employee } from '@/types';
 
 const STEPS = [
@@ -55,6 +56,7 @@ export function EmployeeFormPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [workLocations, setWorkLocations] = useState<WorkLocation[]>([]);
   const [generatedEmployeeId, setGeneratedEmployeeId] = useState<string>('');
   const [isLoadingEmployeeId, setIsLoadingEmployeeId] = useState(false);
   const [showResignModal, setShowResignModal] = useState(false);
@@ -116,14 +118,16 @@ export function EmployeeFormPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [deptResponse, companyResponse, empResponse] = await Promise.all([
+        const [deptResponse, companyResponse, empResponse, workLocResponse] = await Promise.all([
           departmentService.getAll({ page: 1, limit: 100 }),
           companyService.getAll({ page: 1, limit: 100, is_active: true }),
           employeeService.getAll({ page: 1, limit: 500, employment_status: 'active' }),
+          workLocationService.getAll().catch(() => []),
         ]);
         setDepartments(deptResponse.data);
         setCompanies(companyResponse.data);
         setEmployees(empResponse.data);
+        setWorkLocations(workLocResponse);
 
         if (id) {
           const employee = await employeeService.getById(parseInt(id));
@@ -155,6 +159,7 @@ export function EmployeeFormPage() {
             company_id: employee.company_id,
             department_id: employee.department_id,
             position_id: employee.position_id,
+            work_location_id: employee.work_location_id,
             manager_id: employee.manager_id,
             leave_approver_id: employee.leave_approver_id,
             overtime_approver_id: employee.overtime_approver_id,
@@ -740,13 +745,19 @@ export function EmployeeFormPage() {
                       Pilih atasan langsung. Kosongkan untuk posisi tertinggi (Group CEO)
                     </p>
                   </div>
-                  <FormInput
-                    label="Division"
-                    name="division"
-                    value={formData.division || ''}
-                    onChange={handleChange}
-                    placeholder="Engineering"
-                    icon={<Building className="h-4 w-4 text-purple-600" />}
+                  <FormSelect
+                    label="Work Location"
+                    name="work_location_id"
+                    value={formData.work_location_id?.toString() || ''}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, work_location_id: e.target.value ? parseInt(e.target.value) : undefined }))}
+                    icon={<MapPin className="h-4 w-4 text-purple-600" />}
+                    options={[
+                      { value: '', label: '-- Select Work Location --' },
+                      ...workLocations.map((wl) => ({
+                        value: String(wl.id),
+                        label: `${wl.name}${wl.city ? ` - ${wl.city}` : ''}`,
+                      })),
+                    ]}
                   />
                   <FormInput
                     label="Work Schedule"

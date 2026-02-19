@@ -239,10 +239,10 @@ export interface CreateEmployeeRequest {
   department_id?: number;
   position_id?: number;
   company_id?: number;
+  work_location_id?: number;
   manager_id?: number;
   leave_approver_id?: number;
   overtime_approver_id?: number;
-  division?: string;
   organizational_level?: string;
   grade_level?: string;
   cost_center?: string;

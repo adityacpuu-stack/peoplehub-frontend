@@ -250,7 +250,7 @@ export function EmployeeDetailPage() {
                 <InfoItem label="Department" value={employee.department?.name} />
                 <InfoItem label="Position" value={employee.position?.name} />
                 <InfoItem label="Job Title" value={employee.job_title} />
-                <InfoItem label="Division" value={employee.division} />
+                <InfoItem label="Work Location" value={employee.workLocationRef?.name} />
                 <InfoItem label="Organizational Level" value={employee.organizational_level} />
                 <InfoItem label="Grade Level" value={employee.grade_level} />
                 <InfoItem label="Cost Center" value={employee.cost_center} />
