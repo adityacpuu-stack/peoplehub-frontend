@@ -38,6 +38,9 @@ export { EmployeeFormPage } from './employees/EmployeeFormPage';
 // Departments
 export { DepartmentsPage } from './departments/DepartmentsPage';
 
+// Work Locations
+export { WorkLocationsPage } from './work-locations/WorkLocationsPage';
+
 // Positions
 export { PositionsPage } from './positions/PositionsPage';
 

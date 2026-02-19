@@ -14,6 +14,7 @@ import {
   Shield,
   AlertCircle,
   Clock,
+  Landmark,
 } from 'lucide-react';
 import { PageSpinner } from '@/components/ui';
 import { employeeService } from '@/services/employee.service';
@@ -305,6 +306,24 @@ export function EmployeeDetailPage() {
                 <InfoItem label="Meal Allowance" value={employee.meal_allowance ? formatCurrency(employee.meal_allowance) : null} />
                 <InfoItem label="Position Allowance" value={employee.position_allowance ? formatCurrency(employee.position_allowance) : null} />
                 <InfoItem label="Housing Allowance" value={employee.housing_allowance ? formatCurrency(employee.housing_allowance) : null} />
+              </div>
+            </div>
+          </div>
+
+          {/* Bank Account */}
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100">
+              <h3 className="text-base font-semibold text-gray-800 flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-teal-100">
+                  <Landmark className="h-4 w-4 text-teal-600" />
+                </div>
+                Bank Account
+              </h3>
+            </div>
+            <div className="p-6">
+              <div className="grid sm:grid-cols-2 gap-4">
+                <InfoItem label="Bank Name" value={employee.bank_name} />
+                <InfoItem label="Account Number" value={employee.bank_account_number} />
               </div>
             </div>
           </div>

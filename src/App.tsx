@@ -34,6 +34,7 @@ import {
   EmployeeDetailPage,
   EmployeeFormPage,
   DepartmentsPage,
+  WorkLocationsPage,
   PositionsPage,
   ContractsPage,
   GroupContractsPage,
@@ -204,6 +205,7 @@ function App() {
           <Route path="/employees/:id" element={<EmployeeDetailPage />} />
           <Route path="/employees/:id/edit" element={<EmployeeFormPage />} />
           <Route path="/departments" element={<DepartmentsPage />} />
+          <Route path="/work-locations" element={<WorkLocationsPage />} />
 
           {/* Admin pages */}
           <Route path="/users" element={<UsersPage />} />

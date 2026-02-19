@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   Plus,
@@ -41,6 +41,7 @@ import {
 } from '@/components/ui';
 import toast from 'react-hot-toast';
 import { employeeService } from '@/services/employee.service';
+import { companyService, type Company } from '@/services/company.service';
 import type { Employee } from '@/types';
 import { formatDate, formatNumber } from '@/lib/utils';
 
@@ -49,6 +50,8 @@ export function EmployeesPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const debounceTimer = useRef<ReturnType<typeof setTimeout>>(null);
   const page = Number(searchParams.get('page')) || 1;
   const setPage = (newPage: number) => {
     setSearchParams(prev => {
@@ -64,7 +67,9 @@ export function EmployeesPage() {
   const [filters, setFilters] = useState({
     status: '',
     department: '',
+    company_id: '' as string,
   });
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [inactiveTotal, setInactiveTotal] = useState(0);
   const [deleteModal, setDeleteModal] = useState<{ open: boolean; employee: Employee | null }>({
     open: false,
@@ -73,15 +78,25 @@ export function EmployeesPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
+  const fetchCompanies = async () => {
+    try {
+      const response = await companyService.getAll({ status: 'active' });
+      setCompanies(response.data);
+    } catch {
+      console.error('Failed to fetch companies');
+    }
+  };
+
   const fetchEmployees = async () => {
     setIsLoading(true);
     try {
-      // Fetch based on active tab
+      // When searching, show ALL statuses so no employee is missed
       const response = await employeeService.getAll({
         page,
         limit: 10,
-        search,
-        employment_status: activeTab === 'active' ? 'active' : 'inactive'
+        search: debouncedSearch || undefined,
+        employment_status: debouncedSearch ? 'all' : (activeTab === 'active' ? 'active' : 'inactive'),
+        company_id: filters.company_id ? Number(filters.company_id) : undefined,
       });
       setEmployees(response.data);
       setTotalPages(response.pagination.totalPages);
@@ -92,7 +107,8 @@ export function EmployeesPage() {
         const inactiveResponse = await employeeService.getAll({
           page: 1,
           limit: 1,
-          employment_status: 'inactive'
+          employment_status: 'inactive',
+          company_id: filters.company_id ? Number(filters.company_id) : undefined,
         });
         setInactiveTotal(inactiveResponse.pagination.total);
       }
@@ -104,16 +120,31 @@ export function EmployeesPage() {
   };
 
   useEffect(() => {
-    setPage(1); // Reset to page 1 when tab changes
-  }, [activeTab]);
+    fetchCompanies();
+  }, []);
+
+  useEffect(() => {
+    setPage(1); // Reset to page 1 when tab or filter changes
+  }, [activeTab, filters.company_id]);
+
+  // Debounce search: wait 500ms after user stops typing
+  useEffect(() => {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 500);
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    };
+  }, [search]);
 
   useEffect(() => {
     fetchEmployees();
-  }, [page, search, activeTab]);
+  }, [page, debouncedSearch, activeTab, filters.company_id]);
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearch(e.target.value);
-    setPage(1);
   };
 
   const handleDelete = async () => {
@@ -132,7 +163,7 @@ export function EmployeesPage() {
   };
 
   const clearFilters = () => {
-    setFilters({ status: '', department: '' });
+    setFilters({ status: '', department: '', company_id: '' });
     setSearch('');
   };
 
@@ -140,8 +171,9 @@ export function EmployeesPage() {
     setIsExporting(true);
     try {
       await employeeService.exportExcel({
-        search: search || undefined,
-        employment_status: activeTab === 'active' ? 'active' : 'inactive',
+        search: debouncedSearch || undefined,
+        employment_status: debouncedSearch ? 'all' : (activeTab === 'active' ? 'active' : 'inactive'),
+        company_id: filters.company_id ? Number(filters.company_id) : undefined,
       });
       toast.success('Employee data exported successfully');
     } catch (error: any) {
@@ -161,7 +193,8 @@ export function EmployeesPage() {
           const activeResponse = await employeeService.getAll({
             page: 1,
             limit: 1,
-            employment_status: 'active'
+            employment_status: 'active',
+            company_id: filters.company_id ? Number(filters.company_id) : undefined,
           });
           setActiveTotal(activeResponse.pagination.total);
         } catch (error) {
@@ -170,9 +203,9 @@ export function EmployeesPage() {
       }
     };
     fetchActiveCount();
-  }, [activeTab]);
+  }, [activeTab, filters.company_id]);
 
-  const hasActiveFilters = search || filters.department;
+  const hasActiveFilters = search || filters.department || filters.company_id;
 
   if (isLoading && employees.length === 0) {
     return <PageSpinner />;
@@ -362,7 +395,7 @@ export function EmployeesPage() {
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
             <div className="lg:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
               <div className="relative">
@@ -375,6 +408,20 @@ export function EmployeesPage() {
                   className="w-full h-10 pl-10 pr-4 rounded-xl border border-gray-300 text-sm transition-all focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Company</label>
+              <select
+                value={filters.company_id}
+                onChange={(e) => setFilters({ ...filters, company_id: e.target.value })}
+                className="w-full h-10 px-4 rounded-xl border border-gray-300 text-sm transition-all focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+              >
+                <option value="">All Companies</option>
+                {companies.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
             </div>
 
             <div>
@@ -399,6 +446,15 @@ export function EmployeesPage() {
                   <Search className="h-3 w-3" />
                   "{search}"
                   <button onClick={() => setSearch('')} className="hover:text-indigo-900">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+              {filters.company_id && (
+                <span className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-100 text-blue-800 rounded-lg text-xs font-medium">
+                  <Building2 className="h-3 w-3" />
+                  {companies.find(c => c.id === Number(filters.company_id))?.name || filters.company_id}
+                  <button onClick={() => setFilters({ ...filters, company_id: '' })} className="hover:opacity-70">
                     <X className="h-3 w-3" />
                   </button>
                 </span>

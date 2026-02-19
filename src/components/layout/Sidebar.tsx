@@ -48,6 +48,7 @@ import {
   BadgeDollarSign,
   UserCheck,
   MinusCircle,
+  MapPin,
 } from 'lucide-react';
 
 interface MenuItem {
@@ -99,6 +100,11 @@ const superAdminMenu = {
       path: '/company-features',
       icon: Server,
       label: 'Company Features',
+    },
+    {
+      path: '/work-locations',
+      icon: MapPin,
+      label: 'Work Locations',
     },
     {
       path: '/payroll-settings',
@@ -225,6 +231,7 @@ const masterDataDropdown: DropdownMenu = {
     { path: '/companies', label: 'Companies', icon: Building },
     { path: '/departments', label: 'Departments' },
     { path: '/positions', label: 'Positions' },
+    { path: '/work-locations', label: 'Work Locations', icon: MapPin },
     { path: '/holiday-calendar', label: 'Holiday Calendar', icon: CalendarDays },
   ],
 };
