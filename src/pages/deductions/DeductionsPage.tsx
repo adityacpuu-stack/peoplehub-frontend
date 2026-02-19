@@ -77,6 +77,8 @@ export function DeductionsPage() {
     effective_date: '',
     pay_period: '',
     reference_number: '',
+    total_loan_amount: 0,
+    installment_amount: 0,
   });
 
   // Fetch deductions from API
@@ -188,6 +190,20 @@ export function DeductionsPage() {
     };
   }, [deductions, totalItems]);
 
+  const isLoanType = formData.type === 'loan' || formData.type === 'advance';
+
+  const computedInstallments = useMemo(() => {
+    if (!isLoanType || !formData.total_loan_amount || !formData.installment_amount) return 0;
+    return Math.ceil(formData.total_loan_amount / formData.installment_amount);
+  }, [isLoanType, formData.total_loan_amount, formData.installment_amount]);
+
+  const computedEndDate = useMemo(() => {
+    if (!computedInstallments || !formData.effective_date) return '';
+    const date = new Date(formData.effective_date);
+    date.setMonth(date.getMonth() + computedInstallments);
+    return date.toISOString().split('T')[0];
+  }, [computedInstallments, formData.effective_date]);
+
   const getIcon = (type: string) => {
     switch (type) {
       case 'deduction':
@@ -229,12 +245,14 @@ export function DeductionsPage() {
         amount: Number(deduction.amount) || 0,
         is_recurring: deduction.is_recurring,
         recurring_frequency: deduction.recurring_frequency || 'monthly',
-        recurring_end_date: deduction.recurring_end_date || '',
+        recurring_end_date: deduction.recurring_end_date ? deduction.recurring_end_date.split('T')[0] : '',
         company_id: deduction.company_id || '',
         employee_id: deduction.employee_id || '',
-        effective_date: deduction.effective_date || '',
+        effective_date: deduction.effective_date ? deduction.effective_date.split('T')[0] : '',
         pay_period: deduction.pay_period || '',
         reference_number: deduction.reference_number || '',
+        total_loan_amount: Number(deduction.total_loan_amount) || 0,
+        installment_amount: Number(deduction.installment_amount) || 0,
       });
       if (deduction.employee) {
         setSelectedEmployee({
@@ -262,6 +280,8 @@ export function DeductionsPage() {
         effective_date: '',
         pay_period: '',
         reference_number: '',
+        total_loan_amount: 0,
+        installment_amount: 0,
       });
       setSelectedEmployee(null);
     }
@@ -277,28 +297,49 @@ export function DeductionsPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.employee_id || !formData.amount) {
-      toast.error('Karyawan dan jumlah harus diisi');
+    const isLoan = formData.type === 'loan' || formData.type === 'advance';
+
+    if (!formData.employee_id) {
+      toast.error('Karyawan harus dipilih');
       return;
+    }
+
+    if (isLoan) {
+      if (!formData.total_loan_amount || !formData.installment_amount) {
+        toast.error('Total pinjaman dan cicilan per bulan harus diisi');
+        return;
+      }
+    } else {
+      if (!formData.amount) {
+        toast.error('Jumlah harus diisi');
+        return;
+      }
     }
 
     setSubmitting(true);
     try {
-      const payload = {
+      const payload: any = {
         employee_id: Number(formData.employee_id),
         type: formData.type,
         category: formData.category || undefined,
-        amount: formData.amount,
+        amount: isLoan ? formData.installment_amount : formData.amount,
         description: formData.description || undefined,
         reason: formData.reason || undefined,
         effective_date: formData.effective_date || undefined,
         pay_period: formData.pay_period || undefined,
-        is_recurring: formData.is_recurring,
-        recurring_frequency: formData.is_recurring ? formData.recurring_frequency : undefined,
-        recurring_end_date: formData.is_recurring && formData.recurring_end_date ? formData.recurring_end_date : undefined,
+        is_recurring: isLoan ? true : formData.is_recurring,
+        recurring_frequency: isLoan ? 'monthly' : (formData.is_recurring ? formData.recurring_frequency : undefined),
+        recurring_end_date: isLoan
+          ? (computedEndDate || undefined)
+          : (formData.is_recurring && formData.recurring_end_date ? formData.recurring_end_date : undefined),
         reference_number: formData.reference_number || undefined,
         company_id: formData.company_id ? Number(formData.company_id) : undefined,
       };
+
+      if (isLoan) {
+        payload.total_loan_amount = formData.total_loan_amount;
+        payload.installment_amount = formData.installment_amount;
+      }
 
       if (editingDeduction) {
         await deductionService.update(editingDeduction.id, payload);
@@ -601,7 +642,32 @@ export function DeductionsPage() {
                         {deduction.pay_period}
                       </span>
                     )}
+                    {(deduction.type === 'loan' || deduction.type === 'advance') && deduction.total_installments && (
+                      <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">
+                        Cicilan {deduction.current_installment || 0}/{deduction.total_installments}
+                      </span>
+                    )}
                   </div>
+
+                  {/* Loan Progress */}
+                  {(deduction.type === 'loan' || deduction.type === 'advance') && deduction.total_loan_amount && deduction.total_installments && (
+                    <div className="mb-4">
+                      <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                        <span>Progress Cicilan</span>
+                        <span>{Math.round(((deduction.current_installment || 0) / deduction.total_installments) * 100)}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className="bg-blue-500 h-2 rounded-full transition-all"
+                          style={{ width: `${Math.min(100, ((deduction.current_installment || 0) / deduction.total_installments) * 100)}%` }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-gray-500 mt-1">
+                        <span>Sisa: {formatCurrency(Number(deduction.remaining_balance || 0))}</span>
+                        <span>Total: {formatCurrency(Number(deduction.total_loan_amount))}</span>
+                      </div>
+                    </div>
+                  )}
 
                   {deduction.employee && (
                     <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-3">
@@ -770,14 +836,22 @@ export function DeductionsPage() {
                   </div>
 
                   {/* Deduction Type & Amount */}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className={`grid ${isLoanType ? 'grid-cols-1' : 'grid-cols-2'} gap-4`}>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Tipe Potongan <span className="text-red-500">*</span>
                       </label>
                       <select
                         value={formData.type}
-                        onChange={(e) => setFormData(prev => ({ ...prev, type: e.target.value }))}
+                        onChange={(e) => setFormData(prev => ({
+                          ...prev,
+                          type: e.target.value,
+                          // Reset loan fields when switching away from loan type
+                          ...(e.target.value !== 'loan' && e.target.value !== 'advance' ? {
+                            total_loan_amount: 0,
+                            installment_amount: 0,
+                          } : {}),
+                        }))}
                         className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
                         required
                       >
@@ -786,20 +860,91 @@ export function DeductionsPage() {
                         ))}
                       </select>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Jumlah (Rp) <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="number"
-                        value={formData.amount}
-                        onChange={(e) => setFormData(prev => ({ ...prev, amount: Number(e.target.value) }))}
-                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
-                        placeholder="0"
-                        required
-                      />
-                    </div>
+                    {!isLoanType && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Jumlah (Rp) <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          value={formData.amount}
+                          onChange={(e) => setFormData(prev => ({ ...prev, amount: Number(e.target.value) }))}
+                          className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
+                          placeholder="0"
+                          required
+                        />
+                      </div>
+                    )}
                   </div>
+
+                  {/* Loan/Kasbon Details */}
+                  {isLoanType && (
+                    <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                      <p className="text-sm font-medium text-blue-800 mb-3">Detail Pinjaman / Kasbon</p>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Total Pinjaman (Rp) <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="number"
+                            value={formData.total_loan_amount || ''}
+                            onChange={(e) => setFormData(prev => ({ ...prev, total_loan_amount: Number(e.target.value) }))}
+                            className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
+                            placeholder="e.g. 4000000"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Cicilan per Bulan (Rp) <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="number"
+                            value={formData.installment_amount || ''}
+                            onChange={(e) => setFormData(prev => ({ ...prev, installment_amount: Number(e.target.value) }))}
+                            className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
+                            placeholder="e.g. 500000"
+                            required
+                          />
+                        </div>
+                      </div>
+                      {computedInstallments > 0 && (
+                        <div className="mt-3 text-sm text-blue-700">
+                          Jumlah Cicilan: <strong>{computedInstallments} bulan</strong>
+                        </div>
+                      )}
+
+                      {/* Loan Summary Preview */}
+                      {formData.total_loan_amount > 0 && formData.installment_amount > 0 && computedInstallments > 0 && (
+                        <div className="mt-4 bg-white rounded-lg p-4 border border-blue-200">
+                          <p className="text-sm font-semibold text-gray-900 mb-2">Ringkasan Pinjaman</p>
+                          <div className="space-y-1 text-sm text-gray-700">
+                            <div className="flex justify-between">
+                              <span>Total Pinjaman</span>
+                              <span className="font-medium">{formatCurrency(formData.total_loan_amount)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Cicilan</span>
+                              <span className="font-medium">
+                                {formatCurrency(formData.installment_amount)} x {computedInstallments} bulan
+                              </span>
+                            </div>
+                            {formData.effective_date && computedEndDate && (
+                              <div className="flex justify-between">
+                                <span>Periode</span>
+                                <span className="font-medium">
+                                  {new Date(formData.effective_date).toLocaleDateString('id-ID', { month: 'short', year: 'numeric' })}
+                                  {' - '}
+                                  {new Date(computedEndDate).toLocaleDateString('id-ID', { month: 'short', year: 'numeric' })}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -824,24 +969,13 @@ export function DeductionsPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Deskripsi</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Keterangan</label>
                     <textarea
                       value={formData.description}
                       onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                       className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
                       rows={2}
                       placeholder="Keterangan potongan..."
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Alasan</label>
-                    <textarea
-                      value={formData.reason}
-                      onChange={(e) => setFormData(prev => ({ ...prev, reason: e.target.value }))}
-                      className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
-                      rows={2}
-                      placeholder="Alasan potongan..."
                     />
                   </div>
 
@@ -867,47 +1001,49 @@ export function DeductionsPage() {
                     </div>
                   </div>
 
-                  {/* Recurring Options */}
-                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                    <label className="flex items-center gap-2 cursor-pointer mb-3">
-                      <input
-                        type="checkbox"
-                        checked={formData.is_recurring}
-                        onChange={(e) => setFormData(prev => ({ ...prev, is_recurring: e.target.checked }))}
-                        className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
-                      />
-                      <span className="text-sm font-medium text-gray-700">Potongan Berulang (Recurring)</span>
-                    </label>
+                  {/* Recurring Options - hidden for loan types (auto-managed) */}
+                  {!isLoanType && (
+                    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                      <label className="flex items-center gap-2 cursor-pointer mb-3">
+                        <input
+                          type="checkbox"
+                          checked={formData.is_recurring}
+                          onChange={(e) => setFormData(prev => ({ ...prev, is_recurring: e.target.checked }))}
+                          className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
+                        />
+                        <span className="text-sm font-medium text-gray-700">Potongan Berulang (Recurring)</span>
+                      </label>
 
-                    {formData.is_recurring && (
-                      <div className="grid grid-cols-2 gap-4 mt-3">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Frekuensi</label>
-                          <select
-                            value={formData.recurring_frequency}
-                            onChange={(e) => setFormData(prev => ({ ...prev, recurring_frequency: e.target.value }))}
-                            className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
-                          >
-                            <option value="monthly">Bulanan</option>
-                            <option value="quarterly">Per Kuartal</option>
-                            <option value="yearly">Tahunan</option>
-                          </select>
+                      {formData.is_recurring && (
+                        <div className="grid grid-cols-2 gap-4 mt-3">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Frekuensi</label>
+                            <select
+                              value={formData.recurring_frequency}
+                              onChange={(e) => setFormData(prev => ({ ...prev, recurring_frequency: e.target.value }))}
+                              className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
+                            >
+                              <option value="monthly">Bulanan</option>
+                              <option value="quarterly">Per Kuartal</option>
+                              <option value="yearly">Tahunan</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Berakhir Pada</label>
+                            <input
+                              type="date"
+                              value={formData.recurring_end_date}
+                              onChange={(e) => setFormData(prev => ({ ...prev, recurring_end_date: e.target.value }))}
+                              className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
+                            />
+                          </div>
                         </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Berakhir Pada</label>
-                          <input
-                            type="date"
-                            value={formData.recurring_end_date}
-                            onChange={(e) => setFormData(prev => ({ ...prev, recurring_end_date: e.target.value }))}
-                            className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Preview */}
-                  {formData.amount > 0 && (
+                  {!isLoanType && formData.amount > 0 && (
                     <div className="bg-red-50 rounded-lg p-4 border border-red-200">
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-red-700">Total Potongan</span>

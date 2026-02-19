@@ -31,7 +31,8 @@ export interface WorkLocation {
   settings?: unknown;
   created_at?: string;
   updated_at?: string;
-  company?: { id: number; name: string };
+  company?: { id: number; name: string; code?: string };
+  _count?: { employees: number; attendances: number };
 }
 
 export interface CreateWorkLocationRequest {

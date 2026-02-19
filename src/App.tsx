@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import * as Sentry from '@sentry/react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { useAuthStore } from '@/stores/auth.store';
@@ -120,6 +121,19 @@ function App() {
   useEffect(() => {
     checkAuth();
   }, [checkAuth]);
+
+  // Set Sentry user context
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      Sentry.setUser({
+        id: String(user.id),
+        email: user.email,
+        username: user.name,
+      });
+    } else {
+      Sentry.setUser(null);
+    }
+  }, [isAuthenticated, user]);
 
   // Check if password change modal should be shown (first priority)
   // Then check if profile completion modal should be shown
@@ -456,4 +470,4 @@ function PlaceholderPage({ title, icon }: { title: string; icon?: string }) {
   );
 }
 
-export default App;
+export default Sentry.withProfiler(App);

@@ -28,6 +28,11 @@ export interface PayrollAdjustment {
   is_bpjs_object: boolean;
   reference_number?: string;
   attachment_path?: string;
+  total_loan_amount?: number;
+  installment_amount?: number;
+  total_installments?: number;
+  current_installment?: number;
+  remaining_balance?: number;
   company_id?: number;
   created_by?: number;
   created_at: string;
@@ -77,6 +82,8 @@ export interface CreateDeductionDTO {
   is_bpjs_object?: boolean;
   reference_number?: string;
   company_id?: number;
+  total_loan_amount?: number;
+  installment_amount?: number;
 }
 
 export interface UpdateDeductionDTO extends Partial<Omit<CreateDeductionDTO, 'employee_id'>> {
@@ -155,7 +162,7 @@ class DeductionService {
   }
 
   async reject(id: number, reason: string): Promise<PayrollAdjustment> {
-    const response = await api.post(`${this.baseUrl}/${id}/reject`, { rejection_reason: reason });
+    const response = await api.post(`${this.baseUrl}/${id}/reject`, { reason });
     return response.data;
   }
 

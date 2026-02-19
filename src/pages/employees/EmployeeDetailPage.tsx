@@ -378,7 +378,7 @@ export function EmployeeDetailPage() {
               </h3>
             </div>
             <div className="p-6 space-y-3">
-              <InfoItem label="Status PTKP" value={employee.ptkp_status} />
+              <InfoItem label="Tax Status" value={employee.tax_status} />
               <InfoItem label="BPJS Ketenagakerjaan" value={employee.bpjs_ketenagakerjaan_number} />
               <InfoItem label="BPJS Kesehatan" value={employee.bpjs_kesehatan_number} />
               <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50">

@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
 import { workLocationService, type WorkLocation, type CreateWorkLocationRequest } from '@/services/work-location.service';
 import { companyService, type Company } from '@/services/company.service';
-import { MapPin, Plus, Search, Pencil, Trash2, X, Shield, Clock, Radio } from 'lucide-react';
+import { MapPin, Plus, Search, Pencil, Trash2, X, Clock, Radio, Users, Eye, Loader2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { employeeService } from '@/services/employee.service';
+import type { Employee } from '@/types';
 
 // Parse ISO time string (e.g. "1970-01-01T02:00:00.000Z" or "09:00") to "HH:mm"
 function parseTimeToHHmm(timeStr?: string | null): string {
@@ -33,9 +36,6 @@ const defaultFormData: CreateWorkLocationRequest & { is_active: boolean } = {
   latitude: undefined,
   longitude: undefined,
   radius_meters: 100,
-  enable_attendance: true,
-  require_location_verification: true,
-  require_photo: false,
   work_start_time: '09:00',
   work_end_time: '18:00',
   break_start_time: '12:00',
@@ -55,6 +55,10 @@ export function WorkLocationsPage() {
   const [deletingLocation, setDeletingLocation] = useState<WorkLocation | null>(null);
   const [search, setSearch] = useState('');
   const [formData, setFormData] = useState({ ...defaultFormData });
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [viewingLocation, setViewingLocation] = useState<WorkLocation | null>(null);
+  const [viewEmployees, setViewEmployees] = useState<Employee[]>([]);
+  const [isLoadingEmployees, setIsLoadingEmployees] = useState(false);
 
   useEffect(() => {
     fetchCompanies();
@@ -115,9 +119,6 @@ export function WorkLocationsPage() {
         latitude: location.latitude ? parseFloat(String(location.latitude)) : undefined,
         longitude: location.longitude ? parseFloat(String(location.longitude)) : undefined,
         radius_meters: location.radius_meters ?? 100,
-        enable_attendance: location.enable_attendance ?? true,
-        require_location_verification: location.require_location_verification ?? true,
-        require_photo: location.require_photo ?? false,
         work_start_time: parseTimeToHHmm(location.work_start_time) || '09:00',
         work_end_time: parseTimeToHHmm(location.work_end_time) || '18:00',
         break_start_time: parseTimeToHHmm(location.break_start_time) || '12:00',
@@ -177,6 +178,25 @@ export function WorkLocationsPage() {
   const openDeleteModal = (loc: WorkLocation) => {
     setDeletingLocation(loc);
     setShowDeleteModal(true);
+  };
+
+  const openViewModal = async (loc: WorkLocation) => {
+    setViewingLocation(loc);
+    setShowViewModal(true);
+    setIsLoadingEmployees(true);
+    try {
+      const response = await employeeService.getAll({
+        page: 1,
+        limit: 500,
+        work_location_id: loc.id,
+        employment_status: 'active',
+      });
+      setViewEmployees(response.data);
+    } catch {
+      toast.error('Failed to load employees');
+    } finally {
+      setIsLoadingEmployees(false);
+    }
   };
 
   const getAvatarColor = (name: string) => {
@@ -367,7 +387,7 @@ export function WorkLocationsPage() {
                   <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Location</th>
                   <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Code</th>
                   <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Address / City</th>
-                  <th className="text-center px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Attendance</th>
+                  <th className="text-center px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Employees</th>
                   <th className="text-center px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Work Hours</th>
                   <th className="text-center px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Radius</th>
                   <th className="text-center px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
@@ -400,16 +420,10 @@ export function WorkLocationsPage() {
                       {loc.city && <p className="text-xs text-gray-400">{loc.city}{loc.province ? `, ${loc.province}` : ''}</p>}
                     </td>
                     <td className="px-6 py-4 text-center">
-                      {loc.enable_attendance !== false ? (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-teal-100 text-teal-700">
-                          <Shield className="w-3 h-3" />
-                          Enabled
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                          Disabled
-                        </span>
-                      )}
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+                        <Users className="w-3 h-3" />
+                        {loc._count?.employees ?? 0}
+                      </span>
                     </td>
                     <td className="px-6 py-4 text-center">
                       <span className="text-sm text-gray-600">
@@ -438,6 +452,13 @@ export function WorkLocationsPage() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-center gap-1">
+                        <button
+                          onClick={() => openViewModal(loc)}
+                          className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="View Employees"
+                        >
+                          <Eye className="w-5 h-5" />
+                        </button>
                         <button
                           onClick={() => handleOpenModal(loc)}
                           className="p-2 text-gray-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"
@@ -602,7 +623,7 @@ export function WorkLocationsPage() {
                 <div className="border-t border-gray-100 pt-6">
                   <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
                     <Radio className="w-4 h-4 text-teal-600" />
-                    Geolocation & Attendance
+                    Geolocation
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
@@ -638,35 +659,6 @@ export function WorkLocationsPage() {
                         min={10}
                         max={10000}
                       />
-                    </div>
-                    <div className="sm:col-span-3 flex flex-wrap gap-6">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={formData.enable_attendance ?? true}
-                          onChange={(e) => setFormData({ ...formData, enable_attendance: e.target.checked })}
-                          className="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500"
-                        />
-                        <span className="text-sm text-gray-700">Enable Attendance</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={formData.require_location_verification ?? true}
-                          onChange={(e) => setFormData({ ...formData, require_location_verification: e.target.checked })}
-                          className="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500"
-                        />
-                        <span className="text-sm text-gray-700">Require Location Verification</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={formData.require_photo ?? false}
-                          onChange={(e) => setFormData({ ...formData, require_photo: e.target.checked })}
-                          className="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500"
-                        />
-                        <span className="text-sm text-gray-700">Require Photo</span>
-                      </label>
                     </div>
                   </div>
                 </div>
@@ -804,6 +796,85 @@ export function WorkLocationsPage() {
                     Delete
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Employees Modal */}
+      {showViewModal && viewingLocation && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-screen items-center justify-center p-4">
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity" onClick={() => setShowViewModal(false)} />
+
+            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden max-h-[85vh] flex flex-col">
+              {/* Header */}
+              <div className="bg-gradient-to-br from-blue-600 to-indigo-600 px-6 py-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-white/20 backdrop-blur-xl rounded-xl flex items-center justify-center">
+                      <Users className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-white">{viewingLocation.name}</h2>
+                      <p className="text-blue-100 text-sm">{viewEmployees.length} employees assigned</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowViewModal(false)}
+                    className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center text-white hover:bg-white/30 transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Body */}
+              <div className="overflow-y-auto flex-1">
+                {isLoadingEmployees ? (
+                  <div className="flex items-center justify-center py-16">
+                    <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                  </div>
+                ) : viewEmployees.length === 0 ? (
+                  <div className="text-center py-16">
+                    <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                    <p className="text-gray-500">No employees assigned to this location</p>
+                  </div>
+                ) : (
+                  <table className="w-full">
+                    <thead className="bg-gray-50 sticky top-0">
+                      <tr>
+                        <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Employee</th>
+                        <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Department</th>
+                        <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Job Title</th>
+                        <th className="text-center px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {viewEmployees.map(emp => (
+                        <tr key={emp.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-3">
+                            <div>
+                              <p className="font-medium text-gray-900 text-sm">{emp.name}</p>
+                              <p className="text-xs text-gray-400">{emp.employee_id}</p>
+                            </div>
+                          </td>
+                          <td className="px-6 py-3 text-sm text-gray-600">{emp.department?.name || '-'}</td>
+                          <td className="px-6 py-3 text-sm text-gray-600">{emp.job_title || '-'}</td>
+                          <td className="px-6 py-3 text-center">
+                            <Link
+                              to={`/employees/${emp.id}`}
+                              className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                            >
+                              View
+                            </Link>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </div>
           </div>

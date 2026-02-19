@@ -155,7 +155,7 @@ export function EmployeeFormPage() {
             current_postal_code: employee.current_postal_code || '',
             national_id: employee.national_id || '',
             npwp_number: employee.npwp_number || '',
-            job_title: employee.job_title || '',
+            job_title: employee.job_title || employee.position?.name || '',
             company_id: employee.company_id,
             department_id: employee.department_id,
             position_id: employee.position_id,
@@ -211,6 +211,13 @@ export function EmployeeFormPage() {
 
     fetchNextEmployeeId();
   }, [formData.company_id, isEdit]);
+
+  // Filter departments by selected company
+  const filteredDepartments = departments.filter(d => {
+    if (!formData.company_id) return true;
+    const deptCompanyId = d.company_id || d.company?.id;
+    return deptCompanyId === formData.company_id;
+  });
 
   // Auto-calculate probation dates when join_date changes
   useEffect(() => {
@@ -502,7 +509,7 @@ export function EmployeeFormPage() {
                     label="Company"
                     name="company_id"
                     value={formData.company_id?.toString() || ''}
-                    onChange={(e) => setFormData(prev => ({ ...prev, company_id: e.target.value ? parseInt(e.target.value) : undefined }))}
+                    onChange={(e) => setFormData(prev => ({ ...prev, company_id: e.target.value ? parseInt(e.target.value) : undefined, department_id: undefined }))}
                     options={[
                       { value: '', label: '-- Pilih Company --' },
                       ...companies.map(c => ({ value: c.id.toString(), label: `${c.name} (${c.code})` })),
@@ -716,8 +723,8 @@ export function EmployeeFormPage() {
                     value={formData.department_id?.toString() || ''}
                     onChange={(e) => setFormData((prev) => ({ ...prev, department_id: e.target.value ? parseInt(e.target.value) : undefined }))}
                     options={[
-                      { value: '', label: '-- Select Department --' },
-                      ...departments.map((d) => ({ value: d.id.toString(), label: d.name })),
+                      { value: '', label: formData.company_id ? '-- Select Department --' : '-- Pilih Company dulu --' },
+                      ...filteredDepartments.map((d) => ({ value: d.id.toString(), label: d.name })),
                     ]}
                     icon={<Building className="h-4 w-4 text-indigo-600" />}
                   />
@@ -794,7 +801,6 @@ export function EmployeeFormPage() {
                       { value: '', label: '-- Select Type --' },
                       { value: 'permanent', label: 'Permanent (Tetap)' },
                       { value: 'contract', label: 'Contract (Kontrak)' },
-                      { value: 'probation', label: 'Probation (Percobaan)' },
                       { value: 'intern', label: 'Intern (Magang)' },
                       { value: 'freelance', label: 'Freelance' },
                     ]}
