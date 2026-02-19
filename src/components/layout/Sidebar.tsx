@@ -170,7 +170,7 @@ const operationsItems: MenuItem[] = [
     path: '/movement',
     icon: ArrowLeftRight,
     label: 'Movement',
-    roles: ['Group CEO', 'CEO', 'HR Manager', 'HR Staff'],
+    roles: ['Group CEO', 'CEO', 'HR Manager'],
   },
   {
     path: '/org-chart',
