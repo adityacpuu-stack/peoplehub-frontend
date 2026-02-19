@@ -127,7 +127,7 @@ export function EmployeeFormPage() {
         setDepartments(deptResponse.data);
         setCompanies(companyResponse.data);
         setEmployees(empResponse.data);
-        setWorkLocations(workLocResponse);
+        setWorkLocations(Array.isArray(workLocResponse) ? workLocResponse : workLocResponse.data);
 
         if (id) {
           const employee = await employeeService.getById(parseInt(id));
