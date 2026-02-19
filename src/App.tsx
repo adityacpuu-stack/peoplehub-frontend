@@ -128,7 +128,7 @@ function App() {
       Sentry.setUser({
         id: String(user.id),
         email: user.email,
-        username: user.name,
+        username: user.employee?.name || user.email,
       });
     } else {
       Sentry.setUser(null);
