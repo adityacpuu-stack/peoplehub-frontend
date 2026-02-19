@@ -194,6 +194,7 @@ export interface Employee {
   manager_id?: number;
   leave_approver_id?: number;
   overtime_approver_id?: number;
+  work_location_id?: number;
   company?: { id: number; name: string } | null;
   department?: { id: number; name: string } | null;
   position?: { id: number; name: string } | null;
