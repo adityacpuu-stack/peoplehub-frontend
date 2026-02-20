@@ -128,10 +128,9 @@ export function DeductionsPage() {
   const fetchEmployees = useCallback(async (companyId?: number) => {
     setLoadingEmployees(true);
     try {
-      const params: { page: number; limit: number; company_id?: number; employment_status?: string } = {
+      const params: { page: number; limit: number; company_id?: number } = {
         page: 1,
         limit: 200,
-        employment_status: 'active'
       };
       if (companyId) {
         params.company_id = companyId;
@@ -199,9 +198,14 @@ export function DeductionsPage() {
 
   const computedEndDate = useMemo(() => {
     if (!computedInstallments || !formData.effective_date) return '';
-    const date = new Date(formData.effective_date);
-    date.setMonth(date.getMonth() + computedInstallments);
-    return date.toISOString().split('T')[0];
+    try {
+      const date = new Date(formData.effective_date);
+      if (isNaN(date.getTime())) return '';
+      date.setMonth(date.getMonth() + computedInstallments);
+      return date.toISOString().split('T')[0];
+    } catch {
+      return '';
+    }
   }, [computedInstallments, formData.effective_date]);
 
   const getIcon = (type: string) => {
@@ -664,7 +668,7 @@ export function DeductionsPage() {
                       </div>
                       <div className="flex items-center justify-between text-xs text-gray-500 mt-1">
                         <span>Sisa: {formatCurrency(Number(deduction.remaining_balance || 0))}</span>
-                        <span>Total: {formatCurrency(Number(deduction.total_loan_amount))}</span>
+                        <span>Total: {formatCurrency(Number(deduction.total_loan_amount || 0))}</span>
                       </div>
                     </div>
                   )}
