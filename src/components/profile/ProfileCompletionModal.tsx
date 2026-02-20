@@ -14,6 +14,11 @@ interface ProfileCompletionModalProps {
 interface FormData {
   // Step 1: Data Pribadi & Alamat KTP
   name: string;
+  place_of_birth: string;
+  date_of_birth: string;
+  blood_type: string;
+  gender: string;
+  personal_email: string;
   phone: string;
   mobile_number: string;
   address: string;
@@ -53,7 +58,7 @@ const STEPS: StepConfig[] = [
     title: 'Data Alamat',
     description: 'Alamat KTP dan Domisili',
     icon: User,
-    fields: ['name', 'address', 'city', 'province', 'postal_code', 'current_address', 'current_city', 'current_province', 'current_postal_code'],
+    fields: ['name', 'place_of_birth', 'date_of_birth', 'gender', 'blood_type', 'personal_email', 'address', 'city', 'province', 'postal_code', 'current_address', 'current_city', 'current_province', 'current_postal_code'],
   },
   {
     id: 2,
@@ -80,6 +85,11 @@ const STEPS: StepConfig[] = [
 
 const FIELD_LABELS: Record<keyof FormData, string> = {
   name: 'Nama Lengkap',
+  place_of_birth: 'Tempat Lahir',
+  date_of_birth: 'Tanggal Lahir',
+  blood_type: 'Golongan Darah',
+  gender: 'Jenis Kelamin',
+  personal_email: 'Email Pribadi',
   phone: 'Nomor Telepon',
   mobile_number: 'Nomor HP',
   address: 'Alamat Lengkap',
@@ -103,6 +113,11 @@ const FIELD_LABELS: Record<keyof FormData, string> = {
 
 const FIELD_PLACEHOLDERS: Record<keyof FormData, string> = {
   name: 'Nama sesuai KTP',
+  place_of_birth: 'Jakarta',
+  date_of_birth: '',
+  blood_type: '',
+  gender: '',
+  personal_email: 'email.pribadi@gmail.com',
   phone: '021-12345678',
   mobile_number: '081234567890',
   address: 'Jl. Contoh No. 123, RT 01/RW 02, Kelurahan, Kecamatan',
@@ -127,6 +142,8 @@ const FIELD_PLACEHOLDERS: Record<keyof FormData, string> = {
 // Optional fields (not required for profile completion)
 const OPTIONAL_FIELDS: (keyof FormData)[] = [
   'phone',
+  'blood_type',
+  'personal_email',
   'npwp_number',
   'current_address',
   'current_city',
@@ -136,6 +153,11 @@ const OPTIONAL_FIELDS: (keyof FormData)[] = [
 
 const INITIAL_FORM_DATA: FormData = {
   name: '',
+  place_of_birth: '',
+  date_of_birth: '',
+  blood_type: '',
+  gender: '',
+  personal_email: '',
   phone: '',
   mobile_number: '',
   address: '',
@@ -180,6 +202,11 @@ export function ProfileCompletionModal({ isOpen, onComplete }: ProfileCompletion
       setEmployeeName(profile.name || '');
       setFormData({
         name: profile.name || '',
+        place_of_birth: profile.place_of_birth || '',
+        date_of_birth: profile.date_of_birth ? profile.date_of_birth.split('T')[0] : '',
+        blood_type: profile.blood_type || '',
+        gender: profile.gender || '',
+        personal_email: (profile as any).personal_email || '',
         phone: profile.phone || '',
         mobile_number: profile.mobile_number || '',
         address: profile.address || '',
@@ -292,6 +319,11 @@ export function ProfileCompletionModal({ isOpen, onComplete }: ProfileCompletion
     try {
       const updateData: UpdateProfileDTO = {
         name: formData.name,
+        place_of_birth: formData.place_of_birth,
+        date_of_birth: formData.date_of_birth || undefined,
+        blood_type: formData.blood_type || undefined,
+        gender: formData.gender,
+        personal_email: formData.personal_email || undefined,
         phone: formData.phone,
         mobile_number: formData.mobile_number,
         address: formData.address,
@@ -500,9 +532,44 @@ export function ProfileCompletionModal({ isOpen, onComplete }: ProfileCompletion
                               errors[field] ? 'border-red-500' : 'border-gray-300'
                             }`}
                           />
+                        ) : field === 'gender' ? (
+                          <select
+                            value={formData[field]}
+                            onChange={(e) => handleInputChange(field, e.target.value)}
+                            className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500/20 focus:border-slate-500 ${
+                              errors[field] ? 'border-red-500' : 'border-gray-300'
+                            }`}
+                          >
+                            <option value="">Pilih Jenis Kelamin</option>
+                            <option value="male">Laki-laki</option>
+                            <option value="female">Perempuan</option>
+                          </select>
+                        ) : field === 'blood_type' ? (
+                          <select
+                            value={formData[field]}
+                            onChange={(e) => handleInputChange(field, e.target.value)}
+                            className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500/20 focus:border-slate-500 ${
+                              errors[field] ? 'border-red-500' : 'border-gray-300'
+                            }`}
+                          >
+                            <option value="">Pilih Golongan Darah</option>
+                            <option value="A">A</option>
+                            <option value="B">B</option>
+                            <option value="AB">AB</option>
+                            <option value="O">O</option>
+                          </select>
+                        ) : field === 'date_of_birth' ? (
+                          <input
+                            type="date"
+                            value={formData[field]}
+                            onChange={(e) => handleInputChange(field, e.target.value)}
+                            className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500/20 focus:border-slate-500 ${
+                              errors[field] ? 'border-red-500' : 'border-gray-300'
+                            }`}
+                          />
                         ) : (
                           <input
-                            type="text"
+                            type={field === 'personal_email' ? 'email' : 'text'}
                             value={formData[field]}
                             onChange={(e) => handleInputChange(field, e.target.value)}
                             placeholder={FIELD_PLACEHOLDERS[field]}

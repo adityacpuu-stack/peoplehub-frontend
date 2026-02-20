@@ -102,6 +102,7 @@ export interface Employee {
   name: string;
   nick_name?: string;
   email: string | null;
+  personal_email?: string;
   phone?: string;
   mobile_number?: string;
   gender?: string;
@@ -216,6 +217,7 @@ export interface CreateEmployeeRequest {
   employee_id?: string;
   nick_name?: string;
   email?: string;
+  personal_email?: string;
   phone?: string;
   mobile_number?: string;
   gender?: string;

@@ -4,6 +4,11 @@ import type { ApiResponse, Employee } from '@/types';
 // Profile update fields (limited for self-service)
 export interface UpdateProfileDTO {
   name?: string;
+  place_of_birth?: string;
+  date_of_birth?: string;
+  blood_type?: string;
+  gender?: string;
+  personal_email?: string;
   phone?: string;
   mobile_number?: string;
   // Alamat KTP
