@@ -207,6 +207,7 @@ export function EmployeeDetailPage() {
             <div className="p-6">
               <div className="grid sm:grid-cols-2 gap-4">
                 <InfoItem label="Email" value={employee.email} icon={<Mail className="h-4 w-4" />} />
+                <InfoItem label="Personal Email" value={employee.personal_email} icon={<Mail className="h-4 w-4" />} />
                 <InfoItem label="Phone" value={employee.phone} icon={<Phone className="h-4 w-4" />} />
                 <InfoItem label="Mobile" value={employee.mobile_number} />
 
@@ -343,6 +344,7 @@ export function EmployeeDetailPage() {
             </div>
             <div className="p-6 space-y-3">
               <InfoItem label="National ID (KTP)" value={employee.national_id} />
+              <InfoItem label="Family Card (KK)" value={employee.family_card_number} />
               <InfoItem label="NPWP" value={employee.npwp_number} />
               <InfoItem label="Passport Number" value={employee.passport_number} />
               <InfoItem label="Passport Expiry" value={employee.passport_expiry ? formatDate(employee.passport_expiry) : null} />
