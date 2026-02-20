@@ -667,7 +667,7 @@ export function OvertimePage() {
                       </p>
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <span className="text-lg font-bold text-gray-900">{Number(request.hours || 0).toFixed(2)}</span>
+                      <span className="text-lg font-bold text-gray-900">{parseFloat(Number(request.hours || 0).toFixed(2))}</span>
                       <span className="text-sm text-gray-500"> hrs</span>
                     </td>
                     <td className="px-6 py-4 text-center">
@@ -817,7 +817,7 @@ export function OvertimePage() {
                     </div>
                     <div>
                       <p className="text-xs text-gray-500 mb-1">Duration</p>
-                      <p className="font-medium text-gray-900">{Number(selectedRequest.hours || 0).toFixed(2)} hours</p>
+                      <p className="font-medium text-gray-900">{parseFloat(Number(selectedRequest.hours || 0).toFixed(2))} hours</p>
                     </div>
                     <div>
                       <p className="text-xs text-gray-500 mb-1">Type</p>
@@ -840,7 +840,7 @@ export function OvertimePage() {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Hours × Multiplier</span>
-                      <span className="font-medium">{Number(selectedRequest.hours || 0).toFixed(2)} × {selectedRequest.rate_multiplier}</span>
+                      <span className="font-medium">{parseFloat(Number(selectedRequest.hours || 0).toFixed(2))} × {selectedRequest.rate_multiplier}</span>
                     </div>
                     <div className="flex justify-between pt-2 border-t border-orange-200">
                       <span className="font-semibold text-gray-900">Total Amount</span>
