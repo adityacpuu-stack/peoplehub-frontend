@@ -353,9 +353,9 @@ export function PayrollPage() {
       return;
     }
 
-    // Check if there are approved payrolls
-    if (tabCounts.approved === 0) {
-      toast.error('Tidak ada payroll dengan status Approved. Approve payroll terlebih dahulu sebelum export.');
+    // Check if there are approved or paid payrolls
+    if (tabCounts.approved === 0 && tabCounts.paid === 0) {
+      toast.error('Tidak ada payroll dengan status Approved/Paid. Approve payroll terlebih dahulu sebelum export.');
       return;
     }
 
@@ -608,8 +608,8 @@ export function PayrollPage() {
               <div className="relative">
                 <button
                   onClick={() => setShowExportMenu(!showExportMenu)}
-                  disabled={isExporting || tabCounts.approved === 0}
-                  title={tabCounts.approved === 0 ? 'Approve payroll terlebih dahulu' : 'Export Excel'}
+                  disabled={isExporting || (tabCounts.approved === 0 && tabCounts.paid === 0)}
+                  title={tabCounts.approved === 0 && tabCounts.paid === 0 ? 'Approve payroll terlebih dahulu' : 'Export Excel'}
                   className="inline-flex items-center gap-2 px-4 py-2.5 bg-white/20 backdrop-blur-xl text-white rounded-xl border border-white/30 hover:bg-white/30 transition-all duration-200 font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isExporting ? (
