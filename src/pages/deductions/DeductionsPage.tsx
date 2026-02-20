@@ -128,9 +128,10 @@ export function DeductionsPage() {
   const fetchEmployees = useCallback(async (companyId?: number) => {
     setLoadingEmployees(true);
     try {
-      const params: { page: number; limit: number; company_id?: number } = {
+      const params: { page: number; limit: number; company_id?: number; employment_status?: string } = {
         page: 1,
         limit: 200,
+        employment_status: 'all',
       };
       if (companyId) {
         params.company_id = companyId;

@@ -184,6 +184,7 @@ export function OvertimePage() {
         page: 1,
         company_id: companyId,
         limit: 500,
+        employment_status: 'all',
       });
       setEmployees(response.data as Employee[]);
     } catch (error) {
