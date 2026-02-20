@@ -1025,8 +1025,8 @@ export function OvertimePage() {
                       </label>
                       <input
                         type="number"
-                        step="0.5"
-                        min="0.5"
+                        step="0.01"
+                        min="0.01"
                         max="200"
                         value={formData.hours}
                         onChange={(e) => setFormData(prev => ({ ...prev, hours: e.target.value }))}
