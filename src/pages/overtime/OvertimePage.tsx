@@ -186,7 +186,7 @@ export function OvertimePage() {
         limit: 500,
         employment_status: 'all',
       });
-      setEmployees(response.data as Employee[]);
+      setEmployees(response.data.filter(emp => emp.employment_status === 'active' || emp.employment_status === 'resigned') as Employee[]);
     } catch (error) {
       console.error('Failed to fetch employees:', error);
       setEmployees([]);

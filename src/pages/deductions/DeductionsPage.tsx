@@ -137,14 +137,16 @@ export function DeductionsPage() {
         params.company_id = companyId;
       }
       const response = await employeeService.getAll(params);
-      setEmployees(response.data.map(emp => ({
-        id: emp.id,
-        name: emp.name,
-        employee_id: emp.employee_id || '',
-        basic_salary: emp.basic_salary,
-        company_id: emp.company_id,
-        department: emp.department || undefined,
-      })));
+      setEmployees(response.data
+        .filter(emp => emp.employment_status === 'active' || emp.employment_status === 'resigned')
+        .map(emp => ({
+          id: emp.id,
+          name: emp.name,
+          employee_id: emp.employee_id || '',
+          basic_salary: emp.basic_salary,
+          company_id: emp.company_id,
+          department: emp.department || undefined,
+        })));
     } catch (error) {
       console.error('Failed to fetch employees:', error);
       setEmployees([]);
