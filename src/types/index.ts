@@ -61,6 +61,7 @@ export interface User {
     position?: { name: string };
     employment_status: string;
     profile_completed: boolean;
+    national_id?: string;
   };
 }
 
