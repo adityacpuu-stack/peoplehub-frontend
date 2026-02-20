@@ -12,7 +12,8 @@ interface ProfileCompletionModalProps {
 }
 
 interface FormData {
-  // Step 1: Contact & KTP Address
+  // Step 1: Data Pribadi & Alamat KTP
+  name: string;
   phone: string;
   mobile_number: string;
   address: string;
@@ -52,7 +53,7 @@ const STEPS: StepConfig[] = [
     title: 'Data Alamat',
     description: 'Alamat KTP dan Domisili',
     icon: User,
-    fields: ['address', 'city', 'province', 'postal_code', 'current_address', 'current_city', 'current_province', 'current_postal_code'],
+    fields: ['name', 'address', 'city', 'province', 'postal_code', 'current_address', 'current_city', 'current_province', 'current_postal_code'],
   },
   {
     id: 2,
@@ -78,6 +79,7 @@ const STEPS: StepConfig[] = [
 ];
 
 const FIELD_LABELS: Record<keyof FormData, string> = {
+  name: 'Nama Lengkap',
   phone: 'Nomor Telepon',
   mobile_number: 'Nomor HP',
   address: 'Alamat Lengkap',
@@ -100,6 +102,7 @@ const FIELD_LABELS: Record<keyof FormData, string> = {
 };
 
 const FIELD_PLACEHOLDERS: Record<keyof FormData, string> = {
+  name: 'Nama sesuai KTP',
   phone: '021-12345678',
   mobile_number: '081234567890',
   address: 'Jl. Contoh No. 123, RT 01/RW 02, Kelurahan, Kecamatan',
@@ -132,6 +135,7 @@ const OPTIONAL_FIELDS: (keyof FormData)[] = [
 ];
 
 const INITIAL_FORM_DATA: FormData = {
+  name: '',
   phone: '',
   mobile_number: '',
   address: '',
@@ -175,6 +179,7 @@ export function ProfileCompletionModal({ isOpen, onComplete }: ProfileCompletion
       const profile: Employee = await profileService.getMyProfile();
       setEmployeeName(profile.name || '');
       setFormData({
+        name: profile.name || '',
         phone: profile.phone || '',
         mobile_number: profile.mobile_number || '',
         address: profile.address || '',
@@ -286,6 +291,7 @@ export function ProfileCompletionModal({ isOpen, onComplete }: ProfileCompletion
     setIsLoading(true);
     try {
       const updateData: UpdateProfileDTO = {
+        name: formData.name,
         phone: formData.phone,
         mobile_number: formData.mobile_number,
         address: formData.address,
@@ -417,9 +423,17 @@ export function ProfileCompletionModal({ isOpen, onComplete }: ProfileCompletion
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
                 {currentStepConfig?.fields.map((field, _index) => (
                   <>
+                    {/* Section Header for Data Pribadi */}
+                    {field === 'name' && (
+                      <div key="header-pribadi" className="col-span-1 md:col-span-2 pt-2 first:pt-0">
+                        <p className="text-[10px] sm:text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2 pb-2 border-b border-gray-200">
+                          Data Pribadi
+                        </p>
+                      </div>
+                    )}
                     {/* Section Header for Alamat KTP */}
                     {field === 'address' && (
-                      <div key="header-ktp" className="col-span-1 md:col-span-2 pt-2 first:pt-0">
+                      <div key="header-ktp" className="col-span-1 md:col-span-2 pt-3 sm:pt-4">
                         <p className="text-[10px] sm:text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2 pb-2 border-b border-gray-200">
                           Alamat KTP
                         </p>
@@ -465,7 +479,7 @@ export function ProfileCompletionModal({ isOpen, onComplete }: ProfileCompletion
                       <div
                         key={field}
                         className={
-                          field === 'address' || field === 'current_address' ? 'md:col-span-2' : ''
+                          field === 'name' || field === 'address' || field === 'current_address' ? 'md:col-span-2' : ''
                         }
                       >
                         <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
