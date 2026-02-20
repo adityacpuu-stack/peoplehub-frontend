@@ -121,6 +121,7 @@ export interface Employee {
   current_province?: string;
   current_postal_code?: string;
   national_id?: string;
+  family_card_number?: string;
   tax_id?: string;
   npwp_number?: string;
   passport_number?: string;
@@ -234,6 +235,7 @@ export interface CreateEmployeeRequest {
   current_province?: string;
   current_postal_code?: string;
   national_id?: string;
+  family_card_number?: string;
   tax_id?: string;
   npwp_number?: string;
   job_title?: string;

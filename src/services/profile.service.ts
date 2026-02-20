@@ -22,6 +22,7 @@ export interface UpdateProfileDTO {
   emergency_contact_address?: string;
   // Identity Documents
   national_id?: string;
+  family_card_number?: string;
   npwp_number?: string;
   // Bank Information
   bank_name?: string;

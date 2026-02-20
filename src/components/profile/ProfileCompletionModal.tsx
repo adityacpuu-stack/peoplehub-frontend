@@ -30,6 +30,7 @@ interface FormData {
   emergency_contact_relationship: string;
   // Step 4: Identity Documents
   national_id: string;
+  family_card_number: string;
   npwp_number: string;
   // Step 5: Bank Information
   bank_name: string;
@@ -65,7 +66,7 @@ const STEPS: StepConfig[] = [
     title: 'Dokumen',
     description: 'Nomor KTP dan NPWP',
     icon: FileText,
-    fields: ['national_id', 'npwp_number'],
+    fields: ['national_id', 'family_card_number', 'npwp_number'],
   },
   {
     id: 4,
@@ -91,6 +92,7 @@ const FIELD_LABELS: Record<keyof FormData, string> = {
   emergency_contact_phone: 'Telepon Kontak Darurat',
   emergency_contact_relationship: 'Hubungan',
   national_id: 'Nomor KTP (NIK)',
+  family_card_number: 'Nomor Kartu Keluarga (KK)',
   npwp_number: 'Nomor NPWP',
   bank_name: 'Nama Bank',
   bank_account_number: 'Nomor Rekening',
@@ -112,6 +114,7 @@ const FIELD_PLACEHOLDERS: Record<keyof FormData, string> = {
   emergency_contact_phone: '081234567890',
   emergency_contact_relationship: 'Suami/Istri/Orang Tua/Saudara',
   national_id: '3171234567890001',
+  family_card_number: '3171234567890001',
   npwp_number: '12.345.678.9-012.345',
   bank_name: 'BCA / Mandiri / BNI / dll',
   bank_account_number: '1234567890',
@@ -143,6 +146,7 @@ const INITIAL_FORM_DATA: FormData = {
   emergency_contact_phone: '',
   emergency_contact_relationship: '',
   national_id: '',
+  family_card_number: '',
   npwp_number: '',
   bank_name: '',
   bank_account_number: '',
@@ -185,6 +189,7 @@ export function ProfileCompletionModal({ isOpen, onComplete }: ProfileCompletion
         emergency_contact_phone: profile.emergency_contact_phone || '',
         emergency_contact_relationship: profile.emergency_contact_relationship || '',
         national_id: profile.national_id || '',
+        family_card_number: profile.family_card_number || '',
         npwp_number: profile.npwp_number || '',
         bank_name: profile.bank_name || '',
         bank_account_number: profile.bank_account_number || '',
@@ -251,6 +256,11 @@ export function ProfileCompletionModal({ isOpen, onComplete }: ProfileCompletion
       isValid = false;
     }
 
+    if (formData.family_card_number && formData.family_card_number.length !== 16) {
+      newErrors.family_card_number = 'Nomor KK harus 16 digit';
+      isValid = false;
+    }
+
     if (formData.mobile_number && !/^[0-9+\-\s]+$/.test(formData.mobile_number)) {
       newErrors.mobile_number = 'Format nomor HP tidak valid';
       isValid = false;
@@ -290,6 +300,7 @@ export function ProfileCompletionModal({ isOpen, onComplete }: ProfileCompletion
         emergency_contact_phone: formData.emergency_contact_phone,
         emergency_contact_relationship: formData.emergency_contact_relationship,
         national_id: formData.national_id,
+        family_card_number: formData.family_card_number,
         npwp_number: formData.npwp_number,
         bank_name: formData.bank_name,
         bank_account_number: formData.bank_account_number,

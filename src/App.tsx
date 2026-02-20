@@ -144,8 +144,8 @@ function App() {
         setShowPasswordModal(true);
         setShowProfileModal(false);
       }
-      // Second check: profile completion (only if password already changed)
-      else if (user.employee && user.employee.profile_completed === false) {
+      // Second check: profile completion - show if profile_completed is false OR national_id (NIK) is empty
+      else if (user.employee && (user.employee.profile_completed === false || !user.employee.national_id)) {
         setShowPasswordModal(false);
         setShowProfileModal(true);
       } else {
