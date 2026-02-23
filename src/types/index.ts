@@ -281,6 +281,18 @@ export interface CreateEmployeeRequest {
   jp_registered?: boolean;
   medical_insurance?: boolean;
   life_insurance?: boolean;
+  // Bank Info
+  bank_name?: string;
+  bank_account_number?: string;
+  bank_account_holder?: string;
+  // Identity Documents
+  passport_number?: string;
+  passport_expiry?: string;
+  // Emergency Contact
+  emergency_contact_name?: string;
+  emergency_contact_phone?: string;
+  emergency_contact_relationship?: string;
+  emergency_contact_address?: string;
 }
 
 // ==========================================
@@ -359,6 +371,7 @@ export interface LeaveType {
   is_paid: boolean;
   is_active: boolean;
   color?: string;
+  available_during_probation?: boolean;
 }
 
 export interface LeaveRequest {

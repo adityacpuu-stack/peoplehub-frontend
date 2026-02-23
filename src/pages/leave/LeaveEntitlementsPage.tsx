@@ -24,6 +24,7 @@ import {
 import { leaveService } from '../../services/leave.service';
 import { companyService } from '../../services/company.service';
 import { employeeService } from '../../services/employee.service';
+import { departmentService } from '../../services/department.service';
 import type { LeaveType } from '@/types';
 
 interface Company {
@@ -75,6 +76,7 @@ export function LeaveEntitlementsPage() {
   const [entitlements, setEntitlements] = useState<EmployeeEntitlement[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filterCompany, setFilterCompany] = useState<string>('all');
   const [filterDepartment, setFilterDepartment] = useState<string>('all');
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -116,13 +118,19 @@ export function LeaveEntitlementsPage() {
   const fetchEntitlements = useCallback(async () => {
     setLoading(true);
     try {
-      const params: { page: number; limit: number; company_id?: number; employment_status?: string } = {
+      const params: { page: number; limit: number; search?: string; company_id?: number; department_id?: number; employment_status?: string } = {
         page,
         limit,
         employment_status: 'active'
       };
+      if (debouncedSearch.trim()) {
+        params.search = debouncedSearch.trim();
+      }
       if (filterCompany !== 'all') {
         params.company_id = Number(filterCompany);
+      }
+      if (filterDepartment !== 'all') {
+        params.department_id = Number(filterDepartment);
       }
 
       // Fetch employees (only active)
@@ -224,12 +232,31 @@ export function LeaveEntitlementsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, filterCompany, leaveTypes]);
+  }, [page, debouncedSearch, filterCompany, filterDepartment, leaveTypes]);
+
+  // Fetch departments
+  const [departments, setDepartments] = useState<{ id: number; name: string }[]>([]);
+  const fetchDepartments = useCallback(async () => {
+    try {
+      const params: { limit: number; company_id?: number } = { limit: 200 };
+      if (filterCompany !== 'all') {
+        params.company_id = Number(filterCompany);
+      }
+      const response = await departmentService.getAll(params);
+      setDepartments(response.data.map(d => ({ id: d.id, name: d.name })));
+    } catch (error) {
+      console.error('Failed to fetch departments:', error);
+    }
+  }, [filterCompany]);
 
   useEffect(() => {
     fetchCompanies();
     fetchLeaveTypes();
   }, [fetchCompanies, fetchLeaveTypes]);
+
+  useEffect(() => {
+    fetchDepartments();
+  }, [fetchDepartments]);
 
   useEffect(() => {
     if (leaveTypes.length > 0) {
@@ -239,7 +266,7 @@ export function LeaveEntitlementsPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, filterCompany, filterDepartment]);
+  }, [debouncedSearch, filterCompany, filterDepartment]);
 
   // Define custom sort order for companies based on employee_id prefix
   // PFI (Path Finder), GDI (Growpath), LFS (Lampung Farm), UOR (UOR Kreatif), BCI (Buka Cerita), PDR (Pilar Dana)
@@ -269,33 +296,17 @@ export function LeaveEntitlementsPage() {
     return match ? parseInt(match[1], 10) : Infinity;
   };
 
-  // Get unique departments from employees
-  const departments = useMemo(() => {
-    const depts = new Set<string>();
-    employees.forEach(emp => {
-      if (emp.department?.name) {
-        depts.add(emp.department.name);
-      }
-    });
-    return Array.from(depts).sort();
-  }, [employees]);
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [search]);
 
-  // Filter and sort entitlements by company order
+  // Sort entitlements by company order
   const filteredEntitlements = useMemo(() => {
     let result = entitlements;
-
-    if (search) {
-      const searchLower = search.toLowerCase();
-      result = result.filter(e =>
-        e.employee.name?.toLowerCase().includes(searchLower) ||
-        e.employee.employee_id?.toLowerCase().includes(searchLower) ||
-        e.employee.department?.name?.toLowerCase().includes(searchLower)
-      );
-    }
-
-    if (filterDepartment !== 'all') {
-      result = result.filter(e => e.employee.department?.name === filterDepartment);
-    }
 
     // Sort by employee_id prefix order: PFI, GDI, LFS, BCI, then others
     result = [...result].sort((a, b) => {
@@ -323,7 +334,7 @@ export function LeaveEntitlementsPage() {
     });
 
     return result;
-  }, [entitlements, search, filterDepartment]);
+  }, [entitlements]);
 
   // Stats
   const stats = useMemo(() => {
@@ -732,7 +743,7 @@ export function LeaveEntitlementsPage() {
               </div>
               <select
                 value={filterCompany}
-                onChange={(e) => setFilterCompany(e.target.value)}
+                onChange={(e) => { setFilterCompany(e.target.value); setFilterDepartment('all'); }}
                 className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500"
               >
                 <option value="all">All Companies</option>
@@ -748,7 +759,7 @@ export function LeaveEntitlementsPage() {
               >
                 <option value="all">All Departments</option>
                 {departments.map(dept => (
-                  <option key={dept} value={dept}>{dept}</option>
+                  <option key={dept.id} value={dept.id}>{dept.name}</option>
                 ))}
               </select>
             </div>
@@ -778,7 +789,14 @@ export function LeaveEntitlementsPage() {
                   </th>
                   {leaveTypes.slice(0, 4).map(type => (
                     <th key={type.id} className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      {type.code || type.name}
+                      <div className="flex flex-col items-center gap-1">
+                        <span>{type.code || type.name}</span>
+                        {type.available_during_probation === false && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 bg-orange-50 text-orange-600 text-[10px] font-medium rounded normal-case">
+                            No Probation
+                          </span>
+                        )}
+                      </div>
                     </th>
                   ))}
                   <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
@@ -944,7 +962,14 @@ export function LeaveEntitlementsPage() {
                   <div className="space-y-2 max-h-48 overflow-y-auto">
                     {leaveTypes.map(type => (
                       <div key={type.id} className="flex items-center justify-between text-sm">
-                        <span className="text-gray-600">{type.code} - {type.name}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-600">{type.code} - {type.name}</span>
+                          {type.available_during_probation === false && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 bg-orange-50 text-orange-600 text-[10px] font-medium rounded">
+                              No Probation
+                            </span>
+                          )}
+                        </div>
                         <span className="font-medium text-gray-900">{type.default_days} days</span>
                       </div>
                     ))}
@@ -1044,7 +1069,7 @@ export function LeaveEntitlementsPage() {
                   >
                     {leaveTypes.map(type => (
                       <option key={type.id} value={type.id}>
-                        {type.code} - {type.name} (Default: {type.default_days} days)
+                        {type.code} - {type.name} (Default: {type.default_days} days){type.available_during_probation === false ? ' [No Probation]' : ''}
                       </option>
                     ))}
                   </select>
@@ -1167,9 +1192,21 @@ export function LeaveEntitlementsPage() {
                       return (
                         <div key={balance.id || balance.leave_type_id} className="bg-gray-50 rounded-lg p-4">
                           <div className="flex items-center justify-between mb-2">
-                            <span className="font-medium text-gray-900">
-                              {balance.leaveType?.code ? `${balance.leaveType.code} - ${balance.leaveType.name}` : balance.leaveType?.name || 'Unknown'}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-gray-900">
+                                {balance.leaveType?.code ? `${balance.leaveType.code} - ${balance.leaveType.name}` : balance.leaveType?.name || 'Unknown'}
+                              </span>
+                              {balance.leaveType?.available_during_probation === false && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 bg-orange-50 text-orange-600 text-[10px] font-medium rounded">
+                                  No Probation
+                                </span>
+                              )}
+                              {balance.leaveType?.available_during_probation === true && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 bg-green-50 text-green-600 text-[10px] font-medium rounded">
+                                  Probation OK
+                                </span>
+                              )}
+                            </div>
                             <div className="flex items-center gap-2">
                               <span className={`font-bold ${getBalanceColor(balance.remaining_days, balance.allocated_days)}`}>
                                 {balance.remaining_days} days remaining

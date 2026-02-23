@@ -95,7 +95,7 @@ export function EmployeesPage() {
         page,
         limit: 10,
         search: debouncedSearch || undefined,
-        employment_status: debouncedSearch ? 'all' : (activeTab === 'active' ? 'active' : 'inactive'),
+        employment_status: debouncedSearch ? undefined : (activeTab === 'active' ? 'active' : 'inactive'),
         company_id: filters.company_id ? Number(filters.company_id) : undefined,
       });
       setEmployees(response.data);
@@ -172,7 +172,7 @@ export function EmployeesPage() {
     try {
       await employeeService.exportExcel({
         search: debouncedSearch || undefined,
-        employment_status: debouncedSearch ? 'all' : (activeTab === 'active' ? 'active' : 'inactive'),
+        employment_status: debouncedSearch ? undefined : (activeTab === 'active' ? 'active' : 'inactive'),
         company_id: filters.company_id ? Number(filters.company_id) : undefined,
       });
       toast.success('Employee data exported successfully');

@@ -28,6 +28,8 @@ import {
   Heart,
   LogOut,
   X,
+  Landmark,
+  Contact,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { PageSpinner, SearchableSelect } from '@/components/ui';
@@ -113,6 +115,16 @@ export function EmployeeFormPage() {
     jp_registered: false,
     medical_insurance: false,
     life_insurance: false,
+    bank_name: '',
+    bank_account_number: '',
+    bank_account_holder: '',
+    family_card_number: '',
+    passport_number: '',
+    passport_expiry: '',
+    emergency_contact_name: '',
+    emergency_contact_phone: '',
+    emergency_contact_relationship: '',
+    emergency_contact_address: '',
   });
 
   useEffect(() => {
@@ -179,6 +191,16 @@ export function EmployeeFormPage() {
             jp_registered: employee.jp_registered || false,
             medical_insurance: employee.medical_insurance || false,
             life_insurance: employee.life_insurance || false,
+            bank_name: employee.bank_name || '',
+            bank_account_number: employee.bank_account_number || '',
+            bank_account_holder: employee.bank_account_holder || '',
+            family_card_number: employee.family_card_number || '',
+            passport_number: employee.passport_number || '',
+            passport_expiry: employee.passport_expiry?.split('T')[0] || '',
+            emergency_contact_name: employee.emergency_contact_name || '',
+            emergency_contact_phone: employee.emergency_contact_phone || '',
+            emergency_contact_relationship: employee.emergency_contact_relationship || '',
+            emergency_contact_address: employee.emergency_contact_address || '',
           });
         }
       } catch (error) {
@@ -567,6 +589,31 @@ export function EmployeeFormPage() {
                     placeholder="1234567890123456"
                     hint="16-digit National ID Number"
                     icon={<CreditCard className="h-4 w-4 text-purple-600" />}
+                  />
+                  <FormInput
+                    label="Family Card Number (KK)"
+                    name="family_card_number"
+                    value={formData.family_card_number || ''}
+                    onChange={handleChange}
+                    placeholder="1234567890123456"
+                    hint="16-digit Family Card Number"
+                    icon={<CreditCard className="h-4 w-4 text-indigo-600" />}
+                  />
+                  <FormInput
+                    label="Passport Number"
+                    name="passport_number"
+                    value={formData.passport_number || ''}
+                    onChange={handleChange}
+                    placeholder="A1234567"
+                    icon={<FileText className="h-4 w-4 text-teal-600" />}
+                  />
+                  <FormInput
+                    label="Passport Expiry"
+                    name="passport_expiry"
+                    type="date"
+                    value={formData.passport_expiry || ''}
+                    onChange={handleChange}
+                    icon={<Calendar className="h-4 w-4 text-red-600" />}
                   />
                 </div>
               </div>
@@ -1026,6 +1073,49 @@ export function EmployeeFormPage() {
               </div>
             </div>
 
+            {/* Bank Account */}
+            <div className="bg-gradient-to-br from-amber-50 to-yellow-50 rounded-xl border-2 border-amber-200 p-6 mb-6">
+              <div className="flex items-center mb-6">
+                <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-yellow-600 rounded-xl flex items-center justify-center mr-3 shadow-md">
+                  <Landmark className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <h4 className="text-base font-bold text-gray-900">Bank Account</h4>
+                  <p className="text-xs text-gray-600">Bank account for salary disbursement</p>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg p-5 border border-amber-100">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <FormInput
+                    label="Bank Name"
+                    name="bank_name"
+                    value={formData.bank_name || ''}
+                    onChange={handleChange}
+                    placeholder="BCA, Mandiri, BNI, etc."
+                    icon={<Landmark className="h-4 w-4 text-amber-600" />}
+                  />
+                  <FormInput
+                    label="Account Number"
+                    name="bank_account_number"
+                    value={formData.bank_account_number || ''}
+                    onChange={handleChange}
+                    placeholder="1234567890"
+                    icon={<CreditCard className="h-4 w-4 text-amber-600" />}
+                  />
+                  <FormInput
+                    label="Account Holder Name"
+                    name="bank_account_holder"
+                    value={formData.bank_account_holder || ''}
+                    onChange={handleChange}
+                    placeholder="Name as per bank account"
+                    hint="Leave empty to use employee name"
+                    icon={<User className="h-4 w-4 text-amber-600" />}
+                  />
+                </div>
+              </div>
+            </div>
+
             {/* Tax Information */}
             <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl border-2 border-purple-200 p-6">
               <div className="flex items-center mb-6">
@@ -1320,6 +1410,63 @@ export function EmployeeFormPage() {
                 </div>
               </div>
             </div>
+
+            {/* Emergency Contact */}
+            <div className="bg-gradient-to-br from-red-50 to-pink-50 rounded-xl border-2 border-red-200 p-6 mt-6">
+              <div className="flex items-center mb-6">
+                <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-pink-600 rounded-xl flex items-center justify-center mr-3 shadow-md">
+                  <Contact className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <h4 className="text-base font-bold text-gray-900">Emergency Contact</h4>
+                  <p className="text-xs text-gray-600">Person to contact in case of emergency</p>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg p-5 border border-red-100">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <FormInput
+                    label="Contact Name"
+                    name="emergency_contact_name"
+                    value={formData.emergency_contact_name || ''}
+                    onChange={handleChange}
+                    placeholder="Full name"
+                    icon={<User className="h-4 w-4 text-red-600" />}
+                  />
+                  <FormInput
+                    label="Contact Phone"
+                    name="emergency_contact_phone"
+                    value={formData.emergency_contact_phone || ''}
+                    onChange={handleChange}
+                    placeholder="+62 812 3456 7890"
+                    icon={<Phone className="h-4 w-4 text-red-600" />}
+                  />
+                  <FormSelect
+                    label="Relationship"
+                    name="emergency_contact_relationship"
+                    value={formData.emergency_contact_relationship || ''}
+                    onChange={handleChange}
+                    options={[
+                      { value: '', label: '-- Select Relationship --' },
+                      { value: 'spouse', label: 'Spouse' },
+                      { value: 'parent', label: 'Parent' },
+                      { value: 'sibling', label: 'Sibling' },
+                      { value: 'child', label: 'Child' },
+                      { value: 'other', label: 'Other' },
+                    ]}
+                    icon={<Users className="h-4 w-4 text-pink-600" />}
+                  />
+                  <FormInput
+                    label="Contact Address"
+                    name="emergency_contact_address"
+                    value={formData.emergency_contact_address || ''}
+                    onChange={handleChange}
+                    placeholder="Full address"
+                    icon={<MapPin className="h-4 w-4 text-red-600" />}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -1390,6 +1537,7 @@ export function EmployeeFormPage() {
                     value={formData.pay_type ? (formData.pay_type === 'gross' ? 'Gross' : 'Nett') : '-'}
                   />
                   <SummaryItem label="PTKP Status" value={formData.ptkp_status || '-'} />
+                  <SummaryItem label="Bank" value={formData.bank_name ? `${formData.bank_name} - ${formData.bank_account_number || '-'}` : '-'} />
                 </div>
               </div>
 
@@ -1405,6 +1553,7 @@ export function EmployeeFormPage() {
                   <SummaryItem label="Mobile" value={formData.mobile_number || '-'} />
                   <SummaryItem label="KTP City" value={formData.city || '-'} />
                   <SummaryItem label="Current City" value={formData.current_city || '-'} />
+                  <SummaryItem label="Emergency Contact" value={formData.emergency_contact_name ? `${formData.emergency_contact_name} (${formData.emergency_contact_relationship || '-'})` : '-'} />
                 </div>
               </div>
 
