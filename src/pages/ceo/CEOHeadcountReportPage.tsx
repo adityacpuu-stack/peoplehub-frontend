@@ -28,13 +28,18 @@ import {
   type HeadcountAnalytics,
   type GroupDashboard,
 } from '@/services/dashboard.service';
+import { useAuthStore } from '@/stores/auth.store';
 import { formatNumber } from '@/lib/utils';
 
 export function CEOHeadcountReportPage() {
+  const { user } = useAuthStore();
   const [headcountData, setHeadcountData] = useState<HeadcountAnalytics | null>(null);
   const [groupData, setGroupData] = useState<GroupDashboard | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const userCompanyId = user?.employee?.company_id || undefined;
+  const isGroupCEO = user?.roles?.includes('Group CEO') || user?.roles?.includes('Super Admin');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -42,8 +47,9 @@ export function CEOHeadcountReportPage() {
         setIsLoading(true);
         setError(null);
 
+        const companyId = isGroupCEO ? undefined : userCompanyId;
         const [headcount, group] = await Promise.all([
-          dashboardService.getHeadcountAnalytics(),
+          dashboardService.getHeadcountAnalytics(companyId),
           dashboardService.getGroupOverview(),
         ]);
 
@@ -58,7 +64,7 @@ export function CEOHeadcountReportPage() {
     };
 
     fetchData();
-  }, []);
+  }, [userCompanyId, isGroupCEO]);
 
   if (isLoading) {
     return <PageSpinner />;

@@ -66,6 +66,7 @@ export function CEOFinancialOverviewPage() {
   // Get user's company
   const userCompanyId = user?.employee?.company_id;
   const userCompanyName = 'Your Company';
+  const isGroupCEO = user?.roles?.includes('Group CEO') || user?.roles?.includes('Super Admin');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -73,10 +74,11 @@ export function CEOFinancialOverviewPage() {
         setIsLoading(true);
         setError(null);
 
+        const companyId = isGroupCEO ? undefined : userCompanyId;
         const [group, payrollRes] = await Promise.all([
-          dashboardService.getGroupOverview(),
+          dashboardService.getGroupOverview(companyId || undefined),
           payrollService.getAll({
-            company_id: userCompanyId || undefined,
+            company_id: companyId || undefined,
             period: selectedPeriod,
             limit: 1000,
           }),
@@ -93,7 +95,7 @@ export function CEOFinancialOverviewPage() {
     };
 
     fetchData();
-  }, [userCompanyId, selectedPeriod]);
+  }, [userCompanyId, isGroupCEO, selectedPeriod]);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('id-ID', {

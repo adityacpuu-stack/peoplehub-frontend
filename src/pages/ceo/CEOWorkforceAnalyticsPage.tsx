@@ -30,13 +30,18 @@ import {
   type WorkforceAnalytics,
   type GroupDashboard,
 } from '@/services/dashboard.service';
+import { useAuthStore } from '@/stores/auth.store';
 import { formatNumber } from '@/lib/utils';
 
 export function CEOWorkforceAnalyticsPage() {
+  const { user } = useAuthStore();
   const [workforceData, setWorkforceData] = useState<WorkforceAnalytics | null>(null);
   const [groupData, setGroupData] = useState<GroupDashboard | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const userCompanyId = user?.employee?.company_id || undefined;
+  const isGroupCEO = user?.roles?.includes('Group CEO') || user?.roles?.includes('Super Admin');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -44,9 +49,10 @@ export function CEOWorkforceAnalyticsPage() {
         setIsLoading(true);
         setError(null);
 
+        const companyId = isGroupCEO ? undefined : userCompanyId;
         const [workforce, group] = await Promise.all([
-          dashboardService.getWorkforceAnalytics(),
-          dashboardService.getGroupOverview(),
+          dashboardService.getWorkforceAnalytics(companyId),
+          dashboardService.getGroupOverview(companyId),
         ]);
 
         setWorkforceData(workforce);
@@ -60,7 +66,7 @@ export function CEOWorkforceAnalyticsPage() {
     };
 
     fetchData();
-  }, []);
+  }, [userCompanyId, isGroupCEO]);
 
   if (isLoading) {
     return <PageSpinner />;

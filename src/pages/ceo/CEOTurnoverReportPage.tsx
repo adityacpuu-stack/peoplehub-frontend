@@ -24,11 +24,16 @@ import {
   dashboardService,
   type TurnoverAnalytics,
 } from '@/services/dashboard.service';
+import { useAuthStore } from '@/stores/auth.store';
 
 export function CEOTurnoverReportPage() {
+  const { user } = useAuthStore();
   const [turnoverData, setTurnoverData] = useState<TurnoverAnalytics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const userCompanyId = user?.employee?.company_id || undefined;
+  const isGroupCEO = user?.roles?.includes('Group CEO') || user?.roles?.includes('Super Admin');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -36,7 +41,8 @@ export function CEOTurnoverReportPage() {
         setIsLoading(true);
         setError(null);
 
-        const turnover = await dashboardService.getTurnoverAnalytics();
+        const companyId = isGroupCEO ? undefined : userCompanyId;
+        const turnover = await dashboardService.getTurnoverAnalytics(companyId);
         setTurnoverData(turnover);
       } catch (err: any) {
         console.error('Failed to fetch turnover data:', err);
@@ -47,7 +53,7 @@ export function CEOTurnoverReportPage() {
     };
 
     fetchData();
-  }, []);
+  }, [userCompanyId, isGroupCEO]);
 
   if (isLoading) {
     return <PageSpinner />;

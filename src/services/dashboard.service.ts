@@ -327,8 +327,9 @@ export const dashboardService = {
   },
 
   // Get Group CEO dashboard (multi-company overview)
-  getGroupOverview: async (): Promise<GroupDashboard> => {
-    const response = await api.get<ApiResponse<GroupDashboard>>('/dashboard/group');
+  getGroupOverview: async (companyId?: number): Promise<GroupDashboard> => {
+    const params = companyId ? { company_id: companyId } : {};
+    const response = await api.get<ApiResponse<GroupDashboard>>('/dashboard/group', { params });
     return response.data.data;
   },
 

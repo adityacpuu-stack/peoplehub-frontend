@@ -26,13 +26,18 @@ import {
   type GroupDashboard,
   type TurnoverAnalytics,
 } from '@/services/dashboard.service';
+import { useAuthStore } from '@/stores/auth.store';
 import { formatNumber } from '@/lib/utils';
 
 export function CEODepartmentReportPage() {
+  const { user } = useAuthStore();
   const [groupData, setGroupData] = useState<GroupDashboard | null>(null);
   const [turnoverData, setTurnoverData] = useState<TurnoverAnalytics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const userCompanyId = user?.employee?.company_id || undefined;
+  const isGroupCEO = user?.roles?.includes('Group CEO') || user?.roles?.includes('Super Admin');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -40,9 +45,10 @@ export function CEODepartmentReportPage() {
         setIsLoading(true);
         setError(null);
 
+        const companyId = isGroupCEO ? undefined : userCompanyId;
         const [group, turnover] = await Promise.all([
-          dashboardService.getGroupOverview(),
-          dashboardService.getTurnoverAnalytics(),
+          dashboardService.getGroupOverview(companyId),
+          dashboardService.getTurnoverAnalytics(companyId),
         ]);
 
         setGroupData(group);
@@ -56,7 +62,7 @@ export function CEODepartmentReportPage() {
     };
 
     fetchData();
-  }, []);
+  }, [userCompanyId, isGroupCEO]);
 
   if (isLoading) {
     return <PageSpinner />;

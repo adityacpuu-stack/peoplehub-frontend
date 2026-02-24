@@ -37,12 +37,15 @@ import { useAuthStore } from '@/stores/auth.store';
 import { formatNumber } from '@/lib/utils';
 
 export function CEOCompanyPerformancePage() {
-  const { user: _user } = useAuthStore();
+  const { user } = useAuthStore();
   const [groupData, setGroupData] = useState<GroupDashboard | null>(null);
   const [_workforceData, setWorkforceData] = useState<WorkforceAnalytics | null>(null);
   const [_headcountData, setHeadcountData] = useState<HeadcountAnalytics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const userCompanyId = user?.employee?.company_id || undefined;
+  const isGroupCEO = user?.roles?.includes('Group CEO') || user?.roles?.includes('Super Admin');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -50,10 +53,11 @@ export function CEOCompanyPerformancePage() {
         setIsLoading(true);
         setError(null);
 
+        const companyId = isGroupCEO ? undefined : userCompanyId;
         const [group, workforce, headcount] = await Promise.all([
-          dashboardService.getGroupOverview(),
-          dashboardService.getWorkforceAnalytics(),
-          dashboardService.getHeadcountAnalytics(),
+          dashboardService.getGroupOverview(companyId),
+          dashboardService.getWorkforceAnalytics(companyId),
+          dashboardService.getHeadcountAnalytics(companyId),
         ]);
 
         setGroupData(group);
@@ -68,7 +72,7 @@ export function CEOCompanyPerformancePage() {
     };
 
     fetchData();
-  }, []);
+  }, [userCompanyId, isGroupCEO]);
 
   if (isLoading) {
     return <PageSpinner />;

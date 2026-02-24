@@ -22,12 +22,17 @@ import {
   dashboardService,
   type GroupDashboard,
 } from '@/services/dashboard.service';
+import { useAuthStore } from '@/stores/auth.store';
 import { formatNumber } from '@/lib/utils';
 
 export function CEOCostReportPage() {
+  const { user } = useAuthStore();
   const [groupData, setGroupData] = useState<GroupDashboard | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const userCompanyId = user?.employee?.company_id || undefined;
+  const isGroupCEO = user?.roles?.includes('Group CEO') || user?.roles?.includes('Super Admin');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -35,7 +40,8 @@ export function CEOCostReportPage() {
         setIsLoading(true);
         setError(null);
 
-        const group = await dashboardService.getGroupOverview();
+        const companyId = isGroupCEO ? undefined : userCompanyId;
+        const group = await dashboardService.getGroupOverview(companyId);
         setGroupData(group);
       } catch (err: any) {
         console.error('Failed to fetch cost data:', err);
@@ -46,7 +52,7 @@ export function CEOCostReportPage() {
     };
 
     fetchData();
-  }, []);
+  }, [userCompanyId, isGroupCEO]);
 
   if (isLoading) {
     return <PageSpinner />;

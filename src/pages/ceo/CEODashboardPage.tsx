@@ -51,16 +51,20 @@ export function CEODashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const userCompanyId = user?.employee?.company_id || undefined;
+  const isGroupCEO = user?.roles?.includes('Group CEO') || user?.roles?.includes('Super Admin');
+
   useEffect(() => {
     const fetchData = async () => {
       try {
         setIsLoading(true);
         setError(null);
 
+        const companyId = isGroupCEO ? undefined : userCompanyId;
         const [group, workforce, headcount] = await Promise.all([
-          dashboardService.getGroupOverview(),
-          dashboardService.getWorkforceAnalytics(),
-          dashboardService.getHeadcountAnalytics(),
+          dashboardService.getGroupOverview(companyId),
+          dashboardService.getWorkforceAnalytics(companyId),
+          dashboardService.getHeadcountAnalytics(companyId),
         ]);
 
         setGroupData(group);
@@ -75,7 +79,7 @@ export function CEODashboardPage() {
     };
 
     fetchData();
-  }, []);
+  }, [userCompanyId, isGroupCEO]);
 
   if (isLoading) {
     return <PageSpinner />;
