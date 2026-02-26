@@ -15,6 +15,8 @@ export const ALLOWANCE_TYPES = [
   'attendance',
   'shift',
   'remote',
+  'thr',
+  'bonus',
   'other',
 ] as const;
 
@@ -333,6 +335,26 @@ class AllowanceService {
         is_recurring: true,
         description: 'Tunjangan kerja dari rumah (listrik, internet)',
       },
+      {
+        name: 'THR (Tunjangan Hari Raya)',
+        type: 'thr',
+        calculation_base: 'basic_salary',
+        frequency: 'one_time',
+        is_taxable: true,
+        is_bpjs_object: false,
+        is_recurring: false,
+        description: 'Tunjangan Hari Raya keagamaan',
+      },
+      {
+        name: 'Bonus',
+        type: 'bonus',
+        calculation_base: 'basic_salary',
+        frequency: 'one_time',
+        is_taxable: true,
+        is_bpjs_object: false,
+        is_recurring: false,
+        description: 'Bonus kinerja / pencapaian target',
+      },
     ];
   }
 
@@ -351,6 +373,8 @@ class AllowanceService {
       attendance: 'Kehadiran',
       shift: 'Shift',
       remote: 'Remote',
+      thr: 'THR',
+      bonus: 'Bonus',
       other: 'Lainnya',
     };
     return labels[type] || type;

@@ -23,6 +23,8 @@ import {
   Loader2,
   Clock,
   Wifi,
+  Gift,
+  Trophy,
 } from 'lucide-react';
 import { allowanceService, ALLOWANCE_TYPES } from '../../services/allowance.service';
 import type { Allowance, AllowanceListQuery, AllowanceType as AllowanceTypeEnum } from '../../services/allowance.service';
@@ -230,6 +232,10 @@ export function AllowancesPage() {
         return <Shirt className="w-5 h-5" />;
       case 'remote':
         return <Wifi className="w-5 h-5" />;
+      case 'thr':
+        return <Gift className="w-5 h-5" />;
+      case 'bonus':
+        return <Trophy className="w-5 h-5" />;
       default:
         return <Coins className="w-5 h-5" />;
     }
@@ -257,6 +263,10 @@ export function AllowancesPage() {
         return 'from-pink-500 to-pink-600';
       case 'remote':
         return 'from-teal-500 to-teal-600';
+      case 'thr':
+        return 'from-yellow-500 to-yellow-600';
+      case 'bonus':
+        return 'from-emerald-500 to-emerald-600';
       default:
         return 'from-gray-500 to-gray-600';
     }
