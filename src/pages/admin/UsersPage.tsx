@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   UserCog,
   Search,
@@ -103,13 +103,16 @@ export function UsersPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const searchRef = useRef(search);
+  searchRef.current = search;
+
   const fetchUsers = useCallback(async () => {
     try {
       setIsLoading(true);
       const response = await userService.getAll({
         page,
         limit,
-        search: search || undefined,
+        search: searchRef.current || undefined,
       });
       setUsers(response.data);
       setTotalPages(response.pagination.totalPages);
@@ -119,7 +122,7 @@ export function UsersPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [page, search]);
+  }, [page]);
 
   const fetchStats = async () => {
     try {
@@ -150,16 +153,21 @@ export function UsersPage() {
     }
   };
 
+  // Fetch when page changes
   useEffect(() => {
     fetchUsers();
     fetchStats();
-  }, [fetchUsers]);
+  }, [page]);
 
+  // Debounced search — reset to page 1
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (page !== 1) setPage(1);
-      else fetchUsers();
-    }, 300);
+      if (page !== 1) {
+        setPage(1); // triggers fetch via page effect
+      } else {
+        fetchUsers();
+      }
+    }, 400);
     return () => clearTimeout(timer);
   }, [search]);
 
