@@ -73,6 +73,7 @@ export function EmployeeFormPage() {
     name: '',
     employee_id: '',
     email: '',
+    personal_email: '',
     phone: '',
     mobile_number: '',
     gender: '',
@@ -147,6 +148,7 @@ export function EmployeeFormPage() {
             name: employee.name,
             employee_id: employee.employee_id || '',
             email: employee.email || '',
+            personal_email: employee.personal_email || '',
             phone: employee.phone || '',
             mobile_number: employee.mobile_number || '',
             gender: employee.gender || '',
@@ -1310,6 +1312,16 @@ export function EmployeeFormPage() {
                     hint="Official company email"
                     icon={<Mail className="h-4 w-4 text-purple-600" />}
                   />
+                  <FormInput
+                    label="Personal Email"
+                    name="personal_email"
+                    type="email"
+                    value={formData.personal_email || ''}
+                    onChange={handleChange}
+                    placeholder="name@gmail.com"
+                    hint="For sending credentials & notifications"
+                    icon={<Mail className="h-4 w-4 text-orange-500" />}
+                  />
                 </div>
               </div>
             </div>
@@ -1549,6 +1561,7 @@ export function EmployeeFormPage() {
                 </div>
                 <div className="space-y-2 text-sm">
                   <SummaryItem label="Email" value={formData.email || '-'} />
+                  <SummaryItem label="Personal Email" value={formData.personal_email || '-'} />
                   <SummaryItem label="Phone" value={formData.phone || '-'} />
                   <SummaryItem label="Mobile" value={formData.mobile_number || '-'} />
                   <SummaryItem label="KTP City" value={formData.city || '-'} />
