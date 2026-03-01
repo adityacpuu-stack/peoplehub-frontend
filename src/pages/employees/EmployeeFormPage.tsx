@@ -61,6 +61,7 @@ export function EmployeeFormPage() {
   const [workLocations, setWorkLocations] = useState<WorkLocation[]>([]);
   const [generatedEmployeeId, setGeneratedEmployeeId] = useState<string>('');
   const [isLoadingEmployeeId, setIsLoadingEmployeeId] = useState(false);
+  const [hasOfficeEmail, setHasOfficeEmail] = useState(true);
   const [showResignModal, setShowResignModal] = useState(false);
   const [isResigning, setIsResigning] = useState(false);
   const [resignData, setResignData] = useState({
@@ -204,6 +205,8 @@ export function EmployeeFormPage() {
             emergency_contact_relationship: employee.emergency_contact_relationship || '',
             emergency_contact_address: employee.emergency_contact_address || '',
           });
+          // Detect if employee has office email
+          setHasOfficeEmail(!!employee.email && !employee.email.endsWith('@temp.local'));
         }
       } catch (error) {
         console.error('Failed to fetch data:', error);
@@ -283,15 +286,14 @@ export function EmployeeFormPage() {
       return;
     }
 
-    if (!isEdit) {
-      if (!formData.email?.trim()) {
-        toast.error('Office email is required');
-        return;
-      }
-      if (!formData.personal_email?.trim()) {
-        toast.error('Personal email is required');
-        return;
-      }
+    if (!formData.personal_email?.trim()) {
+      toast.error('Personal email is required');
+      return;
+    }
+
+    if (hasOfficeEmail && !formData.email?.trim()) {
+      toast.error('Office email is required when "Has office email" is enabled');
+      return;
     }
 
     setIsSaving(true);
@@ -1314,27 +1316,50 @@ export function EmployeeFormPage() {
                     icon={<Phone className="h-4 w-4 text-green-600" />}
                   />
                   <FormInput
-                    label="Office Email"
-                    name="email"
-                    type="email"
-                    value={formData.email || ''}
-                    onChange={handleChange}
-                    placeholder="employee@company.com"
-                    hint="Official company email (used for login)"
-                    icon={<Mail className="h-4 w-4 text-purple-600" />}
-                    required={!isEdit}
-                  />
-                  <FormInput
                     label="Personal Email"
                     name="personal_email"
                     type="email"
                     value={formData.personal_email || ''}
                     onChange={handleChange}
                     placeholder="name@gmail.com"
-                    hint="For onboarding credentials & notifications"
+                    hint={hasOfficeEmail ? 'For onboarding credentials' : 'Used as login & for notifications'}
                     icon={<Mail className="h-4 w-4 text-orange-500" />}
-                    required={!isEdit}
+                    required
                   />
+                  <div className="lg:col-span-2">
+                    <label className="flex items-center gap-3 cursor-pointer select-none mb-3">
+                      <div
+                        className={`relative w-10 h-5 rounded-full transition-colors ${hasOfficeEmail ? 'bg-purple-500' : 'bg-gray-300'}`}
+                        onClick={() => {
+                          setHasOfficeEmail(!hasOfficeEmail);
+                          if (hasOfficeEmail) {
+                            setFormData(prev => ({ ...prev, email: '' }));
+                          }
+                        }}
+                      >
+                        <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${hasOfficeEmail ? 'translate-x-5' : ''}`} />
+                      </div>
+                      <span className="text-sm font-medium text-gray-700">Employee has office email</span>
+                    </label>
+                    {hasOfficeEmail && (
+                      <FormInput
+                        label="Office Email"
+                        name="email"
+                        type="email"
+                        value={formData.email || ''}
+                        onChange={handleChange}
+                        placeholder="employee@company.com"
+                        hint="Official company email (M365 / Google Workspace)"
+                        icon={<Mail className="h-4 w-4 text-purple-600" />}
+                        required
+                      />
+                    )}
+                    {!hasOfficeEmail && (
+                      <p className="text-xs text-gray-500 bg-gray-50 p-3 rounded-lg">
+                        Login credential will be sent to personal email. Office email can be added later.
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -1573,8 +1598,8 @@ export function EmployeeFormPage() {
                   <h4 className="font-bold text-gray-900">Contact & Address</h4>
                 </div>
                 <div className="space-y-2 text-sm">
-                  <SummaryItem label="Email" value={formData.email || '-'} />
                   <SummaryItem label="Personal Email" value={formData.personal_email || '-'} />
+                  <SummaryItem label="Office Email" value={hasOfficeEmail ? (formData.email || '-') : 'N/A (uses personal email)'} />
                   <SummaryItem label="Phone" value={formData.phone || '-'} />
                   <SummaryItem label="Mobile" value={formData.mobile_number || '-'} />
                   <SummaryItem label="KTP City" value={formData.city || '-'} />
