@@ -757,8 +757,10 @@ export function UsersPage() {
                     </div>
                   ) : m365UserStatus.exists ? (
                     <p className="text-xs text-amber-600 mt-1">M365 account exists but has no license assigned</p>
+                  ) : !m365UserStatus.available ? (
+                    <p className="text-xs text-gray-400 mt-1">M365 integration not configured on server</p>
                   ) : (
-                    <p className="text-xs text-green-600 mt-1">M365 account exists, will only send PeopleHub credentials</p>
+                    <p className="text-xs text-red-500 mt-1">M365 account not found — will be created when sending credentials</p>
                   )}
                 </div>
               ) : (
