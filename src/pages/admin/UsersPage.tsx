@@ -467,13 +467,17 @@ export function UsersPage() {
                 <TableRow key={user.id} className="hover:bg-gray-50/50 transition-colors">
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-full bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center text-white font-semibold text-sm shadow-md">
-                        {user.email.charAt(0).toUpperCase()}
+                      <div className={`h-10 w-10 rounded-full flex items-center justify-center text-white font-semibold text-sm shadow-md ${user.email.endsWith('@temp.local') ? 'bg-gradient-to-br from-amber-500 to-amber-600' : 'bg-gradient-to-br from-slate-600 to-slate-700'}`}>
+                        {user.email.endsWith('@temp.local') ? '?' : user.email.charAt(0).toUpperCase()}
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
                           <Mail className="h-3.5 w-3.5 text-gray-400" />
-                          <span className="text-sm text-gray-900">{user.email}</span>
+                          {user.email.endsWith('@temp.local') ? (
+                            <span className="text-sm text-amber-600 italic">No email set — send credentials to assign</span>
+                          ) : (
+                            <span className="text-sm text-gray-900">{user.email}</span>
+                          )}
                         </div>
                         <p className="text-xs text-gray-500 mt-0.5">
                           Created {formatDate(user.created_at)}
@@ -885,7 +889,11 @@ export function UsersPage() {
                   <div className="space-y-2 mb-4 text-sm">
                     <div className="flex items-center justify-between py-1">
                       <span className="text-gray-500">Current login</span>
-                      <span className="font-mono text-gray-700">{currentEmail}</span>
+                      {currentEmail.endsWith('@temp.local') ? (
+                        <span className="text-amber-600 italic text-xs">Not set yet</span>
+                      ) : (
+                        <span className="font-mono text-gray-700">{currentEmail}</span>
+                      )}
                     </div>
                     {credentialUsername && emailDomain &&
                       currentEmail !== `${credentialUsername}@${emailDomain}` && (
