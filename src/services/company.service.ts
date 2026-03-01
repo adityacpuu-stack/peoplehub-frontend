@@ -10,6 +10,7 @@ export interface Company {
   phone?: string;
   email?: string;
   website?: string;
+  email_domain?: string;
   employee_count?: number;
   is_active: boolean;
   logo?: string;
@@ -46,6 +47,7 @@ interface BackendCompany {
   parent_company_id?: number | null;
   group_name?: string;
   email?: string;
+  email_domain?: string;
   phone?: string;
   address?: string;
   city?: string;

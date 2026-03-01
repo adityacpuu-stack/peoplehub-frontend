@@ -33,6 +33,7 @@ interface CompanyFormData {
   address: string;
   phone: string;
   email: string;
+  email_domain: string;
   website: string;
   npwp: string;
   is_active: boolean;
@@ -45,6 +46,7 @@ const initialFormData: CompanyFormData = {
   address: '',
   phone: '',
   email: '',
+  email_domain: '',
   website: '',
   npwp: '',
   is_active: true,
@@ -130,6 +132,7 @@ export function CompaniesPage() {
       address: company.address || '',
       phone: company.phone || '',
       email: company.email || '',
+      email_domain: company.email_domain || '',
       website: company.website || '',
       npwp: (company as any).npwp || '',
       is_active: company.is_active,
@@ -654,6 +657,24 @@ export function CompaniesPage() {
                         placeholder="+62 21 1234567"
                         className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:border-green-500 focus:ring-2 focus:ring-green-500/20 outline-none transition-all"
                       />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                        Email Domain <span className="text-gray-400 font-normal">(untuk M365 auto-create)</span>
+                      </label>
+                      <div className="flex items-center gap-0">
+                        <span className="px-3 py-2.5 bg-gray-100 border border-r-0 border-gray-200 rounded-l-lg text-sm text-gray-500">@</span>
+                        <input
+                          type="text"
+                          name="email_domain"
+                          value={formData.email_domain}
+                          onChange={handleFormChange}
+                          placeholder="pfigroups.com"
+                          className="flex-1 px-4 py-2.5 rounded-r-lg border border-gray-200 focus:border-green-500 focus:ring-2 focus:ring-green-500/20 outline-none transition-all"
+                        />
+                      </div>
+                      <p className="text-xs text-gray-400 mt-1">Domain email karyawan, misal: pfigroups.com, aggrecapital.com</p>
                     </div>
 
                     <div className="md:col-span-2">
