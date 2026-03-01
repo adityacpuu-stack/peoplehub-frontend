@@ -83,6 +83,7 @@ export function UsersPage() {
   const [credentialUsername, setCredentialUsername] = useState('');
   const [credentialLicenseSkuId, setCredentialLicenseSkuId] = useState('');
   const [m365Licenses, setM365Licenses] = useState<{ available: boolean; licenses: import('@/services/user.service').M365License[] }>({ available: false, licenses: [] });
+  const [m365UserStatus, setM365UserStatus] = useState<import('@/services/user.service').M365UserStatus>({ available: false, exists: false, licenses: [] });
   const [isSendingCredentials, setIsSendingCredentials] = useState(false);
 
   // Form state
@@ -278,14 +279,25 @@ export function UsersPage() {
 
     setCredentialUsername(autoUsername);
     setCredentialLicenseSkuId('');
+    setM365UserStatus({ available: false, exists: false, licenses: [] });
     setCredentialModal({ open: true, user });
 
-    // Fetch M365 licenses
+    // Fetch M365 licenses and user status in parallel
+    const emailToCheck = autoUsername && emailDomain ? `${autoUsername}@${emailDomain}` : currentEmail;
+    const validEmail = emailToCheck && !emailToCheck.endsWith('@temp.local') ? emailToCheck : null;
+
     try {
-      const result = await userService.getM365Licenses();
-      setM365Licenses(result);
+      const [licensesResult, userStatusResult] = await Promise.all([
+        userService.getM365Licenses().catch(() => ({ available: false, licenses: [] as import('@/services/user.service').M365License[] })),
+        validEmail
+          ? userService.getM365UserStatus(validEmail).catch(() => ({ available: false, exists: false, licenses: [] as import('@/services/user.service').M365UserLicense[] }))
+          : Promise.resolve({ available: false, exists: false, licenses: [] as import('@/services/user.service').M365UserLicense[] }),
+      ]);
+      setM365Licenses(licensesResult);
+      setM365UserStatus(userStatusResult);
     } catch {
       setM365Licenses({ available: false, licenses: [] });
+      setM365UserStatus({ available: false, exists: false, licenses: [] });
     }
   };
 
@@ -735,9 +747,19 @@ export function UsersPage() {
                     <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
                     <span className="font-mono text-sm text-green-800">{currentEmail}</span>
                   </div>
-                  <p className="text-xs text-green-600 mt-1">
-                    M365 account sudah ada, hanya kirim credential PeopleHub
-                  </p>
+                  {m365UserStatus.exists && m365UserStatus.licenses.length > 0 ? (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {m365UserStatus.licenses.map((lic) => (
+                        <span key={lic.skuId} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                          {lic.displayName}
+                        </span>
+                      ))}
+                    </div>
+                  ) : m365UserStatus.exists ? (
+                    <p className="text-xs text-amber-600 mt-1">M365 account exists but has no license assigned</p>
+                  ) : (
+                    <p className="text-xs text-green-600 mt-1">M365 account exists, will only send PeopleHub credentials</p>
+                  )}
                 </div>
               ) : (
                 <div className="mb-4">

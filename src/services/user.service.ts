@@ -98,6 +98,18 @@ export interface M365License {
   availableUnits: number;
 }
 
+export interface M365UserLicense {
+  skuId: string;
+  skuPartNumber: string;
+  displayName: string;
+}
+
+export interface M365UserStatus {
+  available: boolean;
+  exists: boolean;
+  licenses: M365UserLicense[];
+}
+
 export interface PaginatedResponse<T> {
   data: T[];
   pagination: {
@@ -149,6 +161,11 @@ export const userService = {
 
   getM365Licenses: async (): Promise<{ available: boolean; licenses: M365License[] }> => {
     const response = await api.get('/users/m365-licenses');
+    return response.data;
+  },
+
+  getM365UserStatus: async (email: string): Promise<M365UserStatus> => {
+    const response = await api.get('/users/m365-user-status', { params: { email } });
     return response.data;
   },
 
