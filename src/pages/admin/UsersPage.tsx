@@ -787,8 +787,8 @@ export function UsersPage() {
               );
             })()}
 
-            {/* M365 License Picker */}
-            {m365Licenses.available && m365Licenses.licenses.length > 0 && credentialModal.user.employee?.company?.email_domain && (
+            {/* M365 License Picker - only show when user has no license yet */}
+            {m365Licenses.available && m365Licenses.licenses.length > 0 && credentialModal.user.employee?.company?.email_domain && m365UserStatus.licenses.length === 0 && (
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   M365 License
@@ -811,57 +811,76 @@ export function UsersPage() {
               </div>
             )}
 
-            <div className="space-y-2 mb-4 text-sm">
-              <div className="flex items-center justify-between py-1">
-                <span className="text-gray-500">Current login</span>
-                <span className="font-mono text-gray-700">{credentialModal.user.email}</span>
-              </div>
-              {credentialUsername && credentialModal.user.employee?.company?.email_domain &&
-                credentialModal.user.email !== `${credentialUsername}@${credentialModal.user.employee.company.email_domain}` && (
-                <div className="flex items-center justify-between py-1">
-                  <span className="text-gray-500">New login</span>
-                  <span className="font-mono text-blue-600 font-medium">
-                    {credentialUsername}@{credentialModal.user.employee.company.email_domain}
-                  </span>
-                </div>
-              )}
-              <div className="flex items-center justify-between py-1">
-                <span className="text-gray-500">Credential sent to</span>
-                {credentialModal.user.employee?.personal_email ? (
-                  <span className="font-mono text-green-700">{credentialModal.user.employee.personal_email}</span>
-                ) : (
-                  <span className="font-mono text-red-500">Not set</span>
-                )}
-              </div>
-            </div>
+            {(() => {
+              // Determine mode: PeopleHub-only when M365 exists + has licenses
+              const isPeopleHubOnly = m365UserStatus.exists && m365UserStatus.licenses.length > 0;
+              const sendToEmail = isPeopleHubOnly
+                ? credentialModal.user.email
+                : (credentialModal.user.employee?.personal_email || null);
+              const canSend = !!sendToEmail && !sendToEmail.endsWith('@temp.local');
 
-            {!credentialModal.user.employee?.personal_email && (
-              <p className="text-sm text-red-600 bg-red-50 p-3 rounded-lg mb-4">
-                Personal email belum diisi. Update data employee terlebih dahulu sebelum mengirim credentials.
-              </p>
-            )}
+              return (
+                <>
+                  <div className="space-y-2 mb-4 text-sm">
+                    <div className="flex items-center justify-between py-1">
+                      <span className="text-gray-500">Current login</span>
+                      <span className="font-mono text-gray-700">{credentialModal.user.email}</span>
+                    </div>
+                    {credentialUsername && credentialModal.user.employee?.company?.email_domain &&
+                      credentialModal.user.email !== `${credentialUsername}@${credentialModal.user.employee.company.email_domain}` && (
+                      <div className="flex items-center justify-between py-1">
+                        <span className="text-gray-500">New login</span>
+                        <span className="font-mono text-blue-600 font-medium">
+                          {credentialUsername}@{credentialModal.user.employee.company.email_domain}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between py-1">
+                      <span className="text-gray-500">Credential sent to</span>
+                      {canSend ? (
+                        <span className="font-mono text-green-700">{sendToEmail}</span>
+                      ) : (
+                        <span className="font-mono text-red-500">Not set</span>
+                      )}
+                    </div>
+                  </div>
 
-            <p className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg mb-6">
-              A new temporary password will be generated. The user must change it on first login.
-            </p>
+                  {isPeopleHubOnly && (
+                    <p className="text-sm text-blue-600 bg-blue-50 p-3 rounded-lg mb-4">
+                      PeopleHub credential only. Will be sent to the office email.
+                    </p>
+                  )}
 
-            <div className="flex justify-end gap-3">
-              <Button
-                variant="outline"
-                onClick={() => { setCredentialModal({ open: false, user: null }); setCredentialUsername(''); setCredentialLicenseSkuId(''); }}
-                disabled={isSendingCredentials}
-                className="rounded-xl"
-              >
-                Cancel
-              </Button>
-              <button
-                onClick={handleSendCredentials}
-                disabled={isSendingCredentials || !credentialModal.user?.employee?.personal_email}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white font-medium hover:from-blue-600 hover:to-blue-700 transition-all shadow-md shadow-blue-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSendingCredentials ? 'Sending...' : 'Send Credentials'}
-              </button>
-            </div>
+                  {!isPeopleHubOnly && !credentialModal.user.employee?.personal_email && (
+                    <p className="text-sm text-red-600 bg-red-50 p-3 rounded-lg mb-4">
+                      Personal email not set. Please update employee data before sending credentials.
+                    </p>
+                  )}
+
+                  <p className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg mb-6">
+                    A new temporary password will be generated. The user must change it on first login.
+                  </p>
+
+                  <div className="flex justify-end gap-3">
+                    <Button
+                      variant="outline"
+                      onClick={() => { setCredentialModal({ open: false, user: null }); setCredentialUsername(''); setCredentialLicenseSkuId(''); }}
+                      disabled={isSendingCredentials}
+                      className="rounded-xl"
+                    >
+                      Cancel
+                    </Button>
+                    <button
+                      onClick={handleSendCredentials}
+                      disabled={isSendingCredentials || !canSend}
+                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white font-medium hover:from-blue-600 hover:to-blue-700 transition-all shadow-md shadow-blue-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isSendingCredentials ? 'Sending...' : isPeopleHubOnly ? 'Send PeopleHub Credential' : 'Send Credentials'}
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       )}
