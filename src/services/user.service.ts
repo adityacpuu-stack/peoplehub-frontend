@@ -131,6 +131,11 @@ export const userService = {
     return response.data;
   },
 
+  sendCredentials: async (id: number): Promise<{ success: boolean; email: string; message: string }> => {
+    const response = await api.post(`/users/${id}/send-credentials`);
+    return response.data;
+  },
+
   toggleStatus: async (id: number): Promise<User> => {
     const response = await api.patch(`/users/${id}/toggle-status`);
     return response.data;

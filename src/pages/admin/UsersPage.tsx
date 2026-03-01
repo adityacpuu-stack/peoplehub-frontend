@@ -17,6 +17,7 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
+  Send,
 } from 'lucide-react';
 import {
   Button,
@@ -75,6 +76,11 @@ export function UsersPage() {
     open: false,
     user: null,
   });
+  const [credentialModal, setCredentialModal] = useState<{ open: boolean; user: User | null }>({
+    open: false,
+    user: null,
+  });
+  const [isSendingCredentials, setIsSendingCredentials] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState<{
@@ -250,6 +256,21 @@ export function UsersPage() {
       fetchStats();
     } catch (error: any) {
       toast.error(error.response?.data?.error || 'Gagal mengubah status');
+    }
+  };
+
+  const handleSendCredentials = async () => {
+    if (!credentialModal.user) return;
+
+    try {
+      setIsSendingCredentials(true);
+      const result = await userService.sendCredentials(credentialModal.user.id);
+      toast.success(result.message || `Credentials sent to ${result.email}`);
+      setCredentialModal({ open: false, user: null });
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Gagal mengirim credentials');
+    } finally {
+      setIsSendingCredentials(false);
     }
   };
 
@@ -455,6 +476,13 @@ export function UsersPage() {
                   <TableCell>
                     <div className="flex items-center justify-center gap-1">
                       <button
+                        className="p-2 rounded-lg hover:bg-blue-50 transition-colors group"
+                        title="Send Credentials"
+                        onClick={() => setCredentialModal({ open: true, user })}
+                      >
+                        <Send className="h-4 w-4 text-gray-400 group-hover:text-blue-600" />
+                      </button>
+                      <button
                         className="p-2 rounded-lg hover:bg-slate-100 transition-colors group"
                         title="Edit"
                         onClick={() => handleOpenEditModal(user)}
@@ -631,6 +659,54 @@ export function UsersPage() {
               >
                 {isSubmitting ? 'Saving...' : formModal.user ? 'Update' : 'Create'}
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Send Credentials Confirmation Modal */}
+      {credentialModal.open && credentialModal.user && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => !isSendingCredentials && setCredentialModal({ open: false, user: null })}
+          />
+          <div className="relative bg-white rounded-2xl shadow-xl max-w-md w-full mx-4 p-6 border-0">
+            <div className="flex items-center gap-4 mb-4">
+              <div className="p-3 rounded-xl bg-blue-100">
+                <Send className="h-6 w-6 text-blue-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Send Credentials</h3>
+                <p className="text-sm text-gray-500">Generate new password & send via email</p>
+              </div>
+            </div>
+
+            <p className="text-gray-600 mb-2">
+              This will generate a new temporary password for{' '}
+              <span className="font-semibold text-gray-900">{credentialModal.user.email}</span>{' '}
+              and send it via email.
+            </p>
+            <p className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg mb-6">
+              The user's current password will be replaced and they will be required to change it on first login.
+            </p>
+
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setCredentialModal({ open: false, user: null })}
+                disabled={isSendingCredentials}
+                className="rounded-xl"
+              >
+                Cancel
+              </Button>
+              <button
+                onClick={handleSendCredentials}
+                disabled={isSendingCredentials}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white font-medium hover:from-blue-600 hover:to-blue-700 transition-all shadow-md shadow-blue-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSendingCredentials ? 'Sending...' : 'Send Credentials'}
+              </button>
             </div>
           </div>
         </div>
