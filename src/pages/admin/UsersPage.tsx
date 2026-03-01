@@ -732,63 +732,100 @@ export function UsersPage() {
               </div>
             </div>
 
-            {/* Office Email - auto-detected or input */}
-            {credentialModal.user.employee?.company?.email_domain && (() => {
+            {/* Office Email Section */}
+            {(() => {
               const emailDomain = credentialModal.user.employee?.company?.email_domain || '';
               const currentEmail = credentialModal.user.email;
-              const hasExistingEmail = currentEmail && !currentEmail.endsWith('@temp.local') && currentEmail.endsWith(`@${emailDomain}`);
+              const hasOfficeEmail = emailDomain && currentEmail && !currentEmail.endsWith('@temp.local') && currentEmail.endsWith(`@${emailDomain}`);
+              const hasNoOfficeEmail = !emailDomain || !currentEmail || currentEmail.endsWith('@temp.local') || !currentEmail.endsWith(`@${emailDomain}`);
+              const personalEmail = credentialModal.user.employee?.personal_email;
 
-              return hasExistingEmail ? (
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Office Email
-                  </label>
-                  <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
-                    <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
-                    <span className="font-mono text-sm text-green-800">{currentEmail}</span>
-                  </div>
-                  {m365UserStatus.exists && m365UserStatus.licenses.length > 0 ? (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {m365UserStatus.licenses.map((lic) => (
-                        <span key={lic.skuId} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                          {lic.displayName}
-                        </span>
-                      ))}
+              // Case 1: Has existing office email (matching company domain)
+              if (hasOfficeEmail) {
+                return (
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Office Email
+                    </label>
+                    <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
+                      <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
+                      <span className="font-mono text-sm text-green-800">{currentEmail}</span>
                     </div>
-                  ) : m365UserStatus.exists ? (
-                    <p className="text-xs text-amber-600 mt-1">M365 account exists but has no license assigned</p>
-                  ) : !m365UserStatus.available ? (
-                    <p className="text-xs text-gray-400 mt-1">M365 integration not configured on server</p>
-                  ) : (
-                    <p className="text-xs text-red-500 mt-1">M365 account not found — will be created when sending credentials</p>
-                  )}
-                </div>
-              ) : (
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Office Email
-                  </label>
-                  <div className="flex items-center gap-0">
-                    <input
-                      type="text"
-                      value={credentialUsername}
-                      onChange={(e) => setCredentialUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''))}
-                      placeholder="username"
-                      className="flex-1 px-3 py-2 border border-gray-200 rounded-l-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                    />
-                    <span className="px-3 py-2 bg-gray-100 border border-l-0 border-gray-200 rounded-r-lg text-sm text-gray-500">
-                      @{emailDomain}
-                    </span>
+                    {m365UserStatus.exists && m365UserStatus.licenses.length > 0 ? (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {m365UserStatus.licenses.map((lic) => (
+                          <span key={lic.skuId} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            {lic.displayName}
+                          </span>
+                        ))}
+                      </div>
+                    ) : m365UserStatus.exists ? (
+                      <p className="text-xs text-amber-600 mt-1">M365 account exists but has no license assigned</p>
+                    ) : !m365UserStatus.available ? (
+                      <p className="text-xs text-gray-400 mt-1">M365 integration not configured on server</p>
+                    ) : (
+                      <p className="text-xs text-red-500 mt-1">M365 account not found — will be created when sending credentials</p>
+                    )}
                   </div>
-                  <p className="text-xs text-gray-400 mt-1">
-                    Will create Microsoft 365 mailbox & set as login email
-                  </p>
-                </div>
-              );
+                );
+              }
+
+              // Case 2: No office email — show info + optional M365 setup toggle
+              if (hasNoOfficeEmail) {
+                return (
+                  <div className="mb-4">
+                    <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg mb-3">
+                      <AlertCircle className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                      <div>
+                        <span className="text-sm text-gray-600">No office email</span>
+                        {personalEmail && (
+                          <p className="text-xs text-gray-400">Login via personal email: <span className="font-mono">{personalEmail}</span></p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Toggle to set up M365 if company has domain */}
+                    {emailDomain && (
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() => setCredentialUsername(credentialUsername ? '' : (credentialModal.user?.employee?.name?.split(' ')[0]?.toLowerCase() || ''))}
+                          className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          {credentialUsername ? 'Cancel M365 setup' : 'Set up office email & M365'}
+                        </button>
+
+                        {credentialUsername && (
+                          <div className="mt-2">
+                            <div className="flex items-center gap-0">
+                              <input
+                                type="text"
+                                value={credentialUsername}
+                                onChange={(e) => setCredentialUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''))}
+                                placeholder="username"
+                                className="flex-1 px-3 py-2 border border-gray-200 rounded-l-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                              />
+                              <span className="px-3 py-2 bg-gray-100 border border-l-0 border-gray-200 rounded-r-lg text-sm text-gray-500">
+                                @{emailDomain}
+                              </span>
+                            </div>
+                            <p className="text-xs text-gray-400 mt-1">
+                              Will create Microsoft 365 mailbox & set as login email
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              return null;
             })()}
 
-            {/* M365 License Picker - only show when user has no license yet */}
-            {m365Licenses.available && m365Licenses.licenses.length > 0 && credentialModal.user.employee?.company?.email_domain && m365UserStatus.licenses.length === 0 && (
+            {/* M365 License Picker - only show when user has no license yet AND has/will have office email */}
+            {m365Licenses.available && m365Licenses.licenses.length > 0 && credentialModal.user.employee?.company?.email_domain && m365UserStatus.licenses.length === 0 && (credentialUsername || (credentialModal.user.email && !credentialModal.user.email.endsWith('@temp.local') && credentialModal.user.email.endsWith(`@${credentialModal.user.employee.company.email_domain}`))) && (
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   M365 License
@@ -812,11 +849,35 @@ export function UsersPage() {
             )}
 
             {(() => {
-              // Determine mode: PeopleHub-only when M365 exists + has licenses
-              const isPeopleHubOnly = m365UserStatus.exists && m365UserStatus.licenses.length > 0;
-              const sendToEmail = isPeopleHubOnly
-                ? credentialModal.user.email
-                : (credentialModal.user.employee?.personal_email || null);
+              const emailDomain = credentialModal.user.employee?.company?.email_domain || '';
+              const currentEmail = credentialModal.user.email;
+              const hasOfficeEmail = emailDomain && currentEmail && !currentEmail.endsWith('@temp.local') && currentEmail.endsWith(`@${emailDomain}`);
+              const personalEmail = credentialModal.user.employee?.personal_email;
+
+              // Determine mode
+              // PeopleHub-only when: (1) M365 exists + licensed, OR (2) no office email and not setting up M365
+              const isM365Licensed = m365UserStatus.exists && m365UserStatus.licenses.length > 0;
+              const isNoOfficeEmailMode = !hasOfficeEmail && !credentialUsername;
+              const isPeopleHubOnly = isM365Licensed || isNoOfficeEmailMode;
+
+              // Determine send-to
+              let sendToEmail: string | null = null;
+              let sendToLabel = '';
+              if (isPeopleHubOnly) {
+                if (hasOfficeEmail) {
+                  // Has office email + M365 licensed → send to office email
+                  sendToEmail = currentEmail;
+                  sendToLabel = 'office email';
+                } else if (personalEmail) {
+                  // No office email → send to personal email
+                  sendToEmail = personalEmail;
+                  sendToLabel = 'personal email';
+                }
+              } else {
+                // Onboarding mode → send to personal email
+                sendToEmail = personalEmail || null;
+                sendToLabel = 'personal email';
+              }
               const canSend = !!sendToEmail && !sendToEmail.endsWith('@temp.local');
 
               return (
@@ -824,36 +885,42 @@ export function UsersPage() {
                   <div className="space-y-2 mb-4 text-sm">
                     <div className="flex items-center justify-between py-1">
                       <span className="text-gray-500">Current login</span>
-                      <span className="font-mono text-gray-700">{credentialModal.user.email}</span>
+                      <span className="font-mono text-gray-700">{currentEmail}</span>
                     </div>
-                    {credentialUsername && credentialModal.user.employee?.company?.email_domain &&
-                      credentialModal.user.email !== `${credentialUsername}@${credentialModal.user.employee.company.email_domain}` && (
+                    {credentialUsername && emailDomain &&
+                      currentEmail !== `${credentialUsername}@${emailDomain}` && (
                       <div className="flex items-center justify-between py-1">
                         <span className="text-gray-500">New login</span>
                         <span className="font-mono text-blue-600 font-medium">
-                          {credentialUsername}@{credentialModal.user.employee.company.email_domain}
+                          {credentialUsername}@{emailDomain}
                         </span>
                       </div>
                     )}
                     <div className="flex items-center justify-between py-1">
                       <span className="text-gray-500">Credential sent to</span>
                       {canSend ? (
-                        <span className="font-mono text-green-700">{sendToEmail}</span>
+                        <span className="font-mono text-green-700 text-xs">{sendToEmail} <span className="text-gray-400">({sendToLabel})</span></span>
                       ) : (
                         <span className="font-mono text-red-500">Not set</span>
                       )}
                     </div>
                   </div>
 
-                  {isPeopleHubOnly && (
+                  {isPeopleHubOnly && isNoOfficeEmailMode && (
                     <p className="text-sm text-blue-600 bg-blue-50 p-3 rounded-lg mb-4">
-                      PeopleHub credential only. Will be sent to the office email.
+                      PeopleHub credential only. Will be sent to personal email.
                     </p>
                   )}
 
-                  {!isPeopleHubOnly && !credentialModal.user.employee?.personal_email && (
+                  {isPeopleHubOnly && isM365Licensed && hasOfficeEmail && (
+                    <p className="text-sm text-blue-600 bg-blue-50 p-3 rounded-lg mb-4">
+                      PeopleHub credential only. M365 already configured. Will be sent to office email.
+                    </p>
+                  )}
+
+                  {!canSend && !personalEmail && (
                     <p className="text-sm text-red-600 bg-red-50 p-3 rounded-lg mb-4">
-                      Personal email not set. Please update employee data before sending credentials.
+                      No email available. Please update employee personal email before sending credentials.
                     </p>
                   )}
 
