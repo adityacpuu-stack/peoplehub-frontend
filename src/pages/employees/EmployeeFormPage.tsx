@@ -283,6 +283,17 @@ export function EmployeeFormPage() {
       return;
     }
 
+    if (!isEdit) {
+      if (!formData.email?.trim()) {
+        toast.error('Office email is required');
+        return;
+      }
+      if (!formData.personal_email?.trim()) {
+        toast.error('Personal email is required');
+        return;
+      }
+    }
+
     setIsSaving(true);
     try {
       if (isEdit && id) {
@@ -1303,14 +1314,15 @@ export function EmployeeFormPage() {
                     icon={<Phone className="h-4 w-4 text-green-600" />}
                   />
                   <FormInput
-                    label="Email Address"
+                    label="Office Email"
                     name="email"
                     type="email"
                     value={formData.email || ''}
                     onChange={handleChange}
                     placeholder="employee@company.com"
-                    hint="Official company email"
+                    hint="Official company email (used for login)"
                     icon={<Mail className="h-4 w-4 text-purple-600" />}
+                    required={!isEdit}
                   />
                   <FormInput
                     label="Personal Email"
@@ -1319,8 +1331,9 @@ export function EmployeeFormPage() {
                     value={formData.personal_email || ''}
                     onChange={handleChange}
                     placeholder="name@gmail.com"
-                    hint="For sending credentials & notifications"
+                    hint="For onboarding credentials & notifications"
                     icon={<Mail className="h-4 w-4 text-orange-500" />}
+                    required={!isEdit}
                   />
                 </div>
               </div>
