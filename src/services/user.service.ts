@@ -14,10 +14,12 @@ export interface User {
     employee_id: string;
     name: string;
     email: string;
+    personal_email: string | null;
     company: {
       id: number;
       name: string;
       code: string;
+      email_domain: string | null;
     } | null;
     department: {
       id: number;
@@ -131,8 +133,8 @@ export const userService = {
     return response.data;
   },
 
-  sendCredentials: async (id: number): Promise<{ success: boolean; email: string; message: string }> => {
-    const response = await api.post(`/users/${id}/send-credentials`);
+  sendCredentials: async (id: number, username?: string): Promise<{ success: boolean; officeEmail: string; sentTo: string; message: string }> => {
+    const response = await api.post(`/users/${id}/send-credentials`, { username });
     return response.data;
   },
 

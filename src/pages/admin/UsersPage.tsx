@@ -80,6 +80,7 @@ export function UsersPage() {
     open: false,
     user: null,
   });
+  const [credentialUsername, setCredentialUsername] = useState('');
   const [isSendingCredentials, setIsSendingCredentials] = useState(false);
 
   // Form state
@@ -264,9 +265,14 @@ export function UsersPage() {
 
     try {
       setIsSendingCredentials(true);
-      const result = await userService.sendCredentials(credentialModal.user.id);
-      toast.success(result.message || `Credentials sent to ${result.email}`);
+      const result = await userService.sendCredentials(
+        credentialModal.user.id,
+        credentialUsername || undefined,
+      );
+      toast.success(result.message || `Credentials sent to ${result.sentTo}`);
       setCredentialModal({ open: false, user: null });
+      setCredentialUsername('');
+      fetchUsers();
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Gagal mengirim credentials');
     } finally {
@@ -678,23 +684,63 @@ export function UsersPage() {
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">Send Credentials</h3>
-                <p className="text-sm text-gray-500">Generate new password & send via email</p>
+                <p className="text-sm text-gray-500">
+                  {credentialModal.user.employee?.name || credentialModal.user.email}
+                </p>
               </div>
             </div>
 
-            <p className="text-gray-600 mb-2">
-              This will generate a new temporary password for{' '}
-              <span className="font-semibold text-gray-900">{credentialModal.user.email}</span>{' '}
-              and send it via email.
-            </p>
+            {/* Office Email Username Input */}
+            {credentialModal.user.employee?.company?.email_domain && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Office Email
+                </label>
+                <div className="flex items-center gap-0">
+                  <input
+                    type="text"
+                    value={credentialUsername}
+                    onChange={(e) => setCredentialUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''))}
+                    placeholder="username"
+                    className="flex-1 px-3 py-2 border border-gray-200 rounded-l-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  />
+                  <span className="px-3 py-2 bg-gray-100 border border-l-0 border-gray-200 rounded-r-lg text-sm text-gray-500">
+                    @{credentialModal.user.employee.company.email_domain || 'company.com'}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-400 mt-1">
+                  Will create Microsoft 365 mailbox & set as login email
+                </p>
+              </div>
+            )}
+
+            <div className="space-y-2 mb-4 text-sm">
+              <div className="flex items-center justify-between py-1">
+                <span className="text-gray-500">Current login</span>
+                <span className="font-mono text-gray-700">{credentialModal.user.email}</span>
+              </div>
+              {credentialUsername && credentialModal.user.employee?.company?.email_domain && (
+                <div className="flex items-center justify-between py-1">
+                  <span className="text-gray-500">New login</span>
+                  <span className="font-mono text-blue-600 font-medium">
+                    {credentialUsername}@{credentialModal.user.employee.company.email_domain || 'company.com'}
+                  </span>
+                </div>
+              )}
+              <div className="flex items-center justify-between py-1">
+                <span className="text-gray-500">Credential sent to</span>
+                <span className="font-mono text-gray-700">Personal email</span>
+              </div>
+            </div>
+
             <p className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg mb-6">
-              The user's current password will be replaced and they will be required to change it on first login.
+              A new temporary password will be generated. The user must change it on first login.
             </p>
 
             <div className="flex justify-end gap-3">
               <Button
                 variant="outline"
-                onClick={() => setCredentialModal({ open: false, user: null })}
+                onClick={() => { setCredentialModal({ open: false, user: null }); setCredentialUsername(''); }}
                 disabled={isSendingCredentials}
                 className="rounded-xl"
               >
