@@ -89,6 +89,15 @@ export interface UserStats {
   }[];
 }
 
+export interface M365License {
+  skuId: string;
+  skuPartNumber: string;
+  displayName: string;
+  totalUnits: number;
+  consumedUnits: number;
+  availableUnits: number;
+}
+
 export interface PaginatedResponse<T> {
   data: T[];
   pagination: {
@@ -133,8 +142,13 @@ export const userService = {
     return response.data;
   },
 
-  sendCredentials: async (id: number, username?: string): Promise<{ success: boolean; officeEmail: string; sentTo: string; message: string }> => {
-    const response = await api.post(`/users/${id}/send-credentials`, { username });
+  sendCredentials: async (id: number, username?: string, licenseSkuId?: string): Promise<{ success: boolean; officeEmail: string; sentTo: string; message: string }> => {
+    const response = await api.post(`/users/${id}/send-credentials`, { username, licenseSkuId });
+    return response.data;
+  },
+
+  getM365Licenses: async (): Promise<{ available: boolean; licenses: M365License[] }> => {
+    const response = await api.get('/users/m365-licenses');
     return response.data;
   },
 

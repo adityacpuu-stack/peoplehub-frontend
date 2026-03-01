@@ -81,6 +81,8 @@ export function UsersPage() {
     user: null,
   });
   const [credentialUsername, setCredentialUsername] = useState('');
+  const [credentialLicenseSkuId, setCredentialLicenseSkuId] = useState('');
+  const [m365Licenses, setM365Licenses] = useState<{ available: boolean; licenses: import('@/services/user.service').M365License[] }>({ available: false, licenses: [] });
   const [isSendingCredentials, setIsSendingCredentials] = useState(false);
 
   // Form state
@@ -260,6 +262,33 @@ export function UsersPage() {
     }
   };
 
+  const handleOpenCredentialModal = async (user: User) => {
+    // Auto-detect username from existing email
+    const emailDomain = user.employee?.company?.email_domain;
+    const currentEmail = user.email;
+    let autoUsername = '';
+
+    if (emailDomain && currentEmail && !currentEmail.endsWith('@temp.local')) {
+      // Extract username from existing email if domain matches
+      const emailParts = currentEmail.split('@');
+      if (emailParts[1] === emailDomain) {
+        autoUsername = emailParts[0];
+      }
+    }
+
+    setCredentialUsername(autoUsername);
+    setCredentialLicenseSkuId('');
+    setCredentialModal({ open: true, user });
+
+    // Fetch M365 licenses
+    try {
+      const result = await userService.getM365Licenses();
+      setM365Licenses(result);
+    } catch {
+      setM365Licenses({ available: false, licenses: [] });
+    }
+  };
+
   const handleSendCredentials = async () => {
     if (!credentialModal.user) return;
 
@@ -268,6 +297,7 @@ export function UsersPage() {
       const result = await userService.sendCredentials(
         credentialModal.user.id,
         credentialUsername || undefined,
+        credentialLicenseSkuId || undefined,
       );
       toast.success(result.message || `Credentials sent to ${result.sentTo}`);
       setCredentialModal({ open: false, user: null });
@@ -484,7 +514,7 @@ export function UsersPage() {
                       <button
                         className="p-2 rounded-lg hover:bg-blue-50 transition-colors group"
                         title="Send Credentials"
-                        onClick={() => setCredentialModal({ open: true, user })}
+                        onClick={() => handleOpenCredentialModal(user)}
                       >
                         <Send className="h-4 w-4 text-gray-400 group-hover:text-blue-600" />
                       </button>
@@ -690,26 +720,69 @@ export function UsersPage() {
               </div>
             </div>
 
-            {/* Office Email Username Input */}
-            {credentialModal.user.employee?.company?.email_domain && (
+            {/* Office Email - auto-detected or input */}
+            {credentialModal.user.employee?.company?.email_domain && (() => {
+              const emailDomain = credentialModal.user.employee?.company?.email_domain || '';
+              const currentEmail = credentialModal.user.email;
+              const hasExistingEmail = currentEmail && !currentEmail.endsWith('@temp.local') && currentEmail.endsWith(`@${emailDomain}`);
+
+              return hasExistingEmail ? (
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Office Email
+                  </label>
+                  <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
+                    <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
+                    <span className="font-mono text-sm text-green-800">{currentEmail}</span>
+                  </div>
+                  <p className="text-xs text-green-600 mt-1">
+                    M365 account sudah ada, hanya kirim credential PeopleHub
+                  </p>
+                </div>
+              ) : (
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Office Email
+                  </label>
+                  <div className="flex items-center gap-0">
+                    <input
+                      type="text"
+                      value={credentialUsername}
+                      onChange={(e) => setCredentialUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''))}
+                      placeholder="username"
+                      className="flex-1 px-3 py-2 border border-gray-200 rounded-l-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    />
+                    <span className="px-3 py-2 bg-gray-100 border border-l-0 border-gray-200 rounded-r-lg text-sm text-gray-500">
+                      @{emailDomain}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Will create Microsoft 365 mailbox & set as login email
+                  </p>
+                </div>
+              );
+            })()}
+
+            {/* M365 License Picker */}
+            {m365Licenses.available && m365Licenses.licenses.length > 0 && credentialModal.user.employee?.company?.email_domain && (
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Office Email
+                  M365 License
                 </label>
-                <div className="flex items-center gap-0">
-                  <input
-                    type="text"
-                    value={credentialUsername}
-                    onChange={(e) => setCredentialUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''))}
-                    placeholder="username"
-                    className="flex-1 px-3 py-2 border border-gray-200 rounded-l-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                  />
-                  <span className="px-3 py-2 bg-gray-100 border border-l-0 border-gray-200 rounded-r-lg text-sm text-gray-500">
-                    @{credentialModal.user.employee.company.email_domain || 'company.com'}
-                  </span>
-                </div>
+                <select
+                  value={credentialLicenseSkuId}
+                  onChange={(e) => setCredentialLicenseSkuId(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                >
+                  <option value="">No license (Unlicensed)</option>
+                  {m365Licenses.licenses.map((lic) => (
+                    <option key={lic.skuId} value={lic.skuId} disabled={lic.availableUnits <= 0}>
+                      {lic.displayName} ({lic.availableUnits}/{lic.totalUnits} available)
+                    </option>
+                  ))}
+                </select>
                 <p className="text-xs text-gray-400 mt-1">
-                  Will create Microsoft 365 mailbox & set as login email
+                  Assign Microsoft 365 license to user
                 </p>
               </div>
             )}
@@ -719,11 +792,12 @@ export function UsersPage() {
                 <span className="text-gray-500">Current login</span>
                 <span className="font-mono text-gray-700">{credentialModal.user.email}</span>
               </div>
-              {credentialUsername && credentialModal.user.employee?.company?.email_domain && (
+              {credentialUsername && credentialModal.user.employee?.company?.email_domain &&
+                credentialModal.user.email !== `${credentialUsername}@${credentialModal.user.employee.company.email_domain}` && (
                 <div className="flex items-center justify-between py-1">
                   <span className="text-gray-500">New login</span>
                   <span className="font-mono text-blue-600 font-medium">
-                    {credentialUsername}@{credentialModal.user.employee.company.email_domain || 'company.com'}
+                    {credentialUsername}@{credentialModal.user.employee.company.email_domain}
                   </span>
                 </div>
               )}
@@ -750,7 +824,7 @@ export function UsersPage() {
             <div className="flex justify-end gap-3">
               <Button
                 variant="outline"
-                onClick={() => { setCredentialModal({ open: false, user: null }); setCredentialUsername(''); }}
+                onClick={() => { setCredentialModal({ open: false, user: null }); setCredentialUsername(''); setCredentialLicenseSkuId(''); }}
                 disabled={isSendingCredentials}
                 className="rounded-xl"
               >
