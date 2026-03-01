@@ -729,9 +729,19 @@ export function UsersPage() {
               )}
               <div className="flex items-center justify-between py-1">
                 <span className="text-gray-500">Credential sent to</span>
-                <span className="font-mono text-gray-700">Personal email</span>
+                {credentialModal.user.employee?.personal_email ? (
+                  <span className="font-mono text-green-700">{credentialModal.user.employee.personal_email}</span>
+                ) : (
+                  <span className="font-mono text-red-500">Not set</span>
+                )}
               </div>
             </div>
+
+            {!credentialModal.user.employee?.personal_email && (
+              <p className="text-sm text-red-600 bg-red-50 p-3 rounded-lg mb-4">
+                Personal email belum diisi. Update data employee terlebih dahulu sebelum mengirim credentials.
+              </p>
+            )}
 
             <p className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg mb-6">
               A new temporary password will be generated. The user must change it on first login.
@@ -748,7 +758,7 @@ export function UsersPage() {
               </Button>
               <button
                 onClick={handleSendCredentials}
-                disabled={isSendingCredentials}
+                disabled={isSendingCredentials || !credentialModal.user?.employee?.personal_email}
                 className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white font-medium hover:from-blue-600 hover:to-blue-700 transition-all shadow-md shadow-blue-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSendingCredentials ? 'Sending...' : 'Send Credentials'}
