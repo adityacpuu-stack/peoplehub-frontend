@@ -14,9 +14,13 @@ interface Company {
   code: string;
 }
 
-export function SettingsPage() {
+interface SettingsPageProps {
+  defaultTab?: SettingsTab;
+}
+
+export function SettingsPage({ defaultTab }: SettingsPageProps = {}) {
   const { user } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<SettingsTab>('notifications');
+  const [activeTab, setActiveTab] = useState<SettingsTab>(defaultTab || 'notifications');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -146,14 +150,15 @@ export function SettingsPage() {
 
   const tabs = getAvailableTabs();
 
-  // Set default active tab based on role
+  // Set default active tab based on role (only if no defaultTab prop)
   useEffect(() => {
+    if (defaultTab) return; // respect explicit tab from URL
     if (canManageCompanySettings) {
       setActiveTab('general');
     } else {
       setActiveTab('notifications');
     }
-  }, [canManageCompanySettings]);
+  }, [canManageCompanySettings, defaultTab]);
 
   // Fetch companies for selector
   useEffect(() => {

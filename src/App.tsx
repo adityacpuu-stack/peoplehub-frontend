@@ -231,15 +231,15 @@ function App() {
           <Route path="/payroll-settings" element={<PayrollSettingsPage />} />
           <Route path="/approval-settings" element={<ApprovalSettingsPage />} />
 
-          {/* System Settings (Super Admin) */}
-          <Route path="/settings/general" element={<PlaceholderPage title="General Settings" icon="settings" />} />
-          <Route path="/settings/notifications" element={<PlaceholderPage title="Notification Settings" icon="bell" />} />
+          {/* System Settings → redirect to SettingsPage with appropriate tab */}
+          <Route path="/settings/general" element={<SettingsPage defaultTab="general" />} />
+          <Route path="/settings/notifications" element={<SettingsPage defaultTab="notifications" />} />
           <Route path="/settings/integrations" element={<PlaceholderPage title="Integrations" icon="plug" />} />
           <Route path="/settings/backup" element={<PlaceholderPage title="Backup & Restore" icon="database" />} />
 
-          {/* Security (Super Admin) */}
+          {/* Security → redirect to SettingsPage security tab */}
           <Route path="/security/api-keys" element={<PlaceholderPage title="API Keys" icon="key" />} />
-          <Route path="/security/sessions" element={<PlaceholderPage title="Active Sessions" icon="monitor" />} />
+          <Route path="/security/sessions" element={<SettingsPage defaultTab="security" />} />
           <Route path="/security/login-history" element={<PlaceholderPage title="Login History" icon="history" />} />
 
           {/* Attendance */}
