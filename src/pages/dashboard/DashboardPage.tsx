@@ -56,7 +56,7 @@ import {
   Bar,
 } from 'recharts';
 import { PageSpinner, Badge } from '@/components/ui';
-import { dashboardService, type TeamDashboard, type GroupDashboard, type MyDashboard, type SuperAdminStats, type AuditLogEntry, type AuditStatistics } from '@/services/dashboard.service';
+import { dashboardService, type DashboardOverview, type TeamDashboard, type GroupDashboard, type MyDashboard, type SuperAdminStats, type AuditLogEntry, type AuditStatistics } from '@/services/dashboard.service';
 import { leaveService } from '@/services/leave.service';
 import { useAuthStore } from '@/stores/auth.store';
 import type { DashboardStats, LeaveRequest } from '@/types';
@@ -98,58 +98,7 @@ const formatAuditAction = (action: string) => {
 };
 
 
-// Dashboard overview type for HR
-interface DashboardOverview {
-  employee: {
-    total: number;
-    active: number;
-    inactive: number;
-    new_this_month: number;
-    by_department: Array<{ department: string; count: number }>;
-    by_employment_type: Array<{ type: string; count: number }>;
-    gender_distribution: Array<{ gender: string; count: number }>;
-  };
-  attendance: {
-    today: {
-      total_expected: number;
-      checked_in: number;
-      checked_out: number;
-      late: number;
-      absent: number;
-      on_leave: number;
-    };
-    this_week: {
-      late_count: number;
-      absent_count: number;
-    };
-    this_month: {
-      total_work_days: number;
-      avg_attendance_rate: number;
-    };
-  };
-  leave: {
-    pending_requests: number;
-    approved_this_month: number;
-    rejected_this_month: number;
-    on_leave_today: number;
-    upcoming_leaves: Array<{
-      employee_name: string;
-      leave_type: string;
-      start_date: string;
-      end_date: string;
-    }>;
-    by_type: Array<{ type: string; count: number }>;
-  };
-  alerts: Array<{
-    id: string;
-    type: string;
-    category: string;
-    title: string;
-    message: string;
-    count: number;
-    action_url: string;
-  }>;
-}
+// DashboardOverview type imported from dashboard.service.ts
 
 // Payroll summary type for HR dashboard
 interface PayrollSummaryData {

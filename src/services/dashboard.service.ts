@@ -1,43 +1,83 @@
 import api from './api';
 import type { ApiResponse, DashboardStats } from '@/types';
 
-interface DashboardOverview {
-  employee_summary: {
-    total_employees: number;
-    active_employees: number;
-    new_hires_this_month: number;
-    terminated_this_month: number;
-    by_status: Record<string, number>;
-    by_type: Record<string, number>;
+export interface DashboardOverview {
+  employee: {
+    total: number;
+    active: number;
+    inactive: number;
+    new_this_month: number;
+    by_department: Array<{ department: string; count: number }>;
+    by_employment_type: Array<{ type: string; count: number }>;
+    gender_distribution: Array<{ gender: string; count: number }>;
   };
-  department_summary: {
-    total_departments: number;
-    departments: Array<{ id: number; name: string; employee_count: number }>;
-  };
-  attendance_summary: {
+  attendance: {
     today: {
-      present: number;
-      absent: number;
+      total_expected: number;
+      checked_in: number;
+      checked_out: number;
       late: number;
+      absent: number;
       on_leave: number;
-      total: number;
     };
     this_week: {
-      average_attendance_rate: number;
-      total_late: number;
+      avg_check_in_time: string | null;
+      avg_work_hours: number | null;
+      late_count: number;
+      absent_count: number;
+    };
+    this_month: {
+      total_work_days: number;
+      avg_attendance_rate: number;
     };
   };
-  leave_summary: {
+  leave: {
     pending_requests: number;
     approved_this_month: number;
     rejected_this_month: number;
     on_leave_today: number;
+    upcoming_leaves: Array<{
+      employee_name: string;
+      leave_type: string;
+      start_date: string;
+      end_date: string;
+    }>;
+    by_type: Array<{ type: string; count: number }>;
   };
-  pending_requests: {
-    leave: number;
-    overtime: number;
-    total: number;
+  payroll: {
+    current_period: {
+      period: string;
+      status: string;
+      total_employees: number;
+      total_gross: number;
+      total_deductions: number;
+      total_net: number;
+    } | null;
+    pending_adjustments: number;
+    pending_overtime: number;
   };
+  performance: {
+    active_cycles: number;
+    pending_reviews: number;
+    completed_reviews_this_month: number;
+    avg_performance_score: number | null;
+    goals: {
+      total: number;
+      in_progress: number;
+      completed: number;
+      overdue: number;
+    };
+  };
+  alerts: Array<{
+    id: string;
+    type: 'warning' | 'info' | 'error' | 'success';
+    category: string;
+    title: string;
+    message: string;
+    count?: number;
+    action_url?: string;
+    created_at: string;
+  }>;
 }
 
 interface QuickStats {
