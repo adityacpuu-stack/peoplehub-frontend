@@ -319,7 +319,58 @@ export interface MyDashboard {
   }[];
 }
 
+// Super Admin Stats type
+export interface SuperAdminStats {
+  total_users: number;
+  total_companies: number;
+  total_employees: number;
+  audit_entries_today: number;
+}
+
+// Audit Log entry type (from /audit-logs/recent)
+export interface AuditLogEntry {
+  id: number;
+  user_id: number | null;
+  user_email: string | null;
+  employee_name: string | null;
+  action: string;
+  model: string | null;
+  model_id: number | null;
+  description: string | null;
+  ip_address: string | null;
+  method: string | null;
+  url: string | null;
+  created_at: string;
+}
+
+// Audit Statistics type (from /audit-logs/statistics)
+export interface AuditStatistics {
+  total_logs: number;
+  by_action: { action: string; count: number }[];
+  by_model: { model: string | null; count: number }[];
+  by_user: { user_email: string | null; count: number }[];
+  daily_activity: { date: string; count: number }[];
+}
+
 export const dashboardService = {
+  // Get super admin stats
+  getSuperAdminStats: async (): Promise<SuperAdminStats> => {
+    const response = await api.get<ApiResponse<SuperAdminStats>>('/dashboard/super-admin-stats');
+    return response.data.data;
+  },
+
+  // Get recent audit logs
+  getRecentAuditLogs: async (limit: number = 10): Promise<AuditLogEntry[]> => {
+    const response = await api.get<ApiResponse<AuditLogEntry[]>>('/audit-logs/recent', { params: { limit } });
+    return response.data.data;
+  },
+
+  // Get audit statistics
+  getAuditStatistics: async (): Promise<AuditStatistics> => {
+    const response = await api.get<ApiResponse<AuditStatistics>>('/audit-logs/statistics');
+    return response.data.data;
+  },
+
   // Get full dashboard overview (Admin/HR)
   getOverview: async (): Promise<DashboardOverview> => {
     const response = await api.get<ApiResponse<DashboardOverview>>('/dashboard');

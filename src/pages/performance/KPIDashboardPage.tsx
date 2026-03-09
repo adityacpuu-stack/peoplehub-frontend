@@ -13,30 +13,44 @@ import {
   AlertCircle,
   Clock,
   Loader2,
-  ChevronRight,
   Star,
   Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { dashboardService, type GroupDashboard } from '@/services/dashboard.service';
+import { kpiService, type KPI } from '@/services/kpi.service';
 import toast from 'react-hot-toast';
 
-// Chart colors
-const CHART_COLORS = [
-  '#10B981', '#3B82F6', '#F59E0B', '#EF4444', '#8B5CF6',
-  '#EC4899', '#06B6D4', '#84CC16',
-];
+const CATEGORY_CONFIG: Record<string, { icon: any; color: string; label: string }> = {
+  financial: { icon: BarChart3, color: 'from-green-500 to-emerald-600', label: 'Financial' },
+  customer: { icon: Users, color: 'from-blue-500 to-indigo-600', label: 'Customer' },
+  process: { icon: Zap, color: 'from-purple-500 to-violet-600', label: 'Process' },
+  learning: { icon: Award, color: 'from-amber-500 to-orange-600', label: 'Learning' },
+  quality: { icon: CheckCircle, color: 'from-teal-500 to-cyan-600', label: 'Quality' },
+  productivity: { icon: Target, color: 'from-rose-500 to-pink-600', label: 'Productivity' },
+};
 
 const STATUS_COLORS = {
   on_track: { bg: 'bg-green-100', text: 'text-green-700', label: 'On Track' },
   at_risk: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'At Risk' },
   behind: { bg: 'bg-red-100', text: 'text-red-700', label: 'Behind' },
-  completed: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Completed' },
+  no_data: { bg: 'bg-gray-100', text: 'text-gray-500', label: 'No Data' },
 };
+
+type KPIStatus = keyof typeof STATUS_COLORS;
+
+function getKPIStatus(kpi: KPI): KPIStatus {
+  if (kpi.benchmark_value == null) return 'no_data';
+  if (kpi.threshold_green != null && kpi.benchmark_value >= kpi.threshold_green) return 'on_track';
+  if (kpi.threshold_yellow != null && kpi.benchmark_value >= kpi.threshold_yellow) return 'at_risk';
+  if (kpi.threshold_red != null && kpi.benchmark_value <= kpi.threshold_red) return 'behind';
+  return 'at_risk';
+}
 
 export function KPIDashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [data, setData] = useState<GroupDashboard | null>(null);
+  const [kpis, setKpis] = useState<KPI[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState('q1_2024');
   const [selectedCompany, setSelectedCompany] = useState('all');
 
@@ -47,8 +61,12 @@ export function KPIDashboardPage() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const response = await dashboardService.getGroupOverview();
-      setData(response);
+      const [groupData, kpiResult] = await Promise.all([
+        dashboardService.getGroupOverview(),
+        kpiService.list({ limit: 100, is_active: true }),
+      ]);
+      setData(groupData);
+      setKpis(kpiResult.data);
     } catch (error: any) {
       console.error('Failed to fetch KPI data:', error);
       toast.error('Failed to load KPI dashboard');
@@ -57,84 +75,29 @@ export function KPIDashboardPage() {
     }
   };
 
-  // Mock KPI categories
-  const kpiCategories = [
-    {
-      name: 'Financial',
-      icon: BarChart3,
-      color: 'from-green-500 to-emerald-600',
-      kpis: [
-        { name: 'Revenue Growth', target: 25, actual: 22, unit: '%', status: 'at_risk' as const },
-        { name: 'Profit Margin', target: 15, actual: 16.5, unit: '%', status: 'on_track' as const },
-        { name: 'Cost Reduction', target: 10, actual: 8, unit: '%', status: 'at_risk' as const },
-      ],
-    },
-    {
-      name: 'Customer',
-      icon: Users,
-      color: 'from-blue-500 to-indigo-600',
-      kpis: [
-        { name: 'Customer Satisfaction', target: 90, actual: 92, unit: '%', status: 'on_track' as const },
-        { name: 'Net Promoter Score', target: 50, actual: 48, unit: '', status: 'at_risk' as const },
-        { name: 'Customer Retention', target: 85, actual: 88, unit: '%', status: 'on_track' as const },
-      ],
-    },
-    {
-      name: 'Operations',
-      icon: Zap,
-      color: 'from-purple-500 to-violet-600',
-      kpis: [
-        { name: 'Process Efficiency', target: 95, actual: 93, unit: '%', status: 'at_risk' as const },
-        { name: 'Quality Score', target: 98, actual: 97.5, unit: '%', status: 'on_track' as const },
-        { name: 'Delivery On-Time', target: 90, actual: 91, unit: '%', status: 'on_track' as const },
-      ],
-    },
-    {
-      name: 'People',
-      icon: Award,
-      color: 'from-amber-500 to-orange-600',
-      kpis: [
-        { name: 'Employee Engagement', target: 80, actual: 78, unit: '%', status: 'at_risk' as const },
-        { name: 'Training Completion', target: 100, actual: 85, unit: '%', status: 'behind' as const },
-        { name: 'Retention Rate', target: 90, actual: 92, unit: '%', status: 'on_track' as const },
-      ],
-    },
-  ];
+  // Group KPIs by category
+  const kpiCategories = Object.entries(
+    kpis.reduce((acc, kpi) => {
+      const cat = kpi.category || 'other';
+      if (!acc[cat]) acc[cat] = [];
+      acc[cat].push(kpi);
+      return acc;
+    }, {} as Record<string, KPI[]>)
+  ).map(([category, items]) => ({
+    category,
+    config: CATEGORY_CONFIG[category] || { icon: Target, color: 'from-gray-500 to-gray-600', label: category.charAt(0).toUpperCase() + category.slice(1) },
+    kpis: items,
+  }));
 
-  // Calculate overall metrics
-  const allKPIs = kpiCategories.flatMap(cat => cat.kpis);
-  const onTrackCount = allKPIs.filter(k => k.status === 'on_track').length;
-  const atRiskCount = allKPIs.filter(k => k.status === 'at_risk').length;
-  const behindCount = allKPIs.filter(k => k.status === 'behind').length;
-  const overallScore = Math.round((onTrackCount / allKPIs.length) * 100);
+  // Calculate overall metrics from real KPI data
+  const allKPIStatuses = kpis.map(getKPIStatus);
+  const onTrackCount = allKPIStatuses.filter(s => s === 'on_track').length;
+  const atRiskCount = allKPIStatuses.filter(s => s === 'at_risk').length;
+  const behindCount = allKPIStatuses.filter(s => s === 'behind').length;
+  const overallScore = kpis.length > 0 ? Math.round((onTrackCount / kpis.length) * 100) : 0;
 
-  // Mock department KPI performance
-  const departmentPerformance = [
-    { name: 'Engineering', score: 92, trend: 5, status: 'on_track' as const },
-    { name: 'Sales', score: 78, trend: -3, status: 'at_risk' as const },
-    { name: 'Marketing', score: 85, trend: 2, status: 'on_track' as const },
-    { name: 'Operations', score: 88, trend: 4, status: 'on_track' as const },
-    { name: 'Finance', score: 95, trend: 1, status: 'on_track' as const },
-    { name: 'HR', score: 72, trend: -5, status: 'behind' as const },
-  ];
-
-  // Mock top performers
-  const topPerformers = [
-    { name: 'Sarah Chen', department: 'Engineering', score: 98, avatar: 'SC' },
-    { name: 'Michael Lee', department: 'Sales', score: 96, avatar: 'ML' },
-    { name: 'Emma Wilson', department: 'Marketing', score: 95, avatar: 'EW' },
-    { name: 'David Kim', department: 'Finance', score: 94, avatar: 'DK' },
-    { name: 'Lisa Park', department: 'Operations', score: 93, avatar: 'LP' },
-  ];
-
-  // Mock quarterly trend
-  const quarterlyTrend = [
-    { quarter: 'Q1 2023', score: 78 },
-    { quarter: 'Q2 2023', score: 82 },
-    { quarter: 'Q3 2023', score: 80 },
-    { quarter: 'Q4 2023', score: 85 },
-    { quarter: 'Q1 2024', score: 88 },
-  ];
+  // Department distribution from dashboard data
+  const departmentData = data?.department_distribution || [];
 
   if (isLoading) {
     return (
@@ -268,177 +231,219 @@ export function KPIDashboardPage() {
             </div>
             <div>
               <p className="text-sm text-gray-500">Total KPIs</p>
-              <p className="text-2xl font-bold text-gray-900">{allKPIs.length}</p>
+              <p className="text-2xl font-bold text-gray-900">{kpis.length}</p>
             </div>
           </div>
         </div>
       </div>
 
       {/* KPI Categories */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {kpiCategories.map((category) => {
-          const CategoryIcon = category.icon;
-          return (
-            <div key={category.name} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className={cn("px-5 py-4 bg-gradient-to-r text-white", category.color)}>
-                <div className="flex items-center gap-3">
-                  <CategoryIcon className="h-5 w-5" />
-                  <h3 className="font-semibold">{category.name} KPIs</h3>
+      {kpiCategories.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {kpiCategories.map(({ category, config, kpis: categoryKpis }) => {
+            const CategoryIcon = config.icon;
+            return (
+              <div key={category} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <div className={cn("px-5 py-4 bg-gradient-to-r text-white", config.color)}>
+                  <div className="flex items-center gap-3">
+                    <CategoryIcon className="h-5 w-5" />
+                    <h3 className="font-semibold">{config.label} KPIs</h3>
+                    <span className="ml-auto text-sm opacity-80">{categoryKpis.length} KPIs</span>
+                  </div>
                 </div>
-              </div>
-              <div className="p-5 space-y-4">
-                {category.kpis.map((kpi) => {
-                  const progress = Math.min((kpi.actual / kpi.target) * 100, 100);
-                  const statusConfig = STATUS_COLORS[kpi.status];
-                  return (
-                    <div key={kpi.name}>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium text-gray-700">{kpi.name}</span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm text-gray-500">
-                            {kpi.actual}{kpi.unit} / {kpi.target}{kpi.unit}
-                          </span>
-                          <span className={cn(
-                            'px-2 py-0.5 rounded-full text-xs font-medium',
-                            statusConfig.bg, statusConfig.text
-                          )}>
-                            {statusConfig.label}
-                          </span>
+                <div className="p-5 space-y-4">
+                  {categoryKpis.map((kpi) => {
+                    const status = getKPIStatus(kpi);
+                    const statusConfig = STATUS_COLORS[status];
+                    const target = kpi.threshold_green ?? kpi.benchmark_value ?? 100;
+                    const actual = kpi.benchmark_value ?? 0;
+                    const progress = target > 0 ? Math.min((actual / target) * 100, 100) : 0;
+                    const unit = kpi.unit_of_measure || '';
+                    return (
+                      <div key={kpi.id}>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-gray-700">{kpi.name}</span>
+                          <div className="flex items-center gap-2">
+                            {kpi.benchmark_value != null && (
+                              <span className="text-sm text-gray-500">
+                                {actual}{unit} / {target}{unit}
+                              </span>
+                            )}
+                            <span className={cn(
+                              'px-2 py-0.5 rounded-full text-xs font-medium',
+                              statusConfig.bg, statusConfig.text
+                            )}>
+                              {statusConfig.label}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className={cn(
+                              "h-full rounded-full transition-all duration-500",
+                              status === 'on_track' ? 'bg-green-500' :
+                              status === 'at_risk' ? 'bg-yellow-500' :
+                              status === 'behind' ? 'bg-red-500' : 'bg-gray-300'
+                            )}
+                            style={{ width: `${progress}%` }}
+                          />
                         </div>
                       </div>
-                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                        <div
-                          className={cn(
-                            "h-full rounded-full transition-all duration-500",
-                            kpi.status === 'on_track' ? 'bg-green-500' :
-                            kpi.status === 'at_risk' ? 'bg-yellow-500' : 'bg-red-500'
-                          )}
-                          style={{ width: `${progress}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+          <Target className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+          <p className="text-gray-500">No KPIs defined yet</p>
+          <p className="text-sm text-gray-400 mt-1">KPIs can be created from the KPI management page</p>
+        </div>
+      )}
 
       {/* Bottom Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Department Performance */}
+        {/* Department Distribution */}
         <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">Department Performance</h3>
-              <p className="text-sm text-gray-500">KPI achievement by department</p>
+              <h3 className="text-lg font-semibold text-gray-900">Department Distribution</h3>
+              <p className="text-sm text-gray-500">Employee distribution across departments</p>
             </div>
             <Building2 className="h-5 w-5 text-gray-400" />
           </div>
-          <div className="space-y-4">
-            {departmentPerformance.map((dept) => {
-              const statusConfig = STATUS_COLORS[dept.status];
-              return (
+          {departmentData.length > 0 ? (
+            <div className="space-y-4">
+              {departmentData.map((dept) => (
                 <div key={dept.name} className="flex items-center gap-4">
                   <div className="w-28">
                     <span className="text-sm font-medium text-gray-700">{dept.name}</span>
                   </div>
                   <div className="flex-1 h-8 bg-gray-100 rounded-lg overflow-hidden relative">
                     <div
-                      className={cn(
-                        "h-full rounded-lg transition-all duration-500",
-                        dept.status === 'on_track' ? 'bg-gradient-to-r from-green-400 to-green-500' :
-                        dept.status === 'at_risk' ? 'bg-gradient-to-r from-yellow-400 to-yellow-500' :
-                        'bg-gradient-to-r from-red-400 to-red-500'
-                      )}
-                      style={{ width: `${dept.score}%` }}
+                      className="h-full rounded-lg transition-all duration-500 bg-gradient-to-r from-purple-400 to-purple-500"
+                      style={{ width: `${dept.percentage}%` }}
                     />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-700">
-                      {dept.score}%
+                      {dept.employees} ({dept.percentage}%)
                     </span>
                   </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-400 text-center py-8">No department data available</p>
+          )}
+        </div>
+
+        {/* KPI Statistics */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">KPI by Category</h3>
+              <p className="text-sm text-gray-500">Distribution of KPIs</p>
+            </div>
+            <Star className="h-5 w-5 text-yellow-500" />
+          </div>
+          <div className="space-y-3">
+            {kpiCategories.map(({ category, config, kpis: catKpis }, index) => {
+              const colors = ['bg-green-500', 'bg-blue-500', 'bg-purple-500', 'bg-amber-500', 'bg-teal-500', 'bg-rose-500'];
+              return (
+                <div key={category} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
                   <div className={cn(
-                    "w-16 flex items-center justify-end gap-1 text-sm font-medium",
-                    dept.trend >= 0 ? "text-green-600" : "text-red-600"
+                    "w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm",
+                    colors[index % colors.length]
                   )}>
-                    {dept.trend >= 0 ? (
-                      <TrendingUp className="h-4 w-4" />
-                    ) : (
-                      <TrendingDown className="h-4 w-4" />
-                    )}
-                    {dept.trend >= 0 ? '+' : ''}{dept.trend}%
+                    {catKpis.length}
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-900">{config.label}</p>
+                    <p className="text-xs text-gray-500">{catKpis.length} KPI{catKpis.length !== 1 ? 's' : ''}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-bold text-purple-600">
+                      {catKpis.filter(k => getKPIStatus(k) === 'on_track').length}/{catKpis.length}
+                    </p>
+                    <p className="text-xs text-gray-500">on track</p>
                   </div>
                 </div>
               );
             })}
           </div>
         </div>
-
-        {/* Top Performers */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">Top Performers</h3>
-              <p className="text-sm text-gray-500">Highest KPI achievers</p>
-            </div>
-            <Star className="h-5 w-5 text-yellow-500" />
-          </div>
-          <div className="space-y-3">
-            {topPerformers.map((person, index) => (
-              <div key={person.name} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-                <div className={cn(
-                  "w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm",
-                  index === 0 ? "bg-yellow-500" :
-                  index === 1 ? "bg-gray-400" :
-                  index === 2 ? "bg-amber-600" : "bg-purple-500"
-                )}>
-                  {index < 3 ? index + 1 : person.avatar}
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-900">{person.name}</p>
-                  <p className="text-xs text-gray-500">{person.department}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-bold text-purple-600">{person.score}%</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
 
-      {/* Quarterly Trend */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">KPI Score Trend</h3>
-            <p className="text-sm text-gray-500">Overall performance over quarters</p>
+      {/* Company KPI Overview */}
+      {data?.companies && data.companies.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-900">Company Overview</h3>
+            <p className="text-sm text-gray-500">Performance metrics by company</p>
           </div>
-          <TrendingUp className="h-5 w-5 text-gray-400" />
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Company</th>
+                  <th className="px-6 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Employees</th>
+                  <th className="px-6 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Attendance Rate</th>
+                  <th className="px-6 py-3 text-center text-xs font-semibold text-gray-600 uppercase">New Hires</th>
+                  <th className="px-6 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {data.companies.map((company) => (
+                  <tr key={company.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-lg flex items-center justify-center text-white font-bold">
+                          {company.name.charAt(0)}
+                        </div>
+                        <span className="font-medium text-gray-900">{company.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-center text-gray-600">{company.employees}</td>
+                    <td className="px-6 py-4 text-center">
+                      <div className="flex items-center justify-center gap-2">
+                        <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className={cn(
+                              "h-full rounded-full",
+                              company.attendance_rate >= 90 ? "bg-green-500" :
+                              company.attendance_rate >= 75 ? "bg-yellow-500" : "bg-red-500"
+                            )}
+                            style={{ width: `${Math.max(company.attendance_rate, 0)}%` }}
+                          />
+                        </div>
+                        <span className="font-medium text-gray-900">
+                          {company.attendance_rate >= 0 ? `${company.attendance_rate}%` : 'N/A'}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-center text-gray-600">{company.new_hires_this_month}</td>
+                    <td className="px-6 py-4 text-center">
+                      <span className={cn(
+                        'px-3 py-1 rounded-full text-xs font-medium',
+                        company.attendance_rate >= 90 ? 'bg-green-100 text-green-700' :
+                        company.attendance_rate >= 75 ? 'bg-yellow-100 text-yellow-700' :
+                        company.attendance_rate < 0 ? 'bg-gray-100 text-gray-500' :
+                        'bg-red-100 text-red-700'
+                      )}>
+                        {company.attendance_rate >= 90 ? 'Excellent' :
+                         company.attendance_rate >= 75 ? 'Good' :
+                         company.attendance_rate < 0 ? 'N/A' : 'Needs Attention'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-        <div className="h-48 flex items-end justify-between gap-8">
-          {quarterlyTrend.map((q, index) => (
-            <div key={q.quarter} className="flex-1 flex flex-col items-center">
-              <div className="w-full relative" style={{ height: `${q.score}%` }}>
-                <div className={cn(
-                  "absolute inset-0 rounded-t-lg transition-all duration-500",
-                  index === quarterlyTrend.length - 1
-                    ? "bg-gradient-to-t from-purple-600 to-purple-400"
-                    : "bg-gradient-to-t from-gray-300 to-gray-200"
-                )} />
-                <div className={cn(
-                  "absolute -top-6 left-1/2 -translate-x-1/2 text-sm font-bold",
-                  index === quarterlyTrend.length - 1 ? "text-purple-600" : "text-gray-600"
-                )}>
-                  {q.score}%
-                </div>
-              </div>
-              <span className="text-xs font-medium text-gray-500 mt-3">{q.quarter}</span>
-            </div>
-          ))}
-        </div>
-      </div>
+      )}
     </div>
   );
 }

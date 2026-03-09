@@ -56,7 +56,7 @@ import {
   Bar,
 } from 'recharts';
 import { PageSpinner, Badge } from '@/components/ui';
-import { dashboardService, type TeamDashboard, type GroupDashboard, type MyDashboard } from '@/services/dashboard.service';
+import { dashboardService, type TeamDashboard, type GroupDashboard, type MyDashboard, type SuperAdminStats, type AuditLogEntry, type AuditStatistics } from '@/services/dashboard.service';
 import { leaveService } from '@/services/leave.service';
 import { useAuthStore } from '@/stores/auth.store';
 import type { DashboardStats, LeaveRequest } from '@/types';
@@ -66,31 +66,36 @@ import { TaxDashboardPage } from './TaxDashboardPage';
 // Chart colors for department distribution
 const DEPARTMENT_COLORS = ['#3b82f6', '#6366f1', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ec4899', '#ef4444'];
 
-// Mock data for Super Admin dashboard
-const loginActivityData = [
-  { name: 'Mon', logins: 45, failed: 3 },
-  { name: 'Tue', logins: 52, failed: 2 },
-  { name: 'Wed', logins: 48, failed: 5 },
-  { name: 'Thu', logins: 61, failed: 1 },
-  { name: 'Fri', logins: 55, failed: 4 },
-  { name: 'Sat', logins: 20, failed: 0 },
-  { name: 'Sun', logins: 15, failed: 1 },
-];
-
+// Static system health data (no real monitoring infra)
 const systemHealthData = [
   { name: 'API', status: 'healthy', uptime: 99.9 },
   { name: 'Database', status: 'healthy', uptime: 99.8 },
   { name: 'Storage', status: 'healthy', uptime: 100 },
-  { name: 'Cache', status: 'warning', uptime: 98.5 },
+  { name: 'Cache', status: 'healthy', uptime: 99.5 },
 ];
 
-const recentAuditLogs = [
-  { action: 'User Login', user: 'admin@example.com', time: '2 mins ago', status: 'success' },
-  { action: 'Employee Created', user: 'hr.manager@example.com', time: '15 mins ago', status: 'success' },
-  { action: 'Role Updated', user: 'admin@example.com', time: '1 hour ago', status: 'success' },
-  { action: 'Login Failed', user: 'unknown@example.com', time: '2 hours ago', status: 'failed' },
-  { action: 'Settings Changed', user: 'admin@example.com', time: '3 hours ago', status: 'success' },
-];
+// Helper: format relative time (e.g., "2 mins ago")
+const formatRelativeTime = (dateStr: string) => {
+  const now = new Date();
+  const date = new Date(dateStr);
+  const diffMs = now.getTime() - date.getTime();
+  const diffSecs = Math.floor(diffMs / 1000);
+  const diffMins = Math.floor(diffSecs / 60);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffSecs < 60) return 'just now';
+  if (diffMins < 60) return `${diffMins} min${diffMins > 1 ? 's' : ''} ago`;
+  if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+  return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+};
+
+// Helper: format audit action for display
+const formatAuditAction = (action: string) => {
+  return action
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+};
 
 
 // Dashboard overview type for HR
@@ -169,6 +174,9 @@ export function DashboardPage() {
   const [myDashboard, setMyDashboard] = useState<MyDashboard | null>(null);
   const [pendingApprovals, setPendingApprovals] = useState<LeaveRequest[]>([]);
   const [payrollSummary, setPayrollSummary] = useState<PayrollSummaryData | null>(null);
+  const [superAdminStats, setSuperAdminStats] = useState<SuperAdminStats | null>(null);
+  const [recentLogs, setRecentLogs] = useState<AuditLogEntry[]>([]);
+  const [auditStats, setAuditStats] = useState<AuditStatistics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // Check user roles
@@ -191,24 +199,27 @@ export function DashboardPage() {
         else if (isTax) {
           // Tax Dashboard uses mock data, no API call needed
         }
+        // Super Admin fetches its own stats + audit data
+        else if (isSuperAdmin) {
+          const [saStats, logs, aStats] = await Promise.all([
+            dashboardService.getSuperAdminStats(),
+            dashboardService.getRecentAuditLogs(10),
+            dashboardService.getAuditStatistics(),
+          ]);
+          setSuperAdminStats(saStats);
+          setRecentLogs(logs);
+          setAuditStats(aStats);
+        }
         // HR/Admin fetches stats and overview
-        else if (isHR || isSuperAdmin) {
-          const promises: Promise<any>[] = [dashboardService.getStats()];
-
-          if (isHR) {
-            promises.push(dashboardService.getOverview());
-            promises.push(dashboardService.getPayrollSummary());
-          }
-
-          const results = await Promise.all(promises);
-          setStats(results[0]);
-
-          if (isHR && results[1]) {
-            setOverview(results[1] as DashboardOverview);
-          }
-          if (isHR && results[2]) {
-            setPayrollSummary(results[2] as PayrollSummaryData);
-          }
+        else if (isHR) {
+          const [statsData, overviewData, payrollData] = await Promise.all([
+            dashboardService.getStats(),
+            dashboardService.getOverview(),
+            dashboardService.getPayrollSummary(),
+          ]);
+          setStats(statsData);
+          setOverview(overviewData as DashboardOverview);
+          setPayrollSummary(payrollData as PayrollSummaryData);
         }
 
         // Manager fetches team dashboard
@@ -332,7 +343,7 @@ export function DashboardPage() {
               </div>
               <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-1 rounded-lg">Total</span>
             </div>
-            <p className="text-3xl font-bold text-gray-900 mb-1">172</p>
+            <p className="text-3xl font-bold text-gray-900 mb-1">{formatNumber(superAdminStats?.total_users || 0)}</p>
             <p className="text-sm text-gray-500">System Users</p>
           </div>
 
@@ -344,7 +355,7 @@ export function DashboardPage() {
               </div>
               <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-1 rounded-lg">Active</span>
             </div>
-            <p className="text-3xl font-bold text-gray-900 mb-1">5</p>
+            <p className="text-3xl font-bold text-gray-900 mb-1">{formatNumber(superAdminStats?.total_companies || 0)}</p>
             <p className="text-sm text-gray-500">Companies</p>
           </div>
 
@@ -356,7 +367,7 @@ export function DashboardPage() {
               </div>
               <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-1 rounded-lg">All</span>
             </div>
-            <p className="text-3xl font-bold text-gray-900 mb-1">{formatNumber(stats?.total_employees || 265)}</p>
+            <p className="text-3xl font-bold text-gray-900 mb-1">{formatNumber(superAdminStats?.total_employees || 0)}</p>
             <p className="text-sm text-gray-500">Total Employees</p>
           </div>
 
@@ -370,19 +381,19 @@ export function DashboardPage() {
                 Today
               </span>
             </div>
-            <p className="text-3xl font-bold text-gray-900 mb-1">48</p>
+            <p className="text-3xl font-bold text-gray-900 mb-1">{formatNumber(superAdminStats?.audit_entries_today || 0)}</p>
             <p className="text-sm text-gray-500">Audit Entries</p>
           </div>
         </div>
 
         {/* Charts Row */}
         <div className="grid lg:grid-cols-3 gap-6">
-          {/* Login Activity Chart */}
+          {/* Daily Activity Chart */}
           <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-shadow">
             <div className="flex items-start justify-between mb-6">
               <div>
-                <h3 className="text-lg font-bold text-gray-900">Login Activity</h3>
-                <p className="text-xs text-gray-500 mt-1">Successful vs failed login attempts</p>
+                <h3 className="text-lg font-bold text-gray-900">Daily Activity</h3>
+                <p className="text-xs text-gray-500 mt-1">Audit log entries per day (last 7 days)</p>
               </div>
               <div className="w-10 h-10 bg-gradient-to-br from-slate-600 to-slate-700 rounded-xl flex items-center justify-center shadow-md">
                 <Activity className="h-5 w-5 text-white" />
@@ -390,7 +401,16 @@ export function DashboardPage() {
             </div>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={loginActivityData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <BarChart
+                  data={(auditStats?.daily_activity || [])
+                    .slice(0, 7)
+                    .reverse()
+                    .map((d) => ({
+                      name: new Date(d.date).toLocaleDateString('en-US', { weekday: 'short' }),
+                      count: d.count,
+                    }))}
+                  margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                >
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                   <XAxis dataKey="name" tick={{ fontSize: 12 }} stroke="#9ca3af" />
                   <YAxis tick={{ fontSize: 12 }} stroke="#9ca3af" />
@@ -402,8 +422,7 @@ export function DashboardPage() {
                       boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)',
                     }}
                   />
-                  <Bar dataKey="logins" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Successful" />
-                  <Bar dataKey="failed" fill="#ef4444" radius={[4, 4, 0, 0]} name="Failed" />
+                  <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Activities" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -462,27 +481,24 @@ export function DashboardPage() {
               </Link>
             </div>
             <div className="space-y-3">
-              {recentAuditLogs.map((log, index) => (
+              {recentLogs.length === 0 && (
+                <p className="text-sm text-gray-400 text-center py-4">No recent activity</p>
+              )}
+              {recentLogs.map((log) => (
                 <div
-                  key={index}
+                  key={log.id}
                   className="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-gray-100 hover:bg-gray-100 transition-colors"
                 >
                   <div className="flex items-center gap-3">
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                      log.status === 'success' ? 'bg-green-100' : 'bg-red-100'
-                    }`}>
-                      {log.status === 'success' ? (
-                        <CheckCircle className="h-4 w-4 text-green-600" />
-                      ) : (
-                        <XCircle className="h-4 w-4 text-red-600" />
-                      )}
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-green-100">
+                      <CheckCircle className="h-4 w-4 text-green-600" />
                     </div>
                     <div>
-                      <p className="font-medium text-gray-900 text-sm">{log.action}</p>
-                      <p className="text-xs text-gray-500">{log.user}</p>
+                      <p className="font-medium text-gray-900 text-sm">{formatAuditAction(log.action)}</p>
+                      <p className="text-xs text-gray-500">{log.employee_name || log.user_email || 'System'}</p>
                     </div>
                   </div>
-                  <span className="text-xs text-gray-400">{log.time}</span>
+                  <span className="text-xs text-gray-400">{formatRelativeTime(log.created_at)}</span>
                 </div>
               ))}
             </div>

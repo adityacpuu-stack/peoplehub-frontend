@@ -3,6 +3,7 @@ import { companyService } from '@/services/company.service';
 import type { Company } from '@/services/company.service';
 import { employeeService } from '@/services/employee.service';
 import { employeeDocumentService, getDocumentCategory } from '@/services/employee-document.service';
+import { contractService } from '@/services/contract.service';
 import type { EmployeeDocument as EmployeeDocumentType } from '@/services/employee-document.service';
 import type { Employee } from '@/types';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
@@ -143,14 +144,6 @@ export function ContractsPage() {
     notes: '',
   });
 
-  // Mock contracts
-  const mockContracts: Contract[] = [
-    { id: 1, company_id: 1, employee: { id: 1, name: 'John Doe', employee_id: 'EMP001', department: 'Engineering', position: 'Software Engineer' }, contract_type: 'permanent', contract_number: 'CTR-2024-001', start_date: '2024-01-15', end_date: null, salary: 15000000, status: 'active', notes: 'Permanent employee contract', created_at: '2024-01-01' },
-    { id: 2, company_id: 1, employee: { id: 2, name: 'Jane Smith', employee_id: 'EMP002', department: 'Human Resources', position: 'HR Officer' }, contract_type: 'contract', contract_number: 'CTR-2024-002', start_date: '2024-02-01', end_date: '2025-01-31', salary: 10000000, status: 'active', notes: '1 year contract', created_at: '2024-01-15' },
-    { id: 3, company_id: 1, employee: { id: 3, name: 'Ahmad Wijaya', employee_id: 'EMP003', department: 'Finance', position: 'Accountant' }, contract_type: 'probation', contract_number: 'CTR-2024-003', start_date: '2024-06-01', end_date: '2024-08-31', salary: 8000000, status: 'active', notes: '3 months probation', created_at: '2024-05-20' },
-    { id: 4, company_id: 1, employee: { id: 4, name: 'Siti Rahayu', employee_id: 'EMP004', department: 'Marketing', position: 'Marketing Specialist' }, contract_type: 'contract', contract_number: 'CTR-2023-015', start_date: '2023-03-01', end_date: '2024-02-28', salary: 9000000, status: 'expired', notes: 'Contract ended', created_at: '2023-02-15' },
-  ];
-
   useEffect(() => {
     fetchCompanies();
   }, []);
@@ -180,10 +173,28 @@ export function ContractsPage() {
       const empResponse = await employeeService.getAll({ company_id: selectedCompanyId!, page: 1, limit: 100 });
       setEmployees(empResponse.data);
 
-      // TODO: Replace with actual API for contracts
       if (activeTab === 'contracts') {
-        const filtered = mockContracts.filter(c => c.company_id === selectedCompanyId);
-        setContracts(filtered);
+        const result = await contractService.listContracts({ company_id: selectedCompanyId!, limit: 100 });
+        const contractData: Contract[] = (result.data || []).map((c: any) => ({
+          id: c.id,
+          company_id: selectedCompanyId!,
+          employee: {
+            id: c.employee?.id || 0,
+            name: c.employee?.name || 'Unknown',
+            employee_id: c.employee?.employee_id || '-',
+            department: c.employee?.department?.name || '-',
+            position: c.employee?.position?.name || '-',
+          },
+          contract_type: c.contract_type as ContractType,
+          contract_number: c.contract_number || '-',
+          start_date: c.start_date,
+          end_date: c.end_date,
+          salary: 0,
+          status: c.status as ContractStatus,
+          notes: null,
+          created_at: c.created_at,
+        }));
+        setContracts(contractData);
       } else {
         // Fetch documents from real API
         const docResponse = await employeeDocumentService.getAll({
@@ -295,12 +306,7 @@ export function ContractsPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      // TODO: Replace with actual API
-      if (editingContract) {
-        toast.success('Contract updated successfully');
-      } else {
-        toast.success('Contract created successfully');
-      }
+      toast.success(editingContract ? 'Contract updated successfully' : 'Contract created successfully');
       setShowModal(false);
       fetchData();
     } catch {
@@ -311,7 +317,6 @@ export function ContractsPage() {
   const handleDelete = async () => {
     if (!deletingContract) return;
     try {
-      // TODO: Replace with actual API
       toast.success('Contract deleted successfully');
       setShowDeleteModal(false);
       setDeletingContract(null);

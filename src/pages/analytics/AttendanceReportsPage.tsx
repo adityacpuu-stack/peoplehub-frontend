@@ -13,14 +13,37 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { dashboardService, type GroupDashboard } from '@/services/dashboard.service';
+import { attendanceService } from '@/services/attendance.service';
+import type { Attendance } from '@/types';
 import toast from 'react-hot-toast';
+
+function getWeekDates(): { start: string; end: string; days: { date: string; label: string }[] } {
+  const today = new Date();
+  const dayOfWeek = today.getDay();
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+
+  const days = [];
+  const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+  for (let i = 0; i < 5; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    days.push({ date: d.toISOString().split('T')[0], label: labels[i] });
+  }
+
+  return {
+    start: days[0].date,
+    end: days[4].date,
+    days,
+  };
+}
 
 export function AttendanceReportsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [data, setData] = useState<GroupDashboard | null>(null);
+  const [weeklyAttendance, setWeeklyAttendance] = useState<{ day: string; present: number; late: number; absent: number }[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState('this_week');
   const [selectedCompany, setSelectedCompany] = useState('all');
-  const [_currentDate, _setCurrentDate] = useState(new Date());
 
   useEffect(() => {
     fetchData();
@@ -29,8 +52,12 @@ export function AttendanceReportsPage() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const response = await dashboardService.getGroupOverview();
-      setData(response);
+      const [groupData, weekData] = await Promise.all([
+        dashboardService.getGroupOverview(),
+        fetchWeeklyAttendance(),
+      ]);
+      setData(groupData);
+      setWeeklyAttendance(weekData);
     } catch (error: any) {
       console.error('Failed to fetch attendance data:', error);
       toast.error('Failed to load attendance reports');
@@ -39,51 +66,49 @@ export function AttendanceReportsPage() {
     }
   };
 
-  // Mock weekly attendance data
-  const weeklyAttendance = [
-    { day: 'Mon', present: 92, late: 5, absent: 3 },
-    { day: 'Tue', present: 88, late: 7, absent: 5 },
-    { day: 'Wed', present: 95, late: 3, absent: 2 },
-    { day: 'Thu', present: 90, late: 6, absent: 4 },
-    { day: 'Fri', present: 85, late: 8, absent: 7 },
-  ];
+  const fetchWeeklyAttendance = async () => {
+    const week = getWeekDates();
+    try {
+      const result = await attendanceService.getAll({
+        start_date: week.start,
+        end_date: week.end,
+        limit: 5000,
+      });
+      const records = result.data || [];
 
-  // Mock monthly trend
-  const monthlyTrend = [
-    { month: 'Jan', rate: 92 },
-    { month: 'Feb', rate: 89 },
-    { month: 'Mar', rate: 94 },
-    { month: 'Apr', rate: 91 },
-    { month: 'May', rate: 93 },
-    { month: 'Jun', rate: 88 },
-  ];
-
-  // Mock attendance by department
-  const departmentAttendance = [
-    { name: 'Engineering', rate: 94, present: 47, total: 50 },
-    { name: 'Marketing', rate: 91, present: 32, total: 35 },
-    { name: 'Sales', rate: 88, present: 44, total: 50 },
-    { name: 'Finance', rate: 96, present: 24, total: 25 },
-    { name: 'HR', rate: 93, present: 14, total: 15 },
-    { name: 'Operations', rate: 89, present: 40, total: 45 },
-  ];
-
-  // Mock late arrivals leaderboard
-  const lateArrivals = [
-    { name: 'John Doe', department: 'Sales', lateCount: 8, avgMinutes: 15 },
-    { name: 'Jane Smith', department: 'Marketing', lateCount: 6, avgMinutes: 12 },
-    { name: 'Mike Johnson', department: 'Engineering', lateCount: 5, avgMinutes: 20 },
-    { name: 'Sarah Wilson', department: 'Operations', lateCount: 4, avgMinutes: 10 },
-    { name: 'Tom Brown', department: 'Finance', lateCount: 3, avgMinutes: 8 },
-  ];
-
-  // Quick stats
-  const stats = {
-    avgAttendanceRate: data?.summary?.avg_attendance_rate || 91,
-    onLeaveToday: data?.summary?.total_on_leave_today || 12,
-    totalEmployees: data?.summary?.total_employees || 300,
-    presentToday: Math.round((data?.summary?.total_employees || 300) * 0.88),
+      return week.days.map(({ date, label }) => {
+        const dayRecords = records.filter((r: Attendance) => {
+          const recDate = new Date(r.date).toISOString().split('T')[0];
+          return recDate === date;
+        });
+        const total = dayRecords.length || 1;
+        const late = dayRecords.filter((r: Attendance) => r.status === 'late').length;
+        const absent = dayRecords.filter((r: Attendance) => r.status === 'absent').length;
+        const present = dayRecords.filter((r: Attendance) =>
+          r.status === 'present' || r.status === 'late' || (r.check_in && r.status !== 'absent')
+        ).length;
+        return {
+          day: label,
+          present: total > 0 ? Math.round((present / total) * 100) : 0,
+          late: total > 0 ? Math.round((late / total) * 100) : 0,
+          absent: total > 0 ? Math.round((absent / total) * 100) : 0,
+        };
+      });
+    } catch {
+      return [];
+    }
   };
+
+  // Derive stats from group dashboard data
+  const totalEmployees = data?.summary?.total_employees || 0;
+  const onLeaveToday = data?.summary?.total_on_leave_today || 0;
+  const avgAttendanceRate = data?.summary?.avg_attendance_rate || 0;
+  const presentToday = totalEmployees > 0 ? Math.round(totalEmployees * (avgAttendanceRate / 100)) : 0;
+  const lateToday = weeklyAttendance.length > 0 ? Math.round(totalEmployees * (weeklyAttendance[weeklyAttendance.length - 1]?.late || 0) / 100) : 0;
+  const absentToday = totalEmployees - presentToday - onLeaveToday;
+
+  // Department distribution from dashboard
+  const departmentData = data?.department_distribution || [];
 
   const maxBarHeight = 100;
 
@@ -126,15 +151,15 @@ export function AttendanceReportsPage() {
             <div className="flex flex-wrap items-center gap-3">
               <div className="bg-white/20 backdrop-blur-xl rounded-xl px-4 py-2 border border-white/10">
                 <span className="text-blue-100 text-xs">Avg Rate</span>
-                <p className="text-xl font-bold text-white">{stats.avgAttendanceRate}%</p>
+                <p className="text-xl font-bold text-white">{avgAttendanceRate}%</p>
               </div>
               <div className="bg-white/20 backdrop-blur-xl rounded-xl px-4 py-2 border border-white/10">
                 <span className="text-blue-100 text-xs">Present Today</span>
-                <p className="text-xl font-bold text-white">{stats.presentToday}</p>
+                <p className="text-xl font-bold text-white">{presentToday}</p>
               </div>
               <div className="bg-white/20 backdrop-blur-xl rounded-xl px-4 py-2 border border-white/10">
                 <span className="text-blue-100 text-xs">On Leave</span>
-                <p className="text-xl font-bold text-white">{stats.onLeaveToday}</p>
+                <p className="text-xl font-bold text-white">{onLeaveToday}</p>
               </div>
             </div>
           </div>
@@ -187,7 +212,7 @@ export function AttendanceReportsPage() {
             </div>
             <div>
               <p className="text-sm text-gray-500">Present</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.presentToday}</p>
+              <p className="text-2xl font-bold text-gray-900">{presentToday}</p>
             </div>
           </div>
         </div>
@@ -198,7 +223,7 @@ export function AttendanceReportsPage() {
             </div>
             <div>
               <p className="text-sm text-gray-500">Late</p>
-              <p className="text-2xl font-bold text-gray-900">18</p>
+              <p className="text-2xl font-bold text-gray-900">{lateToday}</p>
             </div>
           </div>
         </div>
@@ -209,7 +234,7 @@ export function AttendanceReportsPage() {
             </div>
             <div>
               <p className="text-sm text-gray-500">Absent</p>
-              <p className="text-2xl font-bold text-gray-900">8</p>
+              <p className="text-2xl font-bold text-gray-900">{Math.max(absentToday, 0)}</p>
             </div>
           </div>
         </div>
@@ -220,7 +245,7 @@ export function AttendanceReportsPage() {
             </div>
             <div>
               <p className="text-sm text-gray-500">On Leave</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.onLeaveToday}</p>
+              <p className="text-2xl font-bold text-gray-900">{onLeaveToday}</p>
             </div>
           </div>
         </div>
@@ -237,142 +262,85 @@ export function AttendanceReportsPage() {
             </div>
             <BarChart3 className="h-5 w-5 text-gray-400" />
           </div>
-          <div className="flex items-end justify-between gap-2 h-48">
-            {weeklyAttendance.map((day) => (
-              <div key={day.day} className="flex-1 flex flex-col items-center">
-                <div className="w-full flex flex-col-reverse gap-1" style={{ height: maxBarHeight }}>
-                  <div
-                    className="w-full bg-green-500 rounded-t"
-                    style={{ height: `${(day.present / 100) * maxBarHeight}px` }}
-                    title={`Present: ${day.present}%`}
-                  />
-                  <div
-                    className="w-full bg-yellow-500"
-                    style={{ height: `${(day.late / 100) * maxBarHeight}px` }}
-                    title={`Late: ${day.late}%`}
-                  />
-                  <div
-                    className="w-full bg-red-500 rounded-b"
-                    style={{ height: `${(day.absent / 100) * maxBarHeight}px` }}
-                    title={`Absent: ${day.absent}%`}
-                  />
-                </div>
-                <span className="text-sm font-medium text-gray-600 mt-2">{day.day}</span>
-              </div>
-            ))}
-          </div>
-          <div className="flex items-center justify-center gap-6 mt-4 pt-4 border-t border-gray-100">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-green-500 rounded" />
-              <span className="text-sm text-gray-600">Present</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-yellow-500 rounded" />
-              <span className="text-sm text-gray-600">Late</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-red-500 rounded" />
-              <span className="text-sm text-gray-600">Absent</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Monthly Trend */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">Monthly Trend</h3>
-              <p className="text-sm text-gray-500">Attendance rate over months</p>
-            </div>
-            <TrendingUp className="h-5 w-5 text-gray-400" />
-          </div>
-          <div className="relative h-48">
-            {/* Y-axis labels */}
-            <div className="absolute left-0 top-0 bottom-0 w-8 flex flex-col justify-between text-xs text-gray-400">
-              <span>100%</span>
-              <span>75%</span>
-              <span>50%</span>
-            </div>
-            {/* Chart area */}
-            <div className="ml-10 h-full flex items-end justify-between gap-4">
-              {monthlyTrend.map((month) => (
-                <div key={month.month} className="flex-1 flex flex-col items-center">
-                  <div className="w-full relative" style={{ height: `${month.rate}%` }}>
-                    <div className="absolute inset-0 bg-gradient-to-t from-blue-500 to-blue-400 rounded-t-lg" />
-                    <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-semibold text-gray-700">
-                      {month.rate}%
+          {weeklyAttendance.length > 0 ? (
+            <>
+              <div className="flex items-end justify-between gap-2 h-48">
+                {weeklyAttendance.map((day) => (
+                  <div key={day.day} className="flex-1 flex flex-col items-center">
+                    <div className="w-full flex flex-col-reverse gap-1" style={{ height: maxBarHeight }}>
+                      <div
+                        className="w-full bg-green-500 rounded-t"
+                        style={{ height: `${(day.present / 100) * maxBarHeight}px` }}
+                        title={`Present: ${day.present}%`}
+                      />
+                      <div
+                        className="w-full bg-yellow-500"
+                        style={{ height: `${(day.late / 100) * maxBarHeight}px` }}
+                        title={`Late: ${day.late}%`}
+                      />
+                      <div
+                        className="w-full bg-red-500 rounded-b"
+                        style={{ height: `${(day.absent / 100) * maxBarHeight}px` }}
+                        title={`Absent: ${day.absent}%`}
+                      />
                     </div>
+                    <span className="text-sm font-medium text-gray-600 mt-2">{day.day}</span>
                   </div>
-                  <span className="text-xs font-medium text-gray-600 mt-2">{month.month}</span>
+                ))}
+              </div>
+              <div className="flex items-center justify-center gap-6 mt-4 pt-4 border-t border-gray-100">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-green-500 rounded" />
+                  <span className="text-sm text-gray-600">Present</span>
                 </div>
-              ))}
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-yellow-500 rounded" />
+                  <span className="text-sm text-gray-600">Late</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-red-500 rounded" />
+                  <span className="text-sm text-gray-600">Absent</span>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="h-48 flex items-center justify-center">
+              <p className="text-gray-400">No attendance data for this week</p>
             </div>
-          </div>
+          )}
         </div>
 
-        {/* Department Attendance */}
+        {/* Department Distribution */}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">Department Attendance</h3>
-              <p className="text-sm text-gray-500">Attendance rate by department</p>
+              <h3 className="text-lg font-semibold text-gray-900">Department Distribution</h3>
+              <p className="text-sm text-gray-500">Employee count by department</p>
             </div>
             <Building2 className="h-5 w-5 text-gray-400" />
           </div>
-          <div className="space-y-4">
-            {departmentAttendance.map((dept) => (
-              <div key={dept.name}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-medium text-gray-700">{dept.name}</span>
-                  <span className="text-sm text-gray-500">{dept.present}/{dept.total} ({dept.rate}%)</span>
+          {departmentData.length > 0 ? (
+            <div className="space-y-4">
+              {departmentData.slice(0, 8).map((dept) => (
+                <div key={dept.name}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium text-gray-700">{dept.name}</span>
+                    <span className="text-sm text-gray-500">{dept.employees} ({dept.percentage}%)</span>
+                  </div>
+                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-500 bg-blue-500"
+                      style={{ width: `${dept.percentage}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                  <div
-                    className={cn(
-                      "h-full rounded-full transition-all duration-500",
-                      dept.rate >= 95 ? "bg-green-500" :
-                      dept.rate >= 90 ? "bg-blue-500" :
-                      dept.rate >= 85 ? "bg-yellow-500" : "bg-red-500"
-                    )}
-                    style={{ width: `${dept.rate}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Late Arrivals */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">Frequent Late Arrivals</h3>
-              <p className="text-sm text-gray-500">Employees with most late check-ins</p>
+              ))}
             </div>
-            <AlertTriangle className="h-5 w-5 text-yellow-500" />
-          </div>
-          <div className="space-y-3">
-            {lateArrivals.map((person, index) => (
-              <div key={person.name} className="flex items-center gap-4 p-3 bg-gray-50 rounded-xl">
-                <div className={cn(
-                  "w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm",
-                  index === 0 ? "bg-red-500" :
-                  index === 1 ? "bg-orange-500" :
-                  index === 2 ? "bg-yellow-500" : "bg-gray-400"
-                )}>
-                  {index + 1}
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-900">{person.name}</p>
-                  <p className="text-xs text-gray-500">{person.department}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-semibold text-gray-900">{person.lateCount}x late</p>
-                  <p className="text-xs text-gray-500">Avg {person.avgMinutes} min</p>
-                </div>
-              </div>
-            ))}
-          </div>
+          ) : (
+            <div className="h-48 flex items-center justify-center">
+              <p className="text-gray-400">No department data available</p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -413,12 +381,15 @@ export function AttendanceReportsPage() {
                             className={cn(
                               "h-full rounded-full",
                               company.attendance_rate >= 90 ? "bg-green-500" :
-                              company.attendance_rate >= 75 ? "bg-yellow-500" : "bg-red-500"
+                              company.attendance_rate >= 75 ? "bg-yellow-500" :
+                              company.attendance_rate < 0 ? "bg-gray-300" : "bg-red-500"
                             )}
-                            style={{ width: `${company.attendance_rate}%` }}
+                            style={{ width: `${Math.max(company.attendance_rate, 0)}%` }}
                           />
                         </div>
-                        <span className="font-medium text-gray-900">{company.attendance_rate}%</span>
+                        <span className="font-medium text-gray-900">
+                          {company.attendance_rate >= 0 ? `${company.attendance_rate}%` : 'N/A'}
+                        </span>
                       </div>
                     </td>
                     <td className="px-6 py-4 text-center text-gray-600">{company.on_leave_today}</td>
@@ -427,10 +398,12 @@ export function AttendanceReportsPage() {
                         'px-3 py-1 rounded-full text-xs font-medium',
                         company.attendance_rate >= 90 ? 'bg-green-100 text-green-700' :
                         company.attendance_rate >= 75 ? 'bg-yellow-100 text-yellow-700' :
+                        company.attendance_rate < 0 ? 'bg-gray-100 text-gray-500' :
                         'bg-red-100 text-red-700'
                       )}>
                         {company.attendance_rate >= 90 ? 'Excellent' :
-                         company.attendance_rate >= 75 ? 'Good' : 'Needs Attention'}
+                         company.attendance_rate >= 75 ? 'Good' :
+                         company.attendance_rate < 0 ? 'N/A' : 'Needs Attention'}
                       </span>
                     </td>
                   </tr>

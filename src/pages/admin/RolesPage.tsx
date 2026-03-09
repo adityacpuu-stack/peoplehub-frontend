@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Shield,
   Search,
@@ -12,6 +12,7 @@ import {
   ChevronDown,
   ChevronRight,
   CheckCircle2,
+  Loader2,
 } from 'lucide-react';
 import {
   Button,
@@ -22,126 +23,91 @@ import {
   Badge,
   PageSpinner,
 } from '@/components/ui';
+import { rbacService, type Role, type Permission } from '@/services/rbac.service';
+import toast from 'react-hot-toast';
 
-// Mock data for roles
-const mockRoles = [
-  {
-    id: 1,
-    name: 'Super Admin',
-    level: 1,
-    description: 'Full system access with all permissions',
-    is_system: true,
-    user_count: 1,
-    permissions: ['*'],
-  },
-  {
-    id: 2,
-    name: 'Group CEO',
-    level: 2,
-    description: 'Group-level executive access',
-    is_system: true,
-    user_count: 1,
-    permissions: ['dashboard.view', 'employees.view', 'reports.view'],
-  },
-  {
-    id: 3,
-    name: 'CEO',
-    level: 3,
-    description: 'Company-level executive access',
-    is_system: true,
-    user_count: 2,
-    permissions: ['dashboard.view', 'employees.view', 'reports.view'],
-  },
-  {
-    id: 4,
-    name: 'HR Manager',
-    level: 4,
-    description: 'Full P&C module access',
-    is_system: true,
-    user_count: 3,
-    permissions: ['employees.*', 'attendance.*', 'leave.*', 'payroll.view'],
-  },
-  {
-    id: 5,
-    name: 'HR Staff',
-    level: 5,
-    description: 'P&C operations access',
-    is_system: true,
-    user_count: 5,
-    permissions: ['employees.view', 'employees.create', 'attendance.view', 'leave.view'],
-  },
-  {
-    id: 6,
-    name: 'Manager',
-    level: 6,
-    description: 'Team management access',
-    is_system: true,
-    user_count: 10,
-    permissions: ['employees.view', 'attendance.view', 'leave.approve'],
-  },
-  {
-    id: 7,
-    name: 'Employee',
-    level: 7,
-    description: 'Basic employee access',
-    is_system: true,
-    user_count: 150,
-    permissions: ['profile.view', 'attendance.self', 'leave.self'],
-  },
-];
-
-// Permission modules
-const permissionModules = [
-  {
-    module: 'employees',
-    label: 'Employees',
-    permissions: [
-      { key: 'view', label: 'View Employees' },
-      { key: 'create', label: 'Create Employees' },
-      { key: 'update', label: 'Update Employees' },
-      { key: 'delete', label: 'Delete Employees' },
-    ],
-  },
-  {
-    module: 'attendance',
-    label: 'Attendance',
-    permissions: [
-      { key: 'view', label: 'View Attendance' },
-      { key: 'create', label: 'Record Attendance' },
-      { key: 'update', label: 'Update Attendance' },
-      { key: 'approve', label: 'Approve Corrections' },
-    ],
-  },
-  {
-    module: 'leave',
-    label: 'Leave Management',
-    permissions: [
-      { key: 'view', label: 'View Leave Requests' },
-      { key: 'create', label: 'Create Requests' },
-      { key: 'approve', label: 'Approve Requests' },
-      { key: 'reject', label: 'Reject Requests' },
-    ],
-  },
-  {
-    module: 'payroll',
-    label: 'Payroll',
-    permissions: [
-      { key: 'view', label: 'View Payroll' },
-      { key: 'create', label: 'Process Payroll' },
-      { key: 'approve', label: 'Approve Payroll' },
-    ],
-  },
-];
+interface PermissionGroup {
+  module: string;
+  label: string;
+  permissions: Permission[];
+}
 
 export function RolesPage() {
-  const [roles, _setRoles] = useState(mockRoles);
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [permissions, setPermissions] = useState<Permission[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [selectedRole, setSelectedRole] = useState<typeof mockRoles[0] | null>(null);
+  const [selectedRole, setSelectedRole] = useState<Role | null>(null);
+  const [rolePermissions, setRolePermissions] = useState<Permission[]>([]);
   const [expandedModules, setExpandedModules] = useState<string[]>([]);
-  const [deleteModal, setDeleteModal] = useState<{ open: boolean; role: typeof mockRoles[0] | null }>({
+  const [deleteModal, setDeleteModal] = useState<{ open: boolean; role: Role | null }>({
     open: false,
     role: null,
   });
+  const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const [rolesRes, permsRes] = await Promise.all([
+        rbacService.getRoles(),
+        rbacService.getPermissions(),
+      ]);
+      setRoles(rolesRes.data);
+      setPermissions(permsRes.data);
+    } catch {
+      toast.error('Failed to load roles');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSelectRole = async (role: Role) => {
+    setSelectedRole(role);
+    try {
+      // For Super Admin with wildcard, show all permissions
+      const userPerms = await rbacService.getUserPermissions(role.id);
+      setRolePermissions(userPerms);
+    } catch {
+      setRolePermissions([]);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteModal.role) return;
+    setDeleting(true);
+    try {
+      await rbacService.deleteRole(deleteModal.role.id);
+      toast.success('Role deleted');
+      setDeleteModal({ open: false, role: null });
+      if (selectedRole?.id === deleteModal.role.id) setSelectedRole(null);
+      fetchData();
+    } catch {
+      toast.error('Failed to delete role');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // Group permissions by module
+  const permissionGroups: PermissionGroup[] = permissions.reduce<PermissionGroup[]>((groups, perm) => {
+    const module = perm.group || perm.name.split('.')[0] || 'other';
+    const existing = groups.find((g) => g.module === module);
+    if (existing) {
+      existing.permissions.push(perm);
+    } else {
+      groups.push({
+        module,
+        label: module.charAt(0).toUpperCase() + module.slice(1).replace(/_/g, ' '),
+        permissions: [perm],
+      });
+    }
+    return groups;
+  }, []);
 
   const filteredRoles = roles.filter(
     (role) =>
@@ -155,8 +121,10 @@ export function RolesPage() {
     );
   };
 
-  const totalUsers = roles.reduce((acc, role) => acc + role.user_count, 0);
+  const totalUsers = roles.reduce((acc, role) => acc + ((role as any).user_count || 0), 0);
   const systemRoles = roles.filter((r) => r.is_system).length;
+
+  if (loading) return <PageSpinner />;
 
   return (
     <div className="space-y-6">
@@ -202,8 +170,8 @@ export function RolesPage() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-blue-100 text-sm">Total Users</p>
-                <p className="text-3xl font-bold text-white mt-1">{totalUsers}</p>
+                <p className="text-blue-100 text-sm">Custom Roles</p>
+                <p className="text-3xl font-bold text-white mt-1">{roles.length - systemRoles}</p>
               </div>
               <Users className="h-10 w-10 text-blue-200" />
             </div>
@@ -215,9 +183,7 @@ export function RolesPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-amber-100 text-sm">Permissions</p>
-                <p className="text-3xl font-bold text-white mt-1">
-                  {permissionModules.reduce((acc, m) => acc + m.permissions.length, 0)}
-                </p>
+                <p className="text-3xl font-bold text-white mt-1">{permissions.length}</p>
               </div>
               <Key className="h-10 w-10 text-amber-200" />
             </div>
@@ -234,7 +200,6 @@ export function RolesPage() {
               <CardTitle className="text-base font-semibold text-gray-800">Roles</CardTitle>
             </CardHeader>
             <CardContent className="p-4">
-              {/* Search */}
               <div className="relative mb-4">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                 <input
@@ -246,12 +211,11 @@ export function RolesPage() {
                 />
               </div>
 
-              {/* Roles */}
               <div className="space-y-2">
                 {filteredRoles.map((role) => (
                   <button
                     key={role.id}
-                    onClick={() => setSelectedRole(role)}
+                    onClick={() => handleSelectRole(role)}
                     className={`w-full p-4 rounded-xl border transition-all text-left ${
                       selectedRole?.id === role.id
                         ? 'border-slate-300 bg-slate-50 shadow-sm'
@@ -275,15 +239,11 @@ export function RolesPage() {
                         </div>
                         <span className="font-semibold text-gray-900">{role.name}</span>
                       </div>
-                      {role.is_system && (
-                        <Lock className="h-3.5 w-3.5 text-gray-400" />
-                      )}
+                      {role.is_system && <Lock className="h-3.5 w-3.5 text-gray-400" />}
                     </div>
-                    <p className="text-xs text-gray-500 line-clamp-1">{role.description}</p>
+                    <p className="text-xs text-gray-500 line-clamp-1">{role.description || 'No description'}</p>
                     <div className="flex items-center gap-3 mt-2">
                       <span className="text-xs text-gray-400">Level {role.level}</span>
-                      <span className="text-xs text-gray-400">•</span>
-                      <span className="text-xs text-gray-400">{role.user_count} users</span>
                     </div>
                   </button>
                 ))}
@@ -332,7 +292,7 @@ export function RolesPage() {
                       </div>
                       <div>
                         <h3 className="font-semibold text-gray-900">{selectedRole.name}</h3>
-                        <p className="text-sm text-gray-500">{selectedRole.description}</p>
+                        <p className="text-sm text-gray-500">{selectedRole.description || 'No description'}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-4 mt-3">
@@ -340,13 +300,12 @@ export function RolesPage() {
                         {selectedRole.is_system ? 'System Role' : 'Custom Role'}
                       </Badge>
                       <span className="text-sm text-gray-500">Level {selectedRole.level}</span>
-                      <span className="text-sm text-gray-500">{selectedRole.user_count} users</span>
                     </div>
                   </div>
 
                   {/* Permissions */}
                   <div className="space-y-2">
-                    {selectedRole.permissions.includes('*') ? (
+                    {selectedRole.level === 1 ? (
                       <div className="p-4 rounded-xl bg-purple-50 border border-purple-100">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center">
@@ -361,68 +320,60 @@ export function RolesPage() {
                         </div>
                       </div>
                     ) : (
-                      permissionModules.map((module) => (
-                        <div
-                          key={module.module}
-                          className="border border-gray-100 rounded-xl overflow-hidden"
-                        >
-                          <button
-                            onClick={() => toggleModule(module.module)}
-                            className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
-                          >
-                            <div className="flex items-center gap-3">
-                              {expandedModules.includes(module.module) ? (
-                                <ChevronDown className="h-4 w-4 text-gray-400" />
-                              ) : (
-                                <ChevronRight className="h-4 w-4 text-gray-400" />
-                              )}
-                              <span className="font-medium text-gray-900">{module.label}</span>
-                            </div>
-                            <span className="text-xs text-gray-400">
-                              {module.permissions.filter((p) =>
-                                selectedRole.permissions.some(
-                                  (sp) =>
-                                    sp === `${module.module}.*` ||
-                                    sp === `${module.module}.${p.key}`
-                                )
-                              ).length}{' '}
-                              / {module.permissions.length}
-                            </span>
-                          </button>
-                          {expandedModules.includes(module.module) && (
-                            <div className="px-4 pb-4 space-y-2">
-                              {module.permissions.map((perm) => {
-                                const hasPermission = selectedRole.permissions.some(
-                                  (sp) =>
-                                    sp === `${module.module}.*` ||
-                                    sp === `${module.module}.${perm.key}`
-                                );
-                                return (
-                                  <div
-                                    key={perm.key}
-                                    className={`flex items-center justify-between p-3 rounded-lg ${
-                                      hasPermission ? 'bg-green-50' : 'bg-gray-50'
-                                    }`}
-                                  >
-                                    <span
-                                      className={`text-sm ${
-                                        hasPermission ? 'text-green-700' : 'text-gray-500'
+                      permissionGroups.map((group) => {
+                        const grantedInGroup = group.permissions.filter((p) =>
+                          rolePermissions.some((rp) => rp.id === p.id || rp.name === p.name)
+                        );
+                        return (
+                          <div key={group.module} className="border border-gray-100 rounded-xl overflow-hidden">
+                            <button
+                              onClick={() => toggleModule(group.module)}
+                              className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
+                            >
+                              <div className="flex items-center gap-3">
+                                {expandedModules.includes(group.module) ? (
+                                  <ChevronDown className="h-4 w-4 text-gray-400" />
+                                ) : (
+                                  <ChevronRight className="h-4 w-4 text-gray-400" />
+                                )}
+                                <span className="font-medium text-gray-900">{group.label}</span>
+                              </div>
+                              <span className="text-xs text-gray-400">
+                                {grantedInGroup.length} / {group.permissions.length}
+                              </span>
+                            </button>
+                            {expandedModules.includes(group.module) && (
+                              <div className="px-4 pb-4 space-y-2">
+                                {group.permissions.map((perm) => {
+                                  const hasPermission = rolePermissions.some(
+                                    (rp) => rp.id === perm.id || rp.name === perm.name
+                                  );
+                                  return (
+                                    <div
+                                      key={perm.id}
+                                      className={`flex items-center justify-between p-3 rounded-lg ${
+                                        hasPermission ? 'bg-green-50' : 'bg-gray-50'
                                       }`}
                                     >
-                                      {perm.label}
-                                    </span>
-                                    {hasPermission ? (
-                                      <CheckCircle2 className="h-4 w-4 text-green-500" />
-                                    ) : (
-                                      <div className="w-4 h-4 rounded-full border-2 border-gray-300" />
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      ))
+                                      <div>
+                                        <span className={`text-sm ${hasPermission ? 'text-green-700' : 'text-gray-500'}`}>
+                                          {perm.description || perm.name}
+                                        </span>
+                                        <p className="text-xs text-gray-400 font-mono">{perm.name}</p>
+                                      </div>
+                                      {hasPermission ? (
+                                        <CheckCircle2 className="h-4 w-4 text-green-500" />
+                                      ) : (
+                                        <div className="w-4 h-4 rounded-full border-2 border-gray-300" />
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
                     )}
                   </div>
                 </div>
@@ -458,11 +409,6 @@ export function RolesPage() {
             <p className="text-gray-600 mb-6">
               Are you sure you want to delete the{' '}
               <span className="font-semibold text-gray-900">{deleteModal.role.name}</span> role?
-              {deleteModal.role.user_count > 0 && (
-                <span className="block mt-2 text-amber-600">
-                  Warning: {deleteModal.role.user_count} users have this role.
-                </span>
-              )}
             </p>
 
             <div className="flex justify-end gap-3">
@@ -473,8 +419,12 @@ export function RolesPage() {
               >
                 Cancel
               </Button>
-              <button className="px-4 py-2 rounded-xl bg-gradient-to-r from-red-500 to-red-600 text-white font-medium hover:from-red-600 hover:to-red-700 transition-all shadow-md shadow-red-500/25">
-                Delete
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-red-500 to-red-600 text-white font-medium hover:from-red-600 hover:to-red-700 transition-all shadow-md shadow-red-500/25 disabled:opacity-50"
+              >
+                {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Delete'}
               </button>
             </div>
           </div>

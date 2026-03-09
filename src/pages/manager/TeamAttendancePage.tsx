@@ -1,14 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Search,
-  Filter,
   Clock,
   Calendar,
   ChevronLeft,
   ChevronRight,
   Download,
   UserCheck,
-  UserX,
   MapPin,
   AlertCircle,
   CheckCircle,
@@ -18,10 +16,11 @@ import {
   LogOut,
   UsersRound,
   CalendarDays,
+  Loader2,
 } from 'lucide-react';
-import { useAuthStore } from '@/stores/auth.store';
+import { attendanceService } from '@/services/attendance.service';
+import type { Attendance } from '@/types';
 
-// Attendance record interface
 interface AttendanceRecord {
   id: number;
   employee_id: string;
@@ -36,112 +35,49 @@ interface AttendanceRecord {
   notes: string | null;
 }
 
-// Mock data - TODO: Replace with API call
-const generateMockAttendance = (date: string): AttendanceRecord[] => [
-  {
-    id: 1,
-    employee_id: 'EMP001',
-    employee_name: 'Sarah Johnson',
-    position: 'Senior Developer',
-    date,
-    status: 'present',
-    check_in: '08:45',
-    check_out: '17:30',
-    work_hours: 8.75,
-    overtime_hours: 0.75,
-    notes: null,
-  },
-  {
-    id: 2,
-    employee_id: 'EMP002',
-    employee_name: 'Michael Chen',
-    position: 'Developer',
-    date,
-    status: 'late',
-    check_in: '09:15',
-    check_out: '18:00',
-    work_hours: 8.75,
-    overtime_hours: 0,
-    notes: 'Traffic jam',
-  },
-  {
-    id: 3,
-    employee_id: 'EMP003',
-    employee_name: 'Emily Davis',
-    position: 'Junior Developer',
-    date,
-    status: 'wfh',
-    check_in: '08:30',
-    check_out: '17:00',
-    work_hours: 8.5,
-    overtime_hours: 0,
-    notes: 'Working from home',
-  },
-  {
-    id: 4,
-    employee_id: 'EMP004',
-    employee_name: 'David Wilson',
-    position: 'QA Engineer',
-    date,
-    status: 'on_leave',
-    check_in: null,
-    check_out: null,
-    work_hours: null,
-    overtime_hours: null,
-    notes: 'Annual leave',
-  },
-  {
-    id: 5,
-    employee_id: 'EMP005',
-    employee_name: 'Jessica Brown',
-    position: 'UI/UX Designer',
-    date,
-    status: 'present',
-    check_in: '08:55',
-    check_out: '17:15',
-    work_hours: 8.33,
-    overtime_hours: 0,
-    notes: null,
-  },
-  {
-    id: 6,
-    employee_id: 'EMP006',
-    employee_name: 'Robert Taylor',
-    position: 'DevOps Engineer',
-    date,
-    status: 'absent',
-    check_in: null,
-    check_out: null,
-    work_hours: null,
-    overtime_hours: null,
-    notes: 'No notification',
-  },
-  {
-    id: 7,
-    employee_id: 'EMP007',
-    employee_name: 'Amanda Lee',
-    position: 'Backend Developer',
-    date,
-    status: 'half_day',
-    check_in: '08:30',
-    check_out: '12:30',
-    work_hours: 4,
-    overtime_hours: 0,
-    notes: 'Doctor appointment',
-  },
-];
+function transformAttendance(att: Attendance): AttendanceRecord {
+  const checkIn = att.check_in ? new Date(att.check_in).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : null;
+  const checkOut = att.check_out ? new Date(att.check_out).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : null;
+
+  return {
+    id: att.id,
+    employee_id: att.employee?.employee_id || '-',
+    employee_name: att.employee?.name || 'Unknown',
+    position: (att.employee as any)?.position?.name || (att.employee as any)?.position || '-',
+    date: att.date,
+    status: (att.status as any) || 'absent',
+    check_in: checkIn,
+    check_out: checkOut,
+    work_hours: att.work_hours ?? null,
+    overtime_hours: att.overtime_hours ?? null,
+    notes: att.notes ?? null,
+  };
+}
 
 export function TeamAttendancePage() {
-  const { user } = useAuthStore();
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
-  const [showFilters, setShowFilters] = useState(false);
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Get attendance records for selected date
-  const attendanceRecords = generateMockAttendance(selectedDate);
+  const fetchAttendance = async () => {
+    setIsLoading(true);
+    try {
+      const data = await attendanceService.getTeamAttendance({ date: selectedDate });
+      setAttendanceRecords((data || []).map(transformAttendance));
+    } catch (err) {
+      console.error('Failed to fetch team attendance:', err);
+      setAttendanceRecords([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-  // Filter records
+  useEffect(() => {
+    fetchAttendance();
+  }, [selectedDate]);
+
   const filteredRecords = attendanceRecords.filter((record) => {
     const matchesSearch =
       record.employee_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -150,7 +86,6 @@ export function TeamAttendancePage() {
     return matchesSearch && matchesStatus;
   });
 
-  // Stats
   const stats = {
     total: attendanceRecords.length,
     present: attendanceRecords.filter((r) => r.status === 'present').length,
@@ -170,11 +105,12 @@ export function TeamAttendancePage() {
       absent: { bg: 'bg-red-100', text: 'text-red-700', icon: XCircle, label: 'Absent' },
       half_day: { bg: 'bg-cyan-100', text: 'text-cyan-700', icon: Timer, label: 'Half Day' },
     };
-    const { bg, text, icon: Icon, label } = config[status];
+    const c = config[status] || config.absent;
+    const Icon = c.icon;
     return (
-      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${bg} ${text}`}>
+      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${c.bg} ${c.text}`}>
         <Icon className="h-3.5 w-3.5" />
-        {label}
+        {c.label}
       </span>
     );
   };
@@ -287,7 +223,6 @@ export function TeamAttendancePage() {
       {/* Search and Filters */}
       <div className="bg-white rounded-xl border border-gray-200 p-4">
         <div className="flex flex-col lg:flex-row gap-4">
-          {/* Search */}
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
             <input
@@ -299,7 +234,6 @@ export function TeamAttendancePage() {
             />
           </div>
 
-          {/* Status Filters */}
           <div className="flex items-center gap-2 overflow-x-auto pb-2 lg:pb-0">
             {[
               { value: 'all', label: 'All' },
@@ -323,170 +257,156 @@ export function TeamAttendancePage() {
               </button>
             ))}
           </div>
-
-          {/* Export Button */}
-          <button className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 transition-colors">
-            <Download className="h-4 w-4" />
-            <span>Export</span>
-          </button>
         </div>
       </div>
 
       {/* Attendance Table */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Employee
-                </th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Check In
-                </th>
-                <th className="px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Check Out
-                </th>
-                <th className="px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Work Hours
-                </th>
-                <th className="px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Overtime
-                </th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Notes
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {filteredRecords.map((record) => (
-                <tr key={record.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center text-white font-bold text-sm">
-                        {record.employee_name.split(' ').map((n) => n[0]).join('').slice(0, 2)}
-                      </div>
-                      <div>
-                        <p className="font-medium text-gray-900">{record.employee_name}</p>
-                        <p className="text-xs text-gray-500">{record.employee_id} • {record.position}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    {getStatusBadge(record.status)}
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    {record.check_in ? (
-                      <div className="inline-flex items-center gap-1.5 text-sm">
-                        <LogIn className="h-4 w-4 text-green-500" />
-                        <span className="font-medium text-gray-900">{record.check_in}</span>
-                      </div>
-                    ) : (
-                      <span className="text-gray-400">-</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    {record.check_out ? (
-                      <div className="inline-flex items-center gap-1.5 text-sm">
-                        <LogOut className="h-4 w-4 text-red-500" />
-                        <span className="font-medium text-gray-900">{record.check_out}</span>
-                      </div>
-                    ) : (
-                      <span className="text-gray-400">-</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    {record.work_hours !== null ? (
-                      <span className="font-medium text-gray-900">{record.work_hours.toFixed(1)}h</span>
-                    ) : (
-                      <span className="text-gray-400">-</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    {record.overtime_hours !== null && record.overtime_hours > 0 ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
-                        <Timer className="h-3 w-3" />
-                        +{record.overtime_hours.toFixed(1)}h
-                      </span>
-                    ) : (
-                      <span className="text-gray-400">-</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4">
-                    {record.notes ? (
-                      <span className="text-sm text-gray-600">{record.notes}</span>
-                    ) : (
-                      <span className="text-gray-400">-</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Empty State */}
-        {filteredRecords.length === 0 && (
-          <div className="text-center py-12">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <UsersRound className="h-8 w-8 text-gray-400" />
+          {isLoading ? (
+            <div className="flex items-center justify-center py-20">
+              <div className="flex flex-col items-center gap-3">
+                <Loader2 className="h-8 w-8 text-green-600 animate-spin" />
+                <p className="text-gray-500">Loading attendance...</p>
+              </div>
             </div>
-            <h3 className="text-lg font-medium text-gray-900">No records found</h3>
-            <p className="text-gray-500 mt-1">Try adjusting your search or filters</p>
-          </div>
-        )}
+          ) : filteredRecords.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <UsersRound className="h-8 w-8 text-gray-400" />
+              </div>
+              <h3 className="text-lg font-medium text-gray-900">No records found</h3>
+              <p className="text-gray-500 mt-1">Try adjusting your search or filters</p>
+            </div>
+          ) : (
+            <table className="w-full">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Employee</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Check In</th>
+                  <th className="px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Check Out</th>
+                  <th className="px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Work Hours</th>
+                  <th className="px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Overtime</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Notes</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filteredRecords.map((record) => (
+                  <tr key={record.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center text-white font-bold text-sm">
+                          {record.employee_name.split(' ').map((n) => n[0]).join('').slice(0, 2)}
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900">{record.employee_name}</p>
+                          <p className="text-xs text-gray-500">{record.employee_id} {record.position !== '-' ? `\u2022 ${record.position}` : ''}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">{getStatusBadge(record.status)}</td>
+                    <td className="px-6 py-4 text-center">
+                      {record.check_in ? (
+                        <div className="inline-flex items-center gap-1.5 text-sm">
+                          <LogIn className="h-4 w-4 text-green-500" />
+                          <span className="font-medium text-gray-900">{record.check_in}</span>
+                        </div>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      {record.check_out ? (
+                        <div className="inline-flex items-center gap-1.5 text-sm">
+                          <LogOut className="h-4 w-4 text-red-500" />
+                          <span className="font-medium text-gray-900">{record.check_out}</span>
+                        </div>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      {record.work_hours !== null ? (
+                        <span className="font-medium text-gray-900">{record.work_hours.toFixed(1)}h</span>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      {record.overtime_hours !== null && record.overtime_hours > 0 ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+                          <Timer className="h-3 w-3" />
+                          +{record.overtime_hours.toFixed(1)}h
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      {record.notes ? (
+                        <span className="text-sm text-gray-600">{record.notes}</span>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
 
       {/* Summary Card */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h3 className="text-lg font-bold text-gray-900 mb-4">Daily Summary</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="p-4 bg-green-50 rounded-xl border border-green-100">
-            <div className="flex items-center gap-2 mb-2">
-              <UserCheck className="h-5 w-5 text-green-600" />
-              <span className="text-sm font-medium text-green-700">Attendance Rate</span>
+      {!isLoading && attendanceRecords.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <h3 className="text-lg font-bold text-gray-900 mb-4">Daily Summary</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="p-4 bg-green-50 rounded-xl border border-green-100">
+              <div className="flex items-center gap-2 mb-2">
+                <UserCheck className="h-5 w-5 text-green-600" />
+                <span className="text-sm font-medium text-green-700">Attendance Rate</span>
+              </div>
+              <p className="text-2xl font-bold text-green-700">
+                {stats.total > 0 ? Math.round(((stats.present + stats.wfh + stats.late + stats.halfDay) / stats.total) * 100) : 0}%
+              </p>
             </div>
-            <p className="text-2xl font-bold text-green-700">
-              {stats.total > 0 ? Math.round(((stats.present + stats.wfh + stats.late + stats.halfDay) / stats.total) * 100) : 0}%
-            </p>
-          </div>
-          <div className="p-4 bg-amber-50 rounded-xl border border-amber-100">
-            <div className="flex items-center gap-2 mb-2">
-              <AlertCircle className="h-5 w-5 text-amber-600" />
-              <span className="text-sm font-medium text-amber-700">Late Rate</span>
+            <div className="p-4 bg-amber-50 rounded-xl border border-amber-100">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertCircle className="h-5 w-5 text-amber-600" />
+                <span className="text-sm font-medium text-amber-700">Late Rate</span>
+              </div>
+              <p className="text-2xl font-bold text-amber-700">
+                {stats.total > 0 ? Math.round((stats.late / stats.total) * 100) : 0}%
+              </p>
             </div>
-            <p className="text-2xl font-bold text-amber-700">
-              {stats.total > 0 ? Math.round((stats.late / stats.total) * 100) : 0}%
-            </p>
-          </div>
-          <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
-            <div className="flex items-center gap-2 mb-2">
-              <Timer className="h-5 w-5 text-blue-600" />
-              <span className="text-sm font-medium text-blue-700">Total Overtime</span>
+            <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
+              <div className="flex items-center gap-2 mb-2">
+                <Timer className="h-5 w-5 text-blue-600" />
+                <span className="text-sm font-medium text-blue-700">Total Overtime</span>
+              </div>
+              <p className="text-2xl font-bold text-blue-700">
+                {attendanceRecords.reduce((sum, r) => sum + (r.overtime_hours || 0), 0).toFixed(1)}h
+              </p>
             </div>
-            <p className="text-2xl font-bold text-blue-700">
-              {attendanceRecords.reduce((sum, r) => sum + (r.overtime_hours || 0), 0).toFixed(1)}h
-            </p>
-          </div>
-          <div className="p-4 bg-purple-50 rounded-xl border border-purple-100">
-            <div className="flex items-center gap-2 mb-2">
-              <Clock className="h-5 w-5 text-purple-600" />
-              <span className="text-sm font-medium text-purple-700">Avg Work Hours</span>
+            <div className="p-4 bg-purple-50 rounded-xl border border-purple-100">
+              <div className="flex items-center gap-2 mb-2">
+                <Clock className="h-5 w-5 text-purple-600" />
+                <span className="text-sm font-medium text-purple-700">Avg Work Hours</span>
+              </div>
+              <p className="text-2xl font-bold text-purple-700">
+                {(() => {
+                  const validRecords = attendanceRecords.filter(r => r.work_hours !== null);
+                  return validRecords.length > 0
+                    ? (validRecords.reduce((sum, r) => sum + (r.work_hours || 0), 0) / validRecords.length).toFixed(1)
+                    : '0';
+                })()}h
+              </p>
             </div>
-            <p className="text-2xl font-bold text-purple-700">
-              {(() => {
-                const validRecords = attendanceRecords.filter(r => r.work_hours !== null);
-                return validRecords.length > 0
-                  ? (validRecords.reduce((sum, r) => sum + (r.work_hours || 0), 0) / validRecords.length).toFixed(1)
-                  : '0';
-              })()}h
-            </p>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
