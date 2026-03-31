@@ -29,6 +29,7 @@ interface ApprovalEmployee {
   employee_id?: string | null;
   name: string;
   job_title?: string | null;
+  position?: { name: string } | null;
   company?: { id: number; name: string } | null;
   department?: { id: number; name: string } | null;
   manager_id?: number;
