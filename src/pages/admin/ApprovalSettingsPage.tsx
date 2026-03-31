@@ -143,7 +143,7 @@ export function ApprovalSettingsPage() {
       .map(e => ({
         value: e.id,
         label: e.name,
-        sublabel: `${e.job_title || 'No Position'} • ${e.company?.name || ''}`,
+        sublabel: `${e.position?.name || 'No Position'} • ${e.company?.name || ''}`,
       }));
   };
 
@@ -284,7 +284,7 @@ export function ApprovalSettingsPage() {
                           <div>
                             <p className="font-semibold text-gray-900 text-sm">{employee.name}</p>
                             <p className="text-xs text-gray-500">
-                              {employee.job_title || 'No Position'} • {employee.company?.name || 'No Company'}
+                              {employee.position?.name || 'No Position'} • {employee.company?.name || 'No Company'}
                             </p>
                           </div>
                           {hasChanges && (

@@ -24,7 +24,7 @@ const transformNode = (node: OrgChartNode): OrgNode => {
     id: node.id,
     employee_id: node.employee_id,
     name: node.name,
-    position: node.job_title || node.position?.name || 'No Position',
+    position: node.position?.name || 'No Position',
     department: node.department?.name || 'No Department',
     company: node.company?.name || '',
     email: node.email || '',

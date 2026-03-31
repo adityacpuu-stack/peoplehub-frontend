@@ -170,7 +170,7 @@ export function EmployeeFormPage() {
             current_postal_code: employee.current_postal_code || '',
             national_id: employee.national_id || '',
             npwp_number: employee.npwp_number || '',
-            job_title: employee.job_title || employee.position?.name || '',
+            job_title: employee.position?.name || employee.job_title || '',
             company_id: employee.company_id,
             department_id: employee.department_id,
             position_id: employee.position_id,
@@ -772,7 +772,7 @@ export function EmployeeFormPage() {
               <div className="bg-white rounded-lg p-5 border border-blue-100">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <FormInput
-                    label="Job Title"
+                    label="Position"
                     name="job_title"
                     value={formData.job_title || ''}
                     onChange={handleChange}
@@ -806,7 +806,7 @@ export function EmployeeFormPage() {
                         .map((e) => ({
                           value: e.id,
                           label: e.name,
-                          sublabel: `${e.job_title || e.position?.name || 'No Position'} • ${e.company?.name || ''}`,
+                          sublabel: `${e.position?.name || e.job_title || 'No Position'} • ${e.company?.name || ''}`,
                         }))}
                     />
                     <p className="mt-1 text-xs text-gray-500">
@@ -1558,7 +1558,7 @@ export function EmployeeFormPage() {
                 </div>
                 <div className="space-y-2 text-sm">
                   <SummaryItem label="Company" value={companies.find(c => c.id === formData.company_id)?.name || '-'} />
-                  <SummaryItem label="Job Title" value={formData.job_title || '-'} />
+                  <SummaryItem label="Position" value={formData.job_title || '-'} />
                   <SummaryItem label="Department" value={departments.find(d => d.id === formData.department_id)?.name || '-'} />
                   <SummaryItem label="Reports To" value={employees.find(e => e.id === formData.manager_id)?.name || 'No Manager (Top Level)'} />
                   <SummaryItem label="Employment Type" value={formData.employment_type || '-'} />

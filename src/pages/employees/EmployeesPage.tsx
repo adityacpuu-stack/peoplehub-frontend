@@ -557,7 +557,7 @@ export function EmployeesPage() {
                       </div>
                       <div className="flex items-center text-xs text-gray-600">
                         <Briefcase className="h-3.5 w-3.5 text-gray-400 mr-2" />
-                        <span className="truncate">{employee.position?.name || employee.job_title || 'N/A'}</span>
+                        <span className="truncate">{employee.position?.name || 'N/A'}</span>
                       </div>
                       <div className="flex items-center text-xs text-gray-600">
                         <MapPin className="h-3.5 w-3.5 text-gray-400 mr-2" />
@@ -649,7 +649,7 @@ export function EmployeesPage() {
                       <span className="text-gray-700">{employee.department?.name || '-'}</span>
                     </TableCell>
                     <TableCell className="hidden xl:table-cell">
-                      <span className="text-gray-700">{employee.position?.name || employee.job_title || '-'}</span>
+                      <span className="text-gray-700">{employee.position?.name || '-'}</span>
                     </TableCell>
                     <TableCell>
                       <Badge variant={getStatusVariant(employee.employment_status || 'active')}>

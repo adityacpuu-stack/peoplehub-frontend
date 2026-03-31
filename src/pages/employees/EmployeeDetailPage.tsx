@@ -94,7 +94,7 @@ export function EmployeeDetailPage() {
                   {employee.name}
                 </h1>
                 <p className="text-emerald-100 text-sm mt-1">
-                  {employee.job_title || employee.position?.name || 'Employee'}
+                  {employee.position?.name || 'Employee'}
                   {employee.department && ` • ${employee.department.name}`}
                 </p>
               </div>
@@ -149,7 +149,7 @@ export function EmployeeDetailPage() {
               <Briefcase className="w-6 h-6 text-white" />
             </div>
           </div>
-          <p className="text-2xl font-bold text-gray-900 mb-1 truncate">{employee.position?.name || employee.job_title || '-'}</p>
+          <p className="text-2xl font-bold text-gray-900 mb-1 truncate">{employee.position?.name || '-'}</p>
           <p className="text-sm text-gray-500">Position</p>
         </div>
 
@@ -251,7 +251,6 @@ export function EmployeeDetailPage() {
                 <InfoItem label="Company" value={employee.company?.name} />
                 <InfoItem label="Department" value={employee.department?.name} />
                 <InfoItem label="Position" value={employee.position?.name} />
-                <InfoItem label="Job Title" value={employee.job_title} />
                 <InfoItem label="Work Location" value={employee.workLocationRef?.name} />
                 <InfoItem label="Organizational Level" value={employee.organizational_level} />
                 <InfoItem label="Grade Level" value={employee.grade_level} />

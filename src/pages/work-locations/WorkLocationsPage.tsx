@@ -847,7 +847,7 @@ export function WorkLocationsPage() {
                       <tr>
                         <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Employee</th>
                         <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Department</th>
-                        <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Job Title</th>
+                        <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Position</th>
                         <th className="text-center px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Action</th>
                       </tr>
                     </thead>
@@ -861,7 +861,7 @@ export function WorkLocationsPage() {
                             </div>
                           </td>
                           <td className="px-6 py-3 text-sm text-gray-600">{emp.department?.name || '-'}</td>
-                          <td className="px-6 py-3 text-sm text-gray-600">{emp.job_title || '-'}</td>
+                          <td className="px-6 py-3 text-sm text-gray-600">{emp.position?.name || '-'}</td>
                           <td className="px-6 py-3 text-center">
                             <Link
                               to={`/employees/${emp.id}`}
