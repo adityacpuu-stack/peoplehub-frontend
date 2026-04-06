@@ -124,9 +124,10 @@ export function TeamTemplatesPage() {
       // Track download
       await templateService.trackDownload(template.id);
 
-      // Open download URL
-      const baseUrl = import.meta.env.VITE_API_URL || '';
-      window.open(`${baseUrl}/uploads/${template.file_path}`, '_blank');
+      // Open download URL (file_path is already an absolute S3 URL)
+      if (template.file_path) {
+        window.open(template.file_path, '_blank');
+      }
 
       toast.success('Download started');
     } catch (error: any) {
