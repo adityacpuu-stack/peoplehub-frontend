@@ -126,19 +126,10 @@ export function EmployeeTemplatesPage() {
       // Track download
       await templateService.trackDownload(template.id);
 
-      // Download file directly from S3 URL
-      const response = await fetch(template.file_path);
-      const blob = await response.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = downloadUrl;
-      a.download = template.file_name || template.name;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(downloadUrl);
+      // Open S3 URL directly in new tab (avoids CORS issues with fetch)
+      window.open(template.file_path, '_blank');
 
-      toast.success('Template berhasil diunduh');
+      toast.success('Template berhasil dibuka');
     } catch (error) {
       console.error('Failed to download:', error);
       toast.error('Gagal mengunduh template');
