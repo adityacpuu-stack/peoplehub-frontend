@@ -252,10 +252,10 @@ export function EmployeeFormPage() {
       // Set probation_start_date = join_date
       const probationStart = formData.join_date;
 
-      // Set probation_end_date = join_date + 3 months
-      const joinDate = new Date(formData.join_date);
-      joinDate.setMonth(joinDate.getMonth() + 3);
-      const probationEnd = joinDate.toISOString().split('T')[0];
+      // Set probation_end_date = join_date + 3 months (use UTC to avoid timezone shift)
+      const [year, month, day] = formData.join_date.split('-').map(Number);
+      const probationDate = new Date(Date.UTC(year, month - 1 + 3, day));
+      const probationEnd = probationDate.toISOString().split('T')[0];
 
       setFormData(prev => ({
         ...prev,

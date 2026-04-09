@@ -123,13 +123,11 @@ export function EmployeeTemplatesPage() {
 
     setIsDownloading(true);
     try {
-      // Track download
-      await templateService.trackDownload(template.id);
+      // Get presigned URL with forced download from backend
+      const { url } = await templateService.getDownloadUrl(template.id);
+      window.location.href = url;
 
-      // Open S3 URL directly in new tab (avoids CORS issues with fetch)
-      window.open(template.file_path, '_blank');
-
-      toast.success('Template berhasil dibuka');
+      toast.success('Template berhasil diunduh');
     } catch (error) {
       console.error('Failed to download:', error);
       toast.error('Gagal mengunduh template');

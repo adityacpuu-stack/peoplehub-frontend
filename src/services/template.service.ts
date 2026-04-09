@@ -209,6 +209,14 @@ export const templateService = {
   },
 
   /**
+   * Get presigned download URL (forces browser download via Content-Disposition)
+   */
+  getDownloadUrl: async (id: number): Promise<{ url: string; filename: string }> => {
+    const response = await api.get<ApiResponse<{ url: string; filename: string }>>(`/templates/${id}/download-url`);
+    return response.data.data;
+  },
+
+  /**
    * Upload template file (returns file info)
    */
   uploadFile: async (file: File): Promise<{

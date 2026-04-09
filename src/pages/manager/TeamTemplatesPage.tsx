@@ -121,13 +121,9 @@ export function TeamTemplatesPage() {
   const handleDownload = async (template: Template) => {
     setIsDownloading(true);
     try {
-      // Track download
-      await templateService.trackDownload(template.id);
-
-      // Open download URL (file_path is already an absolute S3 URL)
-      if (template.file_path) {
-        window.open(template.file_path, '_blank');
-      }
+      // Get presigned URL with forced download from backend
+      const { url } = await templateService.getDownloadUrl(template.id);
+      window.location.href = url;
 
       toast.success('Download started');
     } catch (error: any) {
