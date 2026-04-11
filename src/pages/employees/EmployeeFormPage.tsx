@@ -267,6 +267,19 @@ export function EmployeeFormPage() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
+
+    if (name === 'employment_type') {
+      const bpjsDefaults =
+        value === 'permanent'
+          ? { jht_registered: true, jp_registered: true, medical_insurance: true, life_insurance: true }
+          : value === 'freelance'
+          ? { jht_registered: true, jp_registered: false, medical_insurance: false, life_insurance: false }
+          : { jht_registered: false, jp_registered: false, medical_insurance: false, life_insurance: false };
+
+      setFormData((prev) => ({ ...prev, employment_type: value, ...bpjsDefaults }));
+      return;
+    }
+
     setFormData((prev) => ({
       ...prev,
       [name]: type === 'number' ? (value ? parseFloat(value) : undefined) : value,
@@ -863,7 +876,7 @@ export function EmployeeFormPage() {
                       { value: '', label: '-- Select Type --' },
                       { value: 'permanent', label: 'Permanent (Tetap)' },
                       { value: 'contract', label: 'Contract (Kontrak)' },
-                      { value: 'intern', label: 'Intern (Magang)' },
+                      { value: 'internship', label: 'Internship (Magang)' },
                       { value: 'freelance', label: 'Freelance' },
                     ]}
                     icon={<FileText className="h-4 w-4 text-green-600" />}
@@ -1016,13 +1029,10 @@ export function EmployeeFormPage() {
                   <FormSelect
                     label="Pay Frequency"
                     name="pay_frequency"
-                    value={formData.pay_frequency || ''}
+                    value={formData.pay_frequency || 'monthly'}
                     onChange={handleChange}
                     options={[
-                      { value: '', label: '-- Select Frequency --' },
                       { value: 'monthly', label: 'Monthly' },
-                      { value: 'biweekly', label: 'Bi-weekly' },
-                      { value: 'weekly', label: 'Weekly' },
                     ]}
                     icon={<Calendar className="h-4 w-4 text-purple-600" />}
                   />
@@ -1118,15 +1128,6 @@ export function EmployeeFormPage() {
                     placeholder="1234567890"
                     icon={<CreditCard className="h-4 w-4 text-amber-600" />}
                   />
-                  <FormInput
-                    label="Account Holder Name"
-                    name="bank_account_holder"
-                    value={formData.bank_account_holder || ''}
-                    onChange={handleChange}
-                    placeholder="Name as per bank account"
-                    hint="Leave empty to use employee name"
-                    icon={<User className="h-4 w-4 text-amber-600" />}
-                  />
                 </div>
               </div>
             </div>
@@ -1219,52 +1220,11 @@ export function EmployeeFormPage() {
                 </div>
               </div>
 
-              {/* BPJS Programs */}
-              <div className="bg-white rounded-lg p-5 border border-teal-100 mb-4">
-                <h5 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  <Shield className="h-4 w-4 text-teal-600" />
-                  Program BPJS Ketenagakerjaan
-                </h5>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <FormCheckbox
-                    label="JHT (Jaminan Hari Tua)"
-                    name="jht_registered"
-                    checked={formData.jht_registered || false}
-                    onChange={(e) => setFormData(prev => ({ ...prev, jht_registered: e.target.checked }))}
-                    description="Tabungan hari tua yang dapat dicairkan saat pensiun"
-                  />
-                  <FormCheckbox
-                    label="JP (Jaminan Pensiun)"
-                    name="jp_registered"
-                    checked={formData.jp_registered || false}
-                    onChange={(e) => setFormData(prev => ({ ...prev, jp_registered: e.target.checked }))}
-                    description="Jaminan pendapatan bulanan saat pensiun"
-                  />
-                </div>
-              </div>
-
-              {/* Other Insurance */}
+              {/* BPJS & Asuransi info (auto-set based on employment type) */}
               <div className="bg-white rounded-lg p-5 border border-teal-100">
-                <h5 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  <Heart className="h-4 w-4 text-red-500" />
-                  Asuransi Tambahan
-                </h5>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <FormCheckbox
-                    label="Asuransi Kesehatan"
-                    name="medical_insurance"
-                    checked={formData.medical_insurance || false}
-                    onChange={(e) => setFormData(prev => ({ ...prev, medical_insurance: e.target.checked }))}
-                    description="Asuransi kesehatan tambahan dari perusahaan"
-                  />
-                  <FormCheckbox
-                    label="Asuransi Jiwa"
-                    name="life_insurance"
-                    checked={formData.life_insurance || false}
-                    onChange={(e) => setFormData(prev => ({ ...prev, life_insurance: e.target.checked }))}
-                    description="Asuransi jiwa dari perusahaan"
-                  />
-                </div>
+                <p className="text-sm text-gray-500">
+                  Program BPJS Ketenagakerjaan dan asuransi akan diatur otomatis berdasarkan tipe karyawan yang dipilih.
+                </p>
               </div>
             </div>
           </div>
@@ -1497,12 +1457,17 @@ export function EmployeeFormPage() {
                     value={formData.emergency_contact_relationship || ''}
                     onChange={handleChange}
                     options={[
-                      { value: '', label: '-- Select Relationship --' },
-                      { value: 'spouse', label: 'Spouse' },
-                      { value: 'parent', label: 'Parent' },
-                      { value: 'sibling', label: 'Sibling' },
-                      { value: 'child', label: 'Child' },
-                      { value: 'other', label: 'Other' },
+                      { value: '', label: '-- Pilih Hubungan --' },
+                      { value: 'Suami', label: 'Suami' },
+                      { value: 'Istri', label: 'Istri' },
+                      { value: 'Orang Tua', label: 'Orang Tua' },
+                      { value: 'Ayah', label: 'Ayah' },
+                      { value: 'Ibu', label: 'Ibu' },
+                      { value: 'Anak', label: 'Anak' },
+                      { value: 'Saudara', label: 'Saudara' },
+                      { value: 'Kakak', label: 'Kakak' },
+                      { value: 'Adik', label: 'Adik' },
+                      { value: 'Lainnya', label: 'Lainnya' },
                     ]}
                     icon={<Users className="h-4 w-4 text-pink-600" />}
                   />

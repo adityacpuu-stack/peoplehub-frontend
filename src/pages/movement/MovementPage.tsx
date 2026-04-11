@@ -48,6 +48,22 @@ export function MovementPage() {
     reason: '',
     notes: '',
   });
+  const [manualJobTitle, setManualJobTitle] = useState('');
+  const [useManualJobTitle, setUseManualJobTitle] = useState(false);
+  const [formCompanyFilter, setFormCompanyFilter] = useState<number | null>(null);
+
+  const movementFieldConfig: Record<string, { position: boolean; department: boolean; salary: boolean; company: boolean }> = {
+    promotion:          { position: true,  department: false, salary: true,  company: false },
+    demotion:           { position: true,  department: false, salary: true,  company: false },
+    transfer:           { position: false, department: true,  salary: false, company: false },
+    mutation:           { position: false, department: true,  salary: false, company: false },
+    salary_adjustment:  { position: false, department: false, salary: true,  company: false },
+    department_change:  { position: false, department: true,  salary: false, company: false },
+    position_change:    { position: true,  department: false, salary: false, company: false },
+    company_transfer:   { position: false, department: false, salary: false, company: true  },
+  };
+
+  const currentFieldConfig = movementFieldConfig[formData.movement_type || 'promotion'];
 
   useEffect(() => {
     fetchInitialData();
@@ -138,7 +154,24 @@ export function MovementPage() {
       reason: '',
       notes: '',
     });
+    setManualJobTitle('');
+    setUseManualJobTitle(false);
+    setFormCompanyFilter(null);
   };
+
+  const selectedEmployee = employees.find(e => e.id === formData.employee_id);
+
+  const filteredPositions = selectedEmployee?.company_id
+    ? positions.filter(p => p.company_id === selectedEmployee.company_id)
+    : positions;
+
+  const uniquePositions = Array.from(
+    filteredPositions.reduce((map, p) => {
+      const key = p.name.trim().toUpperCase();
+      if (!map.has(key)) map.set(key, { value: p.id, label: p.name });
+      return map;
+    }, new Map<string, { value: number; label: string }>()).values()
+  );
 
   const handleOpenModal = (movement?: EmployeeMovement) => {
     if (movement) {
@@ -154,11 +187,31 @@ export function MovementPage() {
         reason: movement.reason || '',
         notes: movement.notes || '',
       });
+      // If existing movement had manual name (no position_id), pre-fill manual
+      if (!movement.new_position_id && movement.new_position_name) {
+        setUseManualJobTitle(true);
+        setManualJobTitle(movement.new_position_name);
+      } else {
+        setUseManualJobTitle(false);
+        setManualJobTitle('');
+      }
     } else {
       setEditingMovement(null);
       resetForm();
     }
     setShowModal(true);
+  };
+
+  const handleMovementTypeChange = (type: string) => {
+    const config = movementFieldConfig[type];
+    setFormData(prev => ({
+      ...prev,
+      movement_type: type,
+      new_position_id: config.position ? prev.new_position_id : undefined,
+      new_department_id: config.department ? prev.new_department_id : undefined,
+      new_salary: config.salary ? prev.new_salary : undefined,
+      new_company_id: config.company ? prev.new_company_id : undefined,
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -172,6 +225,24 @@ export function MovementPage() {
       return;
     }
 
+    const config = currentFieldConfig;
+    if (config.position && !formData.new_position_id && (!useManualJobTitle || !manualJobTitle.trim())) {
+      toast.error('Pilih posisi atau masukkan job title manual');
+      return;
+    }
+    if (config.department && !formData.new_department_id) {
+      toast.error('Please select new department');
+      return;
+    }
+    if (config.salary && !formData.new_salary) {
+      toast.error('Please enter new salary');
+      return;
+    }
+    if (config.company && !formData.new_company_id) {
+      toast.error('Please select new company');
+      return;
+    }
+
     setIsProcessing(true);
     try {
       const data: CreateEmployeeMovementRequest = {
@@ -179,7 +250,8 @@ export function MovementPage() {
         company_id: selectedCompanyId || undefined,
         movement_type: formData.movement_type!,
         effective_date: formData.effective_date!,
-        new_position_id: formData.new_position_id,
+        new_position_id: useManualJobTitle ? undefined : formData.new_position_id,
+        new_position_name: useManualJobTitle ? manualJobTitle.trim() : undefined,
         new_department_id: formData.new_department_id,
         new_company_id: formData.new_company_id,
         new_salary: formData.new_salary,
@@ -753,13 +825,37 @@ export function MovementPage() {
               </div>
 
               <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                {/* Company Filter */}
+                {!editingMovement && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Company</label>
+                    <select
+                      value={formCompanyFilter || ''}
+                      onChange={(e) => {
+                        const val = e.target.value ? Number(e.target.value) : null;
+                        setFormCompanyFilter(val);
+                        setFormData(prev => ({ ...prev, employee_id: 0 }));
+                      }}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    >
+                      <option value="">All Companies</option>
+                      {companies.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
                 {/* Employee */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Employee <span className="text-red-500">*</span>
                   </label>
                   <SearchableSelect
-                    options={employees.map(e => ({
+                    options={(formCompanyFilter
+                      ? employees.filter(e => e.company_id === formCompanyFilter)
+                      : employees
+                    ).map(e => ({
                       value: e.id,
                       label: `${e.name} (${e.employee_id})`,
                     }))}
@@ -778,7 +874,7 @@ export function MovementPage() {
                     </label>
                     <select
                       value={formData.movement_type}
-                      onChange={(e) => setFormData(prev => ({ ...prev, movement_type: e.target.value }))}
+                      onChange={(e) => handleMovementTypeChange(e.target.value)}
                       className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
                       required
                     >
@@ -809,36 +905,63 @@ export function MovementPage() {
                 </div>
 
                 {/* New Position */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    New Position
-                  </label>
-                  <SearchableSelect
-                    options={positions.map(p => ({ value: p.id, label: p.name }))}
-                    value={formData.new_position_id || ''}
-                    onChange={(value) => setFormData(prev => ({ ...prev, new_position_id: value ? Number(value) : undefined }))}
-                    placeholder="Select new position..."
-                  />
-                </div>
+                {currentFieldConfig.position && (
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-sm font-medium text-gray-700">
+                        New Position <span className="text-red-500">*</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUseManualJobTitle(prev => !prev);
+                          setManualJobTitle('');
+                          setFormData(prev => ({ ...prev, new_position_id: undefined }));
+                        }}
+                        className="text-xs text-blue-600 hover:underline"
+                      >
+                        {useManualJobTitle ? 'Pilih dari daftar' : 'Tidak ada? Isi manual'}
+                      </button>
+                    </div>
+                    {useManualJobTitle ? (
+                      <input
+                        type="text"
+                        value={manualJobTitle}
+                        onChange={(e) => setManualJobTitle(e.target.value)}
+                        placeholder="Masukkan job title..."
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    ) : (
+                      <SearchableSelect
+                        options={uniquePositions}
+                        value={formData.new_position_id || ''}
+                        onChange={(value) => setFormData(prev => ({ ...prev, new_position_id: value ? Number(value) : undefined }))}
+                        placeholder={selectedEmployee ? 'Select new position...' : 'Pilih employee dulu'}
+                      />
+                    )}
+                  </div>
+                )}
 
                 {/* New Department */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    New Department
-                  </label>
-                  <SearchableSelect
-                    options={departments.map(d => ({ value: d.id, label: d.name }))}
-                    value={formData.new_department_id || ''}
-                    onChange={(value) => setFormData(prev => ({ ...prev, new_department_id: value ? Number(value) : undefined }))}
-                    placeholder="Select new department..."
-                  />
-                </div>
-
-                {/* New Company (for company transfer) */}
-                {formData.movement_type === 'company_transfer' && (
+                {currentFieldConfig.department && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      New Company
+                      New Department <span className="text-red-500">*</span>
+                    </label>
+                    <SearchableSelect
+                      options={departments.map(d => ({ value: d.id, label: d.name }))}
+                      value={formData.new_department_id || ''}
+                      onChange={(value) => setFormData(prev => ({ ...prev, new_department_id: value ? Number(value) : undefined }))}
+                      placeholder="Select new department..."
+                    />
+                  </div>
+                )}
+
+                {/* New Company */}
+                {currentFieldConfig.company && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      New Company <span className="text-red-500">*</span>
                     </label>
                     <SearchableSelect
                       options={companies.map(c => ({ value: c.id, label: c.name }))}
@@ -850,10 +973,10 @@ export function MovementPage() {
                 )}
 
                 {/* New Salary */}
-                {(formData.movement_type === 'promotion' || formData.movement_type === 'salary_adjustment') && (
+                {currentFieldConfig.salary && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      New Salary
+                      New Salary <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="number"

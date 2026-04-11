@@ -6,6 +6,7 @@ import {
   Search,
   Edit2,
   Trash2,
+  Lock,
   X,
   Building,
   Users,
@@ -76,6 +77,7 @@ export function AllowancesPage() {
     is_taxable: true,
     is_bpjs_object: false,
     is_recurring: true,
+    is_contract: false,
     amount: 0,
     percentage: 0,
     calculation_base: 'fixed' as 'fixed' | 'basic_salary' | 'gross_salary',
@@ -282,6 +284,7 @@ export function AllowancesPage() {
         is_taxable: allowance.is_taxable,
         is_bpjs_object: allowance.is_bpjs_object,
         is_recurring: allowance.is_recurring,
+        is_contract: allowance.is_contract || false,
         amount: allowance.amount || 0,
         percentage: allowance.percentage || 0,
         calculation_base: allowance.calculation_base || 'fixed',
@@ -357,6 +360,7 @@ export function AllowancesPage() {
         is_taxable: formData.is_taxable,
         is_bpjs_object: formData.is_bpjs_object,
         is_recurring: formData.is_recurring,
+        is_contract: formData.is_contract,
         amount: formData.calculation_base === 'fixed' ? formData.amount : undefined,
         percentage: formData.calculation_base !== 'fixed' ? formData.percentage : undefined,
         calculation_base: formData.calculation_base,
@@ -621,18 +625,26 @@ export function AllowancesPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => handleOpenModal(allowance)}
-                        className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(allowance.id)}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {allowance.is_contract ? (
+                        <div className="p-1.5 text-gray-300 cursor-not-allowed" title="Tidak dapat diubah — bagian dari kontrak/OL karyawan">
+                          <Lock className="w-4 h-4" />
+                        </div>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => handleOpenModal(allowance)}
+                            className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(allowance.id)}
+                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -1069,6 +1081,15 @@ export function AllowancesPage() {
                         className="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
                       />
                       <span className="text-sm text-gray-700">Recurring</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.is_contract}
+                        onChange={(e) => setFormData(prev => ({ ...prev, is_contract: e.target.checked }))}
+                        className="w-4 h-4 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
+                      />
+                      <span className="text-sm text-gray-700 font-medium">Contract / OL</span>
                     </label>
                   </div>
                 </div>

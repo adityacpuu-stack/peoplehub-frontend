@@ -79,6 +79,7 @@ export interface CreateEmployeeMovementRequest {
   movement_type: string;
   effective_date: string;
   new_position_id?: number;
+  new_position_name?: string;
   new_department_id?: number;
   new_company_id?: number;
   new_salary?: number;

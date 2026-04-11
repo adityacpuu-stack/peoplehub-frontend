@@ -94,7 +94,7 @@ export function EmployeeDetailPage() {
                   {employee.name}
                 </h1>
                 <p className="text-emerald-100 text-sm mt-1">
-                  {employee.position?.name || 'Employee'}
+                  {employee.job_title || 'Employee'}
                   {employee.department && ` • ${employee.department.name}`}
                 </p>
               </div>
@@ -149,8 +149,8 @@ export function EmployeeDetailPage() {
               <Briefcase className="w-6 h-6 text-white" />
             </div>
           </div>
-          <p className="text-2xl font-bold text-gray-900 mb-1 truncate">{employee.position?.name || '-'}</p>
-          <p className="text-sm text-gray-500">Position</p>
+          <p className="text-2xl font-bold text-gray-900 mb-1 truncate">{employee.job_title || '-'}</p>
+          <p className="text-sm text-gray-500">Job Title</p>
         </div>
 
         <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
@@ -160,7 +160,7 @@ export function EmployeeDetailPage() {
             </div>
           </div>
           <p className="text-2xl font-bold text-gray-900 mb-1">{employee.hire_date ? formatDate(employee.hire_date) : '-'}</p>
-          <p className="text-sm text-gray-500">Hire Date</p>
+          <p className="text-sm text-gray-500">Join Date</p>
         </div>
       </div>
 
@@ -250,7 +250,7 @@ export function EmployeeDetailPage() {
               <div className="grid sm:grid-cols-2 gap-4">
                 <InfoItem label="Company" value={employee.company?.name} />
                 <InfoItem label="Department" value={employee.department?.name} />
-                <InfoItem label="Position" value={employee.position?.name} />
+                <InfoItem label="Job Title" value={employee.job_title} />
                 <InfoItem label="Work Location" value={employee.workLocationRef?.name} />
                 <InfoItem label="Organizational Level" value={employee.organizational_level} />
                 <InfoItem label="Grade Level" value={employee.grade_level} />
@@ -275,7 +275,7 @@ export function EmployeeDetailPage() {
             </div>
             <div className="p-6">
               <div className="grid sm:grid-cols-2 gap-4">
-                <InfoItem label="Hire Date" value={employee.hire_date ? formatDate(employee.hire_date) : null} />
+                <InfoItem label="Join Date" value={employee.hire_date ? formatDate(employee.hire_date) : null} />
                 <InfoItem label="Join Date" value={employee.join_date ? formatDate(employee.join_date) : null} />
                 <InfoItem label="Probation Start" value={employee.probation_start_date ? formatDate(employee.probation_start_date) : null} />
                 <InfoItem label="Probation End" value={employee.probation_end_date ? formatDate(employee.probation_end_date) : null} />
@@ -364,7 +364,6 @@ export function EmployeeDetailPage() {
               <InfoItem label="Name" value={employee.emergency_contact_name} />
               <InfoItem label="Phone" value={employee.emergency_contact_phone} />
               <InfoItem label="Relationship" value={employee.emergency_contact_relationship} />
-              <InfoItem label="Address" value={employee.emergency_contact_address} />
             </div>
           </div>
 

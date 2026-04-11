@@ -41,6 +41,7 @@ export interface Allowance {
   is_taxable: boolean;
   is_bpjs_object: boolean;
   is_recurring: boolean;
+  is_contract?: boolean;
   approved_by?: number;
   approved_at?: string;
   rejection_reason?: string;
