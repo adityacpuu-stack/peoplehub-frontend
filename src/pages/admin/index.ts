@@ -6,3 +6,5 @@ export { default as CompanyAssignmentsPage } from './CompanyAssignmentsPage';
 export { PayrollSettingsPage } from './PayrollSettingsPage';
 export { ApprovalSettingsPage } from './ApprovalSettingsPage';
 export { CompanyFeaturesPage } from './CompanyFeaturesPage';
+export { RoleDashboardConfigPage } from './RoleDashboardConfigPage';
+export { SystemConfigPage } from './SystemConfigPage';

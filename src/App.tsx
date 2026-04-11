@@ -57,6 +57,8 @@ import {
   PayrollSettingsPage,
   ApprovalSettingsPage,
   CompanyFeaturesPage,
+  RoleDashboardConfigPage,
+  SystemConfigPage,
   TemplatesPage,
   AnnouncementsPage,
   MyTeamPage,
@@ -227,6 +229,8 @@ function App() {
           <Route path="/companies" element={<CompaniesPageWrapper />} />
           <Route path="/company-assignments" element={<CompanyAssignmentsPage />} />
           <Route path="/company-features" element={<CompanyFeaturesPage />} />
+          <Route path="/role-dashboard-config" element={<RoleDashboardConfigPage />} />
+          <Route path="/system-config" element={<SystemConfigPage />} />
           <Route path="/audit-logs" element={<AuditLogsPage />} />
           <Route path="/payroll-settings" element={<PayrollSettingsPage />} />
           <Route path="/approval-settings" element={<ApprovalSettingsPage />} />

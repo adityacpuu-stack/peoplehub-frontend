@@ -44,8 +44,11 @@ import { employeeService } from '@/services/employee.service';
 import { companyService, type Company } from '@/services/company.service';
 import type { Employee } from '@/types';
 import { formatDate, formatNumber } from '@/lib/utils';
+import { useAuthStore } from '@/stores/auth.store';
 
 export function EmployeesPage() {
+  const { user } = useAuthStore();
+  const isGroupCEO = user?.roles?.includes('Group CEO');
   const [searchParams, setSearchParams] = useSearchParams();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -266,6 +269,7 @@ export function EmployeesPage() {
             </div>
 
             <div className="flex flex-wrap gap-3">
+              {!isGroupCEO && (
               <button
                 onClick={handleExport}
                 disabled={isExporting}
@@ -274,10 +278,14 @@ export function EmployeesPage() {
                 <Download className={`h-4 w-4 ${isExporting ? 'animate-bounce' : ''}`} />
                 {isExporting ? 'Exporting...' : 'Export'}
               </button>
+              )}
+              {!isGroupCEO && (
               <button className="px-5 py-2.5 bg-white/20 backdrop-blur-xl text-white rounded-xl hover:bg-white/30 transition text-sm font-medium border border-white/30 shadow-lg flex items-center gap-2">
                 <Upload className="h-4 w-4" />
                 Import
               </button>
+              )}
+              {!isGroupCEO && (
               <Link
                 to="/employees/create"
                 className="px-5 py-2.5 bg-white text-blue-600 rounded-xl hover:bg-blue-50 transition text-sm font-bold shadow-lg flex items-center gap-2"
@@ -285,6 +293,7 @@ export function EmployeesPage() {
                 <Plus className="h-4 w-4" />
                 Add Employee
               </Link>
+              )}
             </div>
           </div>
         </div>
@@ -557,7 +566,7 @@ export function EmployeesPage() {
                       </div>
                       <div className="flex items-center text-xs text-gray-600">
                         <Briefcase className="h-3.5 w-3.5 text-gray-400 mr-2" />
-                        <span className="truncate">{employee.position?.name || 'N/A'}</span>
+                        <span className="truncate">{employee.job_title || 'N/A'}</span>
                       </div>
                       <div className="flex items-center text-xs text-gray-600">
                         <MapPin className="h-3.5 w-3.5 text-gray-400 mr-2" />
@@ -588,7 +597,7 @@ export function EmployeesPage() {
                         >
                           <Eye className="h-4 w-4" />
                         </Link>
-                        {activeTab !== 'inactive' && (
+                        {activeTab !== 'inactive' && !isGroupCEO && (
                           <Link
                             to={`/employees/${employee.id}/edit`}
                             className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
@@ -649,7 +658,7 @@ export function EmployeesPage() {
                       <span className="text-gray-700">{employee.department?.name || '-'}</span>
                     </TableCell>
                     <TableCell className="hidden xl:table-cell">
-                      <span className="text-gray-700">{employee.position?.name || '-'}</span>
+                      <span className="text-gray-700">{employee.job_title || '-'}</span>
                     </TableCell>
                     <TableCell>
                       <Badge variant={getStatusVariant(employee.employment_status || 'active')}>
@@ -682,7 +691,7 @@ export function EmployeesPage() {
                         >
                           <Eye className="h-4 w-4 text-gray-400 group-hover:text-blue-600" />
                         </Link>
-                        {activeTab !== 'inactive' && (
+                        {activeTab !== 'inactive' && !isGroupCEO && (
                           <Link
                             to={`/employees/${employee.id}/edit`}
                             className="p-2 rounded-lg hover:bg-indigo-50 transition-colors group"

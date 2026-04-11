@@ -58,6 +58,7 @@ export interface User {
     company_id: number;
     department_id: number;
     position_id: number;
+    job_title?: string;
     position?: { name: string };
     employment_status: string;
     profile_completed: boolean;
@@ -326,6 +327,7 @@ export interface Position {
   code?: string;
   description?: string;
   department_id?: number;
+  company_id?: number;
   level?: number;
   department?: Department;
   is_active: boolean;

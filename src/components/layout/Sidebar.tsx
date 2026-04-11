@@ -5,6 +5,7 @@ import { useSidebarStore } from '@/stores/sidebar.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { leaveService } from '@/services/leave.service';
 import { overtimeService } from '@/services/overtime.service';
+import { getSidebarConfig, isMenuVisible } from '@/pages/admin/RoleDashboardConfigPage';
 import {
   LayoutDashboard,
   Users,
@@ -49,6 +50,7 @@ import {
   UserCheck,
   MinusCircle,
   MapPin,
+  Settings,
 } from 'lucide-react';
 
 interface MenuItem {
@@ -97,9 +99,9 @@ const superAdminMenu = {
       label: 'Company Assignments',
     },
     {
-      path: '/company-features',
-      icon: Server,
-      label: 'Company Features',
+      path: '/system-config',
+      icon: Settings,
+      label: 'System Config',
     },
     {
       path: '/work-locations',
@@ -693,6 +695,18 @@ export function Sidebar() {
     window.location.href = '/login';
   };
 
+  // Sidebar role config for menu visibility
+  const configRole = userRoles.includes('HR Manager') ? 'HR Manager'
+    : userRoles.includes('HR Staff') ? 'HR Staff'
+    : isManager ? 'Manager'
+    : isEmployee ? 'Employee'
+    : null;
+  const sidebarConfig = configRole ? getSidebarConfig() : null;
+  const canShow = (path: string): boolean => {
+    if (!sidebarConfig || !configRole) return true;
+    return isMenuVisible(sidebarConfig, configRole, path);
+  };
+
   // Filter items for non-super admin roles and company features
   const filteredOperationsItems = operationsItems.filter((item) => {
     // Check role access
@@ -701,8 +715,37 @@ export function Sidebar() {
     // Check company feature toggles
     if (item.path === '/attendance' && !attendanceEnabled) return false;
 
+    // Check sidebar config
+    if (!canShow(item.path)) return false;
+
     return true;
   });
+
+  // Filtered dropdowns for HR role
+  const filteredLeaveDropdown = { ...leaveDropdown, items: leaveDropdown.items.filter(i => canShow(i.path)) };
+  const filteredPayrollDropdown = { ...payrollDropdown, items: payrollDropdown.items.filter(i => canShow(i.path)) };
+  const filteredCompensationDropdown = { ...compensationDropdown, items: compensationDropdown.items.filter(i => canShow(i.path)) };
+  const filteredDocumentsDropdown = { ...documentsDropdown, items: documentsDropdown.items.filter(i => canShow(i.path)) };
+  const filteredResourcesDropdown = { ...resourcesDropdown, items: resourcesDropdown.items.filter(i => canShow(i.path)) };
+  const filteredMasterDataDropdown = { ...masterDataDropdown, items: masterDataDropdown.items.filter(i => canShow(i.path)) };
+
+  // Filtered for Manager
+  const filteredManagerMenuItems = managerMenuItems.filter(item => {
+    if (item.path === '/team-attendance' && !attendanceEnabled) return false;
+    if (item.path === '/team-overtime' && !attendanceEnabled) return false;
+    if (item.path === '/leave-approval' && !leaveEnabled) return false;
+    if (item.path === '/my-leave' && !leaveEnabled) return false;
+    return canShow(item.path);
+  });
+  const filteredManagerResourcesDropdown = { ...managerResourcesDropdown, items: managerResourcesDropdown.items.filter(i => canShow(i.path)) };
+
+  // Filtered for Employee
+  const filteredEmployeeMenuItems = employeeMenuItems.filter(item => {
+    if (item.path === '/attendance' && !attendanceEnabled) return false;
+    if (item.path === '/my-leave' && !leaveEnabled) return false;
+    return canShow(item.path);
+  });
+  const filteredEmployeeResourcesDropdown = { ...employeeResourcesDropdown, items: employeeResourcesDropdown.items.filter(i => canShow(i.path)) };
 
   return (
     <aside
@@ -801,7 +844,7 @@ export function Sidebar() {
                 "text-xs truncate",
                 isSuperAdmin ? "text-slate-600 font-medium" : isGroupCEO ? "text-amber-600 font-medium" : isCEO ? "text-indigo-600 font-medium" : isTax ? "text-emerald-600 font-medium" : "text-gray-500"
               )}>
-                {user.employee?.position?.name || '-'}
+                {user.employee?.job_title || user.employee?.position?.name || '-'}
               </p>
             </div>
           </div>
@@ -1127,13 +1170,7 @@ export function Sidebar() {
 
             {/* Team Management */}
             {!isCollapsed && <NavLabel>Team Management</NavLabel>}
-            {managerMenuItems.filter((item) => {
-              if (item.path === '/team-attendance' && !attendanceEnabled) return false;
-              if (item.path === '/team-overtime' && !attendanceEnabled) return false;
-              if (item.path === '/leave-approval' && !leaveEnabled) return false;
-              if (item.path === '/my-leave' && !leaveEnabled) return false;
-              return true;
-            }).map((item) => (
+            {filteredManagerMenuItems.map((item) => (
               <NavItem
                 key={item.path}
                 item={item}
@@ -1143,15 +1180,19 @@ export function Sidebar() {
             ))}
 
             {/* Resources Section for Manager */}
-            {!isCollapsed && <NavLabel>Resources</NavLabel>}
-            <NavDropdown
-              dropdown={managerResourcesDropdown}
-              isOpen={isDropdownOpen(managerResourcesDropdown.label + '-manager') || isDropdownActive(managerResourcesDropdown.items)}
-              isActive={isDropdownActive(managerResourcesDropdown.items)}
-              isCollapsed={isCollapsed}
-              onToggle={() => toggleDropdown(managerResourcesDropdown.label + '-manager')}
-              currentPath={location.pathname}
-            />
+            {filteredManagerResourcesDropdown.items.length > 0 && (
+              <>
+                {!isCollapsed && <NavLabel>Resources</NavLabel>}
+                <NavDropdown
+                  dropdown={filteredManagerResourcesDropdown}
+                  isOpen={isDropdownOpen(filteredManagerResourcesDropdown.label + '-manager') || isDropdownActive(filteredManagerResourcesDropdown.items)}
+                  isActive={isDropdownActive(filteredManagerResourcesDropdown.items)}
+                  isCollapsed={isCollapsed}
+                  onToggle={() => toggleDropdown(filteredManagerResourcesDropdown.label + '-manager')}
+                  currentPath={location.pathname}
+                />
+              </>
+            )}
           </>
         ) : isEmployee ? (
           <>
@@ -1165,11 +1206,7 @@ export function Sidebar() {
 
             {/* Self Service */}
             {!isCollapsed && <NavLabel>Self Service</NavLabel>}
-            {employeeMenuItems.filter((item) => {
-              if (item.path === '/attendance' && !attendanceEnabled) return false;
-              if (item.path === '/my-leave' && !leaveEnabled) return false;
-              return true;
-            }).map((item) => (
+            {filteredEmployeeMenuItems.map((item) => (
               <NavItem
                 key={item.path}
                 item={item}
@@ -1179,15 +1216,19 @@ export function Sidebar() {
             ))}
 
             {/* Resources Section for Employee */}
-            {!isCollapsed && <NavLabel>Resources</NavLabel>}
-            <NavDropdown
-              dropdown={employeeResourcesDropdown}
-              isOpen={isDropdownOpen(employeeResourcesDropdown.label + '-employee') || isDropdownActive(employeeResourcesDropdown.items)}
-              isActive={isDropdownActive(employeeResourcesDropdown.items)}
-              isCollapsed={isCollapsed}
-              onToggle={() => toggleDropdown(employeeResourcesDropdown.label + '-employee')}
-              currentPath={location.pathname}
-            />
+            {filteredEmployeeResourcesDropdown.items.length > 0 && (
+              <>
+                {!isCollapsed && <NavLabel>Resources</NavLabel>}
+                <NavDropdown
+                  dropdown={filteredEmployeeResourcesDropdown}
+                  isOpen={isDropdownOpen(filteredEmployeeResourcesDropdown.label + '-employee') || isDropdownActive(filteredEmployeeResourcesDropdown.items)}
+                  isActive={isDropdownActive(filteredEmployeeResourcesDropdown.items)}
+                  isCollapsed={isCollapsed}
+                  onToggle={() => toggleDropdown(filteredEmployeeResourcesDropdown.label + '-employee')}
+                  currentPath={location.pathname}
+                />
+              </>
+            )}
           </>
         ) : (
           <>
@@ -1212,81 +1253,81 @@ export function Sidebar() {
             ))}
 
             {/* Leave Management Dropdown */}
-            {hasAccess(leaveDropdown.roles) && leaveEnabled && (
+            {hasAccess(leaveDropdown.roles) && leaveEnabled && filteredLeaveDropdown.items.length > 0 && (
               <NavDropdown
-                dropdown={leaveDropdown}
-                isOpen={isDropdownOpen(leaveDropdown.label) || isDropdownActive(leaveDropdown.items)}
-                isActive={isDropdownActive(leaveDropdown.items)}
+                dropdown={filteredLeaveDropdown}
+                isOpen={isDropdownOpen(filteredLeaveDropdown.label) || isDropdownActive(filteredLeaveDropdown.items)}
+                isActive={isDropdownActive(filteredLeaveDropdown.items)}
                 isCollapsed={isCollapsed}
-                onToggle={() => toggleDropdown(leaveDropdown.label)}
+                onToggle={() => toggleDropdown(filteredLeaveDropdown.label)}
                 currentPath={location.pathname}
               />
             )}
 
             {/* Payroll Dropdown */}
-            {hasAccess(payrollDropdown.roles) && payrollEnabled && (
+            {hasAccess(payrollDropdown.roles) && payrollEnabled && filteredPayrollDropdown.items.length > 0 && (
               <NavDropdown
-                dropdown={payrollDropdown}
-                isOpen={isDropdownOpen(payrollDropdown.label) || isDropdownActive(payrollDropdown.items)}
-                isActive={isDropdownActive(payrollDropdown.items)}
+                dropdown={filteredPayrollDropdown}
+                isOpen={isDropdownOpen(filteredPayrollDropdown.label) || isDropdownActive(filteredPayrollDropdown.items)}
+                isActive={isDropdownActive(filteredPayrollDropdown.items)}
                 isCollapsed={isCollapsed}
-                onToggle={() => toggleDropdown(payrollDropdown.label)}
+                onToggle={() => toggleDropdown(filteredPayrollDropdown.label)}
                 currentPath={location.pathname}
               />
             )}
 
             {/* Compensation Dropdown */}
-            {hasAccess(compensationDropdown.roles) && (
+            {hasAccess(compensationDropdown.roles) && filteredCompensationDropdown.items.length > 0 && (
               <NavDropdown
-                dropdown={compensationDropdown}
-                isOpen={isDropdownOpen(compensationDropdown.label) || isDropdownActive(compensationDropdown.items)}
-                isActive={isDropdownActive(compensationDropdown.items)}
+                dropdown={filteredCompensationDropdown}
+                isOpen={isDropdownOpen(filteredCompensationDropdown.label) || isDropdownActive(filteredCompensationDropdown.items)}
+                isActive={isDropdownActive(filteredCompensationDropdown.items)}
                 isCollapsed={isCollapsed}
-                onToggle={() => toggleDropdown(compensationDropdown.label)}
+                onToggle={() => toggleDropdown(filteredCompensationDropdown.label)}
                 currentPath={location.pathname}
               />
             )}
 
             {/* Documents Section */}
-            {hasAccess(documentsDropdown.roles) && (
+            {hasAccess(documentsDropdown.roles) && filteredDocumentsDropdown.items.length > 0 && (
               <>
                 {!isCollapsed && <NavLabel>Documents</NavLabel>}
                 <NavDropdown
-                  dropdown={documentsDropdown}
-                  isOpen={isDropdownOpen(documentsDropdown.label) || isDropdownActive(documentsDropdown.items)}
-                  isActive={isDropdownActive(documentsDropdown.items)}
+                  dropdown={filteredDocumentsDropdown}
+                  isOpen={isDropdownOpen(filteredDocumentsDropdown.label) || isDropdownActive(filteredDocumentsDropdown.items)}
+                  isActive={isDropdownActive(filteredDocumentsDropdown.items)}
                   isCollapsed={isCollapsed}
-                  onToggle={() => toggleDropdown(documentsDropdown.label)}
+                  onToggle={() => toggleDropdown(filteredDocumentsDropdown.label)}
                   currentPath={location.pathname}
                 />
               </>
             )}
 
             {/* Resources Section */}
-            {hasAccess(resourcesDropdown.roles) && (
+            {hasAccess(resourcesDropdown.roles) && filteredResourcesDropdown.items.length > 0 && (
               <>
                 {!isCollapsed && <NavLabel>Resources</NavLabel>}
                 <NavDropdown
-                  dropdown={resourcesDropdown}
-                  isOpen={isDropdownOpen(resourcesDropdown.label) || isDropdownActive(resourcesDropdown.items)}
-                  isActive={isDropdownActive(resourcesDropdown.items)}
+                  dropdown={filteredResourcesDropdown}
+                  isOpen={isDropdownOpen(filteredResourcesDropdown.label) || isDropdownActive(filteredResourcesDropdown.items)}
+                  isActive={isDropdownActive(filteredResourcesDropdown.items)}
                   isCollapsed={isCollapsed}
-                  onToggle={() => toggleDropdown(resourcesDropdown.label)}
+                  onToggle={() => toggleDropdown(filteredResourcesDropdown.label)}
                   currentPath={location.pathname}
                 />
               </>
             )}
 
             {/* Master Data Section */}
-            {hasAccess(masterDataDropdown.roles) && (
+            {hasAccess(masterDataDropdown.roles) && filteredMasterDataDropdown.items.length > 0 && (
               <>
                 {!isCollapsed && <NavLabel>Master Data</NavLabel>}
                 <NavDropdown
-                  dropdown={masterDataDropdown}
-                  isOpen={isDropdownOpen(masterDataDropdown.label) || isDropdownActive(masterDataDropdown.items)}
-                  isActive={isDropdownActive(masterDataDropdown.items)}
+                  dropdown={filteredMasterDataDropdown}
+                  isOpen={isDropdownOpen(filteredMasterDataDropdown.label) || isDropdownActive(filteredMasterDataDropdown.items)}
+                  isActive={isDropdownActive(filteredMasterDataDropdown.items)}
                   isCollapsed={isCollapsed}
-                  onToggle={() => toggleDropdown(masterDataDropdown.label)}
+                  onToggle={() => toggleDropdown(filteredMasterDataDropdown.label)}
                   currentPath={location.pathname}
                 />
               </>

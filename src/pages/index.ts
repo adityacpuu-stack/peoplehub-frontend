@@ -113,7 +113,7 @@ export { PayrollPage } from './payroll/PayrollPage';
 export { FreelanceInternshipPayrollPage } from './payroll/FreelanceInternshipPayrollPage';
 
 // Admin (Super Admin)
-export { UsersPage, RolesPage, CompaniesPage as AdminCompaniesPage, AuditLogsPage, CompanyAssignmentsPage, PayrollSettingsPage, ApprovalSettingsPage, CompanyFeaturesPage } from './admin';
+export { UsersPage, RolesPage, CompaniesPage as AdminCompaniesPage, AuditLogsPage, CompanyAssignmentsPage, PayrollSettingsPage, ApprovalSettingsPage, CompanyFeaturesPage, RoleDashboardConfigPage, SystemConfigPage } from './admin';
 
 // Analytics (Group CEO)
 export { WorkforceAnalyticsPage } from './analytics/WorkforceAnalyticsPage';

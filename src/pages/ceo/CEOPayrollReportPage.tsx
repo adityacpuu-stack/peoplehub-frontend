@@ -85,7 +85,7 @@ export function CEOPayrollReportPage() {
       const query = searchQuery.toLowerCase();
       result = result.filter(
         (p) =>
-          (p.employee as { full_name?: string } | undefined)?.full_name?.toLowerCase().includes(query) ||
+          p.employee?.name?.toLowerCase().includes(query) ||
           p.employee?.employee_id?.toLowerCase().includes(query) ||
           p.employee?.position?.name?.toLowerCase().includes(query)
       );
@@ -106,7 +106,7 @@ export function CEOPayrollReportPage() {
       let comparison = 0;
       switch (sortField) {
         case 'name':
-          comparison = ((a.employee as { full_name?: string } | undefined)?.full_name || '').localeCompare((b.employee as { full_name?: string } | undefined)?.full_name || '');
+          comparison = (a.employee?.name || '').localeCompare(b.employee?.name || '');
           break;
         case 'gross':
           comparison = (Number(a.gross_salary) || 0) - (Number(b.gross_salary) || 0);
@@ -435,7 +435,7 @@ export function CEOPayrollReportPage() {
                       <td className="px-4 py-4">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center text-white font-bold text-sm">
-                            {(payroll.employee as { full_name?: string } | undefined)?.full_name
+                            {payroll.employee?.name
                               ?.split(' ')
                               .map((n: string) => n[0])
                               .join('')
@@ -443,7 +443,7 @@ export function CEOPayrollReportPage() {
                           </div>
                           <div>
                             <p className="font-semibold text-gray-900 text-sm">
-                              {(payroll.employee as { full_name?: string } | undefined)?.full_name || 'Unknown'}
+                              {payroll.employee?.name || 'Unknown'}
                             </p>
                             <p className="text-xs text-gray-500">
                               {payroll.employee?.employee_id} • {payroll.employee?.position?.name || '-'}
@@ -536,14 +536,14 @@ export function CEOPayrollReportPage() {
               {/* Employee Info */}
               <div className="flex items-center gap-4 pb-4 border-b border-gray-200">
                 <div className="w-14 h-14 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center text-white font-bold text-lg">
-                  {(selectedPayroll.employee as { full_name?: string } | undefined)?.full_name
+                  {selectedPayroll.employee?.name
                     ?.split(' ')
                     .map((n: string) => n[0])
                     .join('')
                     .substring(0, 2) || '?'}
                 </div>
                 <div>
-                  <h4 className="font-bold text-gray-900">{(selectedPayroll.employee as { full_name?: string } | undefined)?.full_name}</h4>
+                  <h4 className="font-bold text-gray-900">{selectedPayroll.employee?.name}</h4>
                   <p className="text-sm text-gray-500">
                     {selectedPayroll.employee?.employee_id} • {selectedPayroll.employee?.position?.name}
                   </p>
