@@ -145,7 +145,7 @@ export function LeaveEntitlementsPage() {
         position: emp.position || undefined,
         join_date: emp.join_date,
         probation_end_date: (emp as any).probation_end_date,
-        employment_status: emp.employment_status,
+        employment_status: emp.employment_status ?? undefined,
       })));
       setTotalPages(response.pagination?.totalPages || 1);
       setTotalItems(response.pagination?.total || response.data.length);
@@ -223,7 +223,7 @@ export function LeaveEntitlementsPage() {
             position: emp.position || undefined,
             join_date: emp.join_date,
             probation_end_date: (emp as any).probation_end_date,
-            employment_status: emp.employment_status,
+            employment_status: emp.employment_status ?? undefined,
           },
           balances,
         };
