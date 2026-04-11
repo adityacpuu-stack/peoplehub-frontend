@@ -88,7 +88,10 @@ export function MovementPage() {
       setDepartments(departmentsRes.data);
       setPositions(positionsRes.data);
       if (companiesRes.data.length > 0) {
-        setSelectedCompanyId(companiesRes.data[0].id);
+        const saved = localStorage.getItem('movement_selected_company');
+        const savedId = saved ? Number(saved) : null;
+        const valid = savedId && companiesRes.data.some(c => c.id === savedId);
+        setSelectedCompanyId(valid ? savedId : companiesRes.data[0].id);
       }
     } catch (error) {
       console.error('Failed to fetch initial data:', error);
@@ -247,7 +250,7 @@ export function MovementPage() {
     try {
       const data: CreateEmployeeMovementRequest = {
         employee_id: formData.employee_id!,
-        company_id: selectedCompanyId || undefined,
+        company_id: selectedEmployee?.company_id || selectedCompanyId || undefined,
         movement_type: formData.movement_type!,
         effective_date: formData.effective_date!,
         new_position_id: useManualJobTitle ? undefined : formData.new_position_id,
@@ -265,6 +268,10 @@ export function MovementPage() {
       } else {
         await employeeMovementService.create(data);
         toast.success('Movement created successfully');
+        // Auto-switch list filter to the employee's company
+        if (selectedEmployee?.company_id && selectedEmployee.company_id !== selectedCompanyId) {
+          setSelectedCompanyId(selectedEmployee.company_id);
+        }
       }
       setShowModal(false);
       resetForm();
@@ -464,12 +471,19 @@ export function MovementPage() {
                 <select
                   value={selectedCompanyId || ''}
                   onChange={(e) => {
-                    setSelectedCompanyId(Number(e.target.value));
+                    const id = Number(e.target.value);
+                    setSelectedCompanyId(id);
+                    localStorage.setItem('movement_selected_company', String(id));
                     setPagination(prev => ({ ...prev, page: 1 }));
                   }}
                   className="appearance-none pl-10 pr-10 py-2.5 bg-white/20 backdrop-blur-xl text-white rounded-xl border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50 text-sm font-medium cursor-pointer min-w-[200px]"
                 >
-                  {companies.map(company => (
+                  {[...companies].sort((a, b) => {
+                    const order = ['PATH FINDER', 'GROWPATH', 'LAMPUNG FARM', 'BUKA CERITA', 'UOR KREATIF', 'PILAR DANA'];
+                    const aIdx = order.findIndex(k => a.name.toUpperCase().includes(k));
+                    const bIdx = order.findIndex(k => b.name.toUpperCase().includes(k));
+                    return (aIdx === -1 ? 99 : aIdx) - (bIdx === -1 ? 99 : bIdx);
+                  }).map(company => (
                     <option key={company.id} value={company.id} className="text-gray-900">
                       {company.name}
                     </option>
@@ -585,8 +599,6 @@ export function MovementPage() {
               <option value="transfer">Transfer</option>
               <option value="mutation">Mutation</option>
               <option value="salary_adjustment">Salary Adjustment</option>
-              <option value="department_change">Department Change</option>
-              <option value="position_change">Position Change</option>
               <option value="company_transfer">Company Transfer</option>
             </select>
             <select
@@ -883,8 +895,6 @@ export function MovementPage() {
                       <option value="transfer">Transfer</option>
                       <option value="mutation">Mutation</option>
                       <option value="salary_adjustment">Salary Adjustment</option>
-                      <option value="department_change">Department Change</option>
-                      <option value="position_change">Position Change</option>
                       <option value="company_transfer">Company Transfer</option>
                     </select>
                   </div>
@@ -911,6 +921,12 @@ export function MovementPage() {
                       <label className="block text-sm font-medium text-gray-700">
                         New Position <span className="text-red-500">*</span>
                       </label>
+                      <div className="flex items-center gap-3">
+                        {(formData.movement_type === 'promotion' || formData.movement_type === 'demotion') && selectedEmployee?.job_title && (
+                          <span className="text-xs text-gray-500">
+                            Current: <span className="font-semibold text-amber-600">{selectedEmployee.job_title}</span>
+                          </span>
+                        )}
                       <button
                         type="button"
                         onClick={() => {
@@ -922,6 +938,7 @@ export function MovementPage() {
                       >
                         {useManualJobTitle ? 'Pilih dari daftar' : 'Tidak ada? Isi manual'}
                       </button>
+                      </div>
                     </div>
                     {useManualJobTitle ? (
                       <input
@@ -977,7 +994,7 @@ export function MovementPage() {
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <label className="block text-sm font-medium text-gray-700">
-                        New Salary <span className="text-red-500">*</span>
+                        {formData.movement_type === 'demotion' ? 'Reduced Salary' : formData.movement_type === 'promotion' ? 'Increased Salary' : 'New Salary'} <span className="text-red-500">*</span>
                       </label>
                       {selectedEmployee?.basic_salary ? (
                         <span className="text-xs text-gray-500">
@@ -985,13 +1002,26 @@ export function MovementPage() {
                         </span>
                       ) : null}
                     </div>
-                    <input
-                      type="number"
-                      value={formData.new_salary || ''}
-                      onChange={(e) => setFormData(prev => ({ ...prev, new_salary: e.target.value ? Number(e.target.value) : undefined }))}
-                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
-                      placeholder="Enter new salary..."
-                    />
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-gray-500 pointer-events-none">Rp</span>
+                      <input
+                        type="text"
+                        value={formData.new_salary ? Number(formData.new_salary).toLocaleString('id-ID') : ''}
+                        onChange={(e) => {
+                          const raw = e.target.value.replace(/\./g, '').replace(/[^0-9]/g, '');
+                          setFormData(prev => ({ ...prev, new_salary: raw ? Number(raw) : undefined }));
+                        }}
+                        className={`w-full pl-10 pr-4 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 ${
+                          formData.movement_type === 'demotion' && formData.new_salary && selectedEmployee?.basic_salary && formData.new_salary >= selectedEmployee.basic_salary
+                            ? 'border-red-400 bg-red-50'
+                            : 'border-gray-200'
+                        }`}
+                        placeholder="0"
+                      />
+                    </div>
+                    {formData.movement_type === 'demotion' && formData.new_salary && selectedEmployee?.basic_salary && formData.new_salary >= selectedEmployee.basic_salary && (
+                      <p className="text-xs text-red-500 mt-1">Demotion salary must be lower than current salary</p>
+                    )}
                   </div>
                 )}
 
@@ -1127,7 +1157,7 @@ export function MovementPage() {
                       {viewingMovement.salary_change > 0 ? '+' : ''}{formatCurrency(viewingMovement.salary_change)}
                       {viewingMovement.salary_change_percentage && (
                         <span className="text-sm font-medium ml-2">
-                          ({viewingMovement.salary_change_percentage > 0 ? '+' : ''}{viewingMovement.salary_change_percentage.toFixed(1)}%)
+                          ({Number(viewingMovement.salary_change_percentage) > 0 ? '+' : ''}{Number(viewingMovement.salary_change_percentage).toFixed(1)}%)
                         </span>
                       )}
                     </p>
