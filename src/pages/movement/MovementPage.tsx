@@ -975,9 +975,16 @@ export function MovementPage() {
                 {/* New Salary */}
                 {currentFieldConfig.salary && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      New Salary <span className="text-red-500">*</span>
-                    </label>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-sm font-medium text-gray-700">
+                        New Salary <span className="text-red-500">*</span>
+                      </label>
+                      {selectedEmployee?.basic_salary ? (
+                        <span className="text-xs text-gray-500">
+                          Current salary: <span className="font-semibold text-amber-600">{formatCurrency(selectedEmployee.basic_salary)}</span>
+                        </span>
+                      ) : null}
+                    </div>
                     <input
                       type="number"
                       value={formData.new_salary || ''}
