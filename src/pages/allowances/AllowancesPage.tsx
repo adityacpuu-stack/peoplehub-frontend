@@ -316,6 +316,7 @@ export function AllowancesPage() {
         is_taxable: true,
         is_bpjs_object: false,
         is_recurring: true,
+        is_contract: false,
         amount: 0,
         percentage: 0,
         calculation_base: 'fixed',
