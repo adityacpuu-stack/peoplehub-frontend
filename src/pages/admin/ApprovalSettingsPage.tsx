@@ -101,7 +101,8 @@ export function ApprovalSettingsPage() {
     setChanges(prev => {
       const newChanges = new Map(prev);
       const existing = newChanges.get(employeeId) || {};
-      newChanges.set(employeeId, { ...existing, [field]: value });
+      // Send null (not undefined) so backend clears the field
+      newChanges.set(employeeId, { ...existing, [field]: value ?? null });
       return newChanges;
     });
 

@@ -605,6 +605,10 @@ export function MyLeavePage() {
                     <p className="text-sm text-indigo-800">
                       Request akan dikirim ke: <strong>{myProfile.leaveApprover.name}</strong>
                     </p>
+                  ) : myProfile?.manager ? (
+                    <p className="text-sm text-indigo-800">
+                      Request akan dikirim ke: <strong>{myProfile.manager.name}</strong>
+                    </p>
                   ) : (
                     <p className="text-sm text-indigo-700">
                       Belum ada leave approver. Request akan dikirim ke P&C.

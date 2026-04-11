@@ -144,6 +144,8 @@ export function LeaveEntitlementsPage() {
         department: emp.department || undefined,
         position: emp.position || undefined,
         join_date: emp.join_date,
+        probation_end_date: (emp as any).probation_end_date,
+        employment_status: emp.employment_status,
       })));
       setTotalPages(response.pagination?.totalPages || 1);
       setTotalItems(response.pagination?.total || response.data.length);
@@ -220,6 +222,8 @@ export function LeaveEntitlementsPage() {
             department: emp.department || undefined,
             position: emp.position || undefined,
             join_date: emp.join_date,
+            probation_end_date: (emp as any).probation_end_date,
+            employment_status: emp.employment_status,
           },
           balances,
         };
@@ -369,10 +373,13 @@ export function LeaveEntitlementsPage() {
   const handleOpenAllocate = (entitlement: EmployeeEntitlement) => {
     setSelectedEmployee(entitlement);
     const firstType = leaveTypes[0];
+    const proratedDays = firstType
+      ? calculateProratedDays(entitlement.employee.join_date, Number(firstType.default_days) || 0, firstType.code, new Date().getFullYear())
+      : 0;
     setAllocateForm({
       employee_id: entitlement.employee.id,
       leave_type_id: firstType?.id || 0,
-      allocated_days: Number(firstType?.default_days) || 12,
+      allocated_days: proratedDays,
     });
     setShowAllocateModal(true);
   };
@@ -787,7 +794,7 @@ export function LeaveEntitlementsPage() {
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                     Employee
                   </th>
-                  {leaveTypes.slice(0, 4).map(type => (
+                  {leaveTypes.map(type => (
                     <th key={type.id} className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
                       <div className="flex flex-col items-center gap-1">
                         <span>{type.code || type.name}</span>
@@ -821,7 +828,14 @@ export function LeaveEntitlementsPage() {
                             <User className="w-5 h-5 text-cyan-600" />
                           </div>
                           <div>
-                            <p className="font-medium text-gray-900">{ent.employee.name}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium text-gray-900">{ent.employee.name}</p>
+                              {ent.employee.probation_end_date && new Date(ent.employee.probation_end_date) > new Date() && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">
+                                  Probation
+                                </span>
+                              )}
+                            </div>
                             <p className="text-xs text-gray-500">
                               {ent.employee.employee_id}
                               {ent.employee.department?.name && (
@@ -831,7 +845,7 @@ export function LeaveEntitlementsPage() {
                           </div>
                         </div>
                       </td>
-                      {leaveTypes.slice(0, 4).map(type => {
+                      {leaveTypes.map(type => {
                         const balance = ent.balances.find(b => b.leave_type_id === type.id);
                         const allocated = balance?.allocated_days || 0;
                         const remaining = balance?.remaining_days || 0;
@@ -1059,10 +1073,13 @@ export function LeaveEntitlementsPage() {
                     onChange={(e) => {
                       const typeId = Number(e.target.value);
                       const selectedType = leaveTypes.find(t => t.id === typeId);
+                      const proratedDays = selectedType
+                        ? calculateProratedDays(selectedEmployee.employee.join_date, Number(selectedType.default_days) || 0, selectedType.code, new Date().getFullYear())
+                        : 0;
                       setAllocateForm(prev => ({
                         ...prev,
                         leave_type_id: typeId,
-                        allocated_days: Number(selectedType?.default_days) || 0,
+                        allocated_days: proratedDays,
                       }));
                     }}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500"

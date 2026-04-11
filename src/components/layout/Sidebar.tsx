@@ -194,6 +194,7 @@ const leaveDropdown: DropdownMenu = {
   label: 'Leave Management',
   roles: ['Group CEO', 'CEO', 'HR Manager', 'HR Staff', 'Manager', 'Employee'],
   items: [
+    { path: '/my-leave', label: 'My Leave' },
     { path: '/leave', label: 'Leave Requests' },
     { path: '/leave/policy', label: 'Leave Policy' },
     { path: '/leave/entitlements', label: 'Entitlements' },
