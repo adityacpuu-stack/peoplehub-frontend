@@ -84,6 +84,7 @@ export function UsersPage() {
   const [credentialLicenseSkuId, setCredentialLicenseSkuId] = useState('');
   const [m365Licenses, setM365Licenses] = useState<{ available: boolean; licenses: import('@/services/user.service').M365License[] }>({ available: false, licenses: [] });
   const [m365UserStatus, setM365UserStatus] = useState<import('@/services/user.service').M365UserStatus>({ available: false, exists: false, licenses: [] });
+  const [m365UsernameStatus, setM365UsernameStatus] = useState<{ checking: boolean; exists: boolean | null; licenses: import('@/services/user.service').M365UserLicense[] }>({ checking: false, exists: null, licenses: [] });
   const [isSendingCredentials, setIsSendingCredentials] = useState(false);
 
   // Form state
@@ -170,6 +171,26 @@ export function UsersPage() {
     }, 400);
     return () => clearTimeout(timer);
   }, [search]);
+
+  // Debounced M365 check when typing new username
+  useEffect(() => {
+    const emailDomain = credentialModal.user?.employee?.company?.email_domain;
+    if (!credentialUsername || !emailDomain) {
+      setM365UsernameStatus({ checking: false, exists: null });
+      return;
+    }
+    setM365UsernameStatus({ checking: true, exists: null, licenses: [] });
+    const timer = setTimeout(async () => {
+      try {
+        const email = `${credentialUsername}@${emailDomain}`;
+        const status = await userService.getM365UserStatus(email);
+        setM365UsernameStatus({ checking: false, exists: status.exists, licenses: status.licenses || [] });
+      } catch {
+        setM365UsernameStatus({ checking: false, exists: null, licenses: [] });
+      }
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [credentialUsername, credentialModal.user]);
 
   const handleOpenCreateModal = async () => {
     setFormData({
@@ -822,9 +843,15 @@ export function UsersPage() {
                                 @{emailDomain}
                               </span>
                             </div>
-                            <p className="text-xs text-gray-400 mt-1">
-                              Will create Microsoft 365 mailbox & set as login email
-                            </p>
+                            {m365UsernameStatus.checking ? (
+                              <p className="text-xs text-gray-400 mt-1">Checking M365...</p>
+                            ) : m365UsernameStatus.exists === true ? (
+                              <p className="text-xs text-amber-600 mt-1">⚠ Email already exists in M365 — will link to existing account</p>
+                            ) : m365UsernameStatus.exists === false ? (
+                              <p className="text-xs text-green-600 mt-1">✓ Available — new M365 account will be created</p>
+                            ) : (
+                              <p className="text-xs text-gray-400 mt-1">Will create Microsoft 365 mailbox & set as login email</p>
+                            )}
                           </div>
                         )}
                       </div>
@@ -836,27 +863,48 @@ export function UsersPage() {
               return null;
             })()}
 
-            {/* M365 License Picker - only show when user has no license yet AND has/will have office email */}
-            {m365Licenses.available && m365Licenses.licenses.length > 0 && credentialModal.user.employee?.company?.email_domain && m365UserStatus.licenses.length === 0 && (credentialUsername || (credentialModal.user.email && !credentialModal.user.email.endsWith('@temp.local') && credentialModal.user.email.endsWith(`@${credentialModal.user.employee.company.email_domain}`))) && (
+            {/* M365 License Section */}
+            {m365Licenses.available && credentialModal.user.employee?.company?.email_domain && (credentialUsername || (credentialModal.user.email && !credentialModal.user.email.endsWith('@temp.local') && credentialModal.user.email.endsWith(`@${credentialModal.user.employee.company.email_domain}`))) && (
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   M365 License
                 </label>
-                <select
-                  value={credentialLicenseSkuId}
-                  onChange={(e) => setCredentialLicenseSkuId(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                >
-                  <option value="">No license (Unlicensed)</option>
-                  {m365Licenses.licenses.map((lic) => (
-                    <option key={lic.skuId} value={lic.skuId} disabled={lic.availableUnits <= 0}>
-                      {lic.displayName} ({lic.availableUnits}/{lic.totalUnits} available)
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-gray-400 mt-1">
-                  Assign Microsoft 365 license to user
-                </p>
+                {/* Existing username typed + already has license */}
+                {credentialUsername && m365UsernameStatus.exists && m365UsernameStatus.licenses.length > 0 ? (
+                  <div className="px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-blue-800 font-medium">Already licensed:</p>
+                    {m365UsernameStatus.licenses.map((lic) => (
+                      <p key={lic.skuId} className="text-sm text-blue-700">{lic.displayName}</p>
+                    ))}
+                    <p className="text-xs text-blue-500 mt-1">No license change needed</p>
+                  </div>
+                ) : m365UserStatus.licenses.length > 0 ? (
+                  /* Current email already has license */
+                  <div className="px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-blue-800 font-medium">Already licensed:</p>
+                    {m365UserStatus.licenses.map((lic) => (
+                      <p key={lic.skuId} className="text-sm text-blue-700">{lic.displayName}</p>
+                    ))}
+                    <p className="text-xs text-blue-500 mt-1">No license change needed</p>
+                  </div>
+                ) : m365Licenses.licenses.length > 0 ? (
+                  /* No license yet — show picker */
+                  <>
+                    <select
+                      value={credentialLicenseSkuId}
+                      onChange={(e) => setCredentialLicenseSkuId(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    >
+                      <option value="">No license (Unlicensed)</option>
+                      {m365Licenses.licenses.map((lic) => (
+                        <option key={lic.skuId} value={lic.skuId} disabled={lic.availableUnits <= 0}>
+                          {lic.displayName} ({lic.availableUnits}/{lic.totalUnits} available)
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-400 mt-1">Assign Microsoft 365 license to user</p>
+                  </>
+                ) : null}
               </div>
             )}
 
