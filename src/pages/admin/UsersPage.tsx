@@ -176,7 +176,7 @@ export function UsersPage() {
   useEffect(() => {
     const emailDomain = credentialModal.user?.employee?.company?.email_domain;
     if (!credentialUsername || !emailDomain) {
-      setM365UsernameStatus({ checking: false, exists: null });
+      setM365UsernameStatus({ checking: false, exists: null, licenses: [] });
       return;
     }
     setM365UsernameStatus({ checking: true, exists: null, licenses: [] });
