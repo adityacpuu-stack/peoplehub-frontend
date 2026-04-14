@@ -18,23 +18,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Send,
+  Loader2,
 } from 'lucide-react';
-import {
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-  TableEmpty,
-  Badge,
-  PageSpinner,
-} from '@/components/ui';
 import { formatDate } from '@/lib/utils';
 import { toast } from 'react-hot-toast';
 import { userService, type User, type UserStats, type CreateUserDTO, type UpdateUserDTO } from '@/services/user.service';
@@ -53,6 +38,19 @@ interface UnlinkedEmployee {
   name: string;
 }
 
+const INPUT = 'w-full px-3 py-2 text-sm rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:border-slate-400 focus:outline-none transition-all';
+
+const ROLE_COLORS: Record<string, string> = {
+  'Super Admin': 'bg-purple-100 text-purple-700',
+  'Group CEO': 'bg-red-100 text-red-700',
+  'CEO': 'bg-orange-100 text-orange-700',
+  'HR Manager': 'bg-blue-100 text-blue-700',
+  'HR Staff': 'bg-cyan-100 text-cyan-700',
+  'Manager': 'bg-amber-100 text-amber-700',
+};
+
+const getRoleColor = (name: string) => ROLE_COLORS[name] ?? 'bg-gray-100 text-gray-600';
+
 export function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [stats, setStats] = useState<UserStats | null>(null);
@@ -63,23 +61,12 @@ export function UsersPage() {
   const [total, setTotal] = useState(0);
   const limit = 10;
 
-  // Roles and employees for form
   const [roles, setRoles] = useState<Role[]>([]);
   const [unlinkedEmployees, setUnlinkedEmployees] = useState<UnlinkedEmployee[]>([]);
 
-  // Modal states
-  const [deleteModal, setDeleteModal] = useState<{ open: boolean; user: User | null }>({
-    open: false,
-    user: null,
-  });
-  const [formModal, setFormModal] = useState<{ open: boolean; user: User | null }>({
-    open: false,
-    user: null,
-  });
-  const [credentialModal, setCredentialModal] = useState<{ open: boolean; user: User | null }>({
-    open: false,
-    user: null,
-  });
+  const [deleteModal, setDeleteModal] = useState<{ open: boolean; user: User | null }>({ open: false, user: null });
+  const [formModal, setFormModal] = useState<{ open: boolean; user: User | null }>({ open: false, user: null });
+  const [credentialModal, setCredentialModal] = useState<{ open: boolean; user: User | null }>({ open: false, user: null });
   const [credentialUsername, setCredentialUsername] = useState('');
   const [credentialLicenseSkuId, setCredentialLicenseSkuId] = useState('');
   const [m365Licenses, setM365Licenses] = useState<{ available: boolean; licenses: import('@/services/user.service').M365License[] }>({ available: false, licenses: [] });
@@ -87,20 +74,13 @@ export function UsersPage() {
   const [m365UsernameStatus, setM365UsernameStatus] = useState<{ checking: boolean; exists: boolean | null; licenses: import('@/services/user.service').M365UserLicense[] }>({ checking: false, exists: null, licenses: [] });
   const [isSendingCredentials, setIsSendingCredentials] = useState(false);
 
-  // Form state
   const [formData, setFormData] = useState<{
     email: string;
     password: string;
     employee_id: number | null;
     role_ids: number[];
     is_active: boolean;
-  }>({
-    email: '',
-    password: '',
-    employee_id: null,
-    role_ids: [],
-    is_active: true,
-  });
+  }>({ email: '', password: '', employee_id: null, role_ids: [], is_active: true });
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -110,11 +90,7 @@ export function UsersPage() {
   const fetchUsers = useCallback(async () => {
     try {
       setIsLoading(true);
-      const response = await userService.getAll({
-        page,
-        limit,
-        search: searchRef.current || undefined,
-      });
+      const response = await userService.getAll({ page, limit, search: searchRef.current || undefined });
       setUsers(response.data);
       setTotalPages(response.pagination.totalPages);
       setTotal(response.pagination.total);
@@ -145,8 +121,6 @@ export function UsersPage() {
 
   const fetchUnlinkedEmployees = async () => {
     try {
-      // Fetch all employees - backend doesn't support has_user filter yet
-      // For now, just fetch employees and let user select any
       const response = await employeeService.getAll({ page: 1, limit: 100 });
       setUnlinkedEmployees(response.data || []);
     } catch (error) {
@@ -154,25 +128,16 @@ export function UsersPage() {
     }
   };
 
-  // Fetch when page changes
-  useEffect(() => {
-    fetchUsers();
-    fetchStats();
-  }, [page]);
+  useEffect(() => { fetchUsers(); fetchStats(); }, [page]);
 
-  // Debounced search — reset to page 1
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (page !== 1) {
-        setPage(1); // triggers fetch via page effect
-      } else {
-        fetchUsers();
-      }
+      if (page !== 1) setPage(1);
+      else fetchUsers();
     }, 400);
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Debounced M365 check when typing new username
   useEffect(() => {
     const emailDomain = credentialModal.user?.employee?.company?.email_domain;
     if (!credentialUsername || !emailDomain) {
@@ -193,70 +158,33 @@ export function UsersPage() {
   }, [credentialUsername, credentialModal.user]);
 
   const handleOpenCreateModal = async () => {
-    setFormData({
-      email: '',
-      password: '',
-      employee_id: null,
-      role_ids: [],
-      is_active: true,
-    });
+    setFormData({ email: '', password: '', employee_id: null, role_ids: [], is_active: true });
     await Promise.all([fetchRoles(), fetchUnlinkedEmployees()]);
     setFormModal({ open: true, user: null });
   };
 
   const handleOpenEditModal = async (user: User) => {
-    setFormData({
-      email: user.email,
-      password: '',
-      employee_id: user.employee?.id || null,
-      role_ids: user.roles.map((r) => r.id),
-      is_active: user.is_active,
-    });
+    setFormData({ email: user.email, password: '', employee_id: user.employee?.id || null, role_ids: user.roles.map((r) => r.id), is_active: user.is_active });
     await fetchRoles();
     setFormModal({ open: true, user });
   };
 
   const handleSubmit = async () => {
-    if (!formData.email) {
-      toast.error('Email harus diisi');
-      return;
-    }
-
-    if (!formModal.user && !formData.password) {
-      toast.error('Password harus diisi');
-      return;
-    }
-
+    if (!formData.email) { toast.error('Email harus diisi'); return; }
+    if (!formModal.user && !formData.password) { toast.error('Password harus diisi'); return; }
     try {
       setIsSubmitting(true);
-
       if (formModal.user) {
-        // Update
-        const updateData: UpdateUserDTO = {
-          email: formData.email,
-          is_active: formData.is_active,
-          role_ids: formData.role_ids,
-        };
-        if (formData.password) {
-          updateData.password = formData.password;
-        }
+        const updateData: UpdateUserDTO = { email: formData.email, is_active: formData.is_active, role_ids: formData.role_ids };
+        if (formData.password) updateData.password = formData.password;
         await userService.update(formModal.user.id, updateData);
         toast.success('User berhasil diupdate');
       } else {
-        // Create
-        const createData: CreateUserDTO = {
-          email: formData.email,
-          password: formData.password,
-          is_active: formData.is_active,
-          role_ids: formData.role_ids,
-        };
-        if (formData.employee_id) {
-          createData.employee_id = formData.employee_id;
-        }
+        const createData: CreateUserDTO = { email: formData.email, password: formData.password, is_active: formData.is_active, role_ids: formData.role_ids };
+        if (formData.employee_id) createData.employee_id = formData.employee_id;
         await userService.create(createData);
         toast.success('User berhasil dibuat');
       }
-
       setFormModal({ open: false, user: null });
       fetchUsers();
       fetchStats();
@@ -269,7 +197,6 @@ export function UsersPage() {
 
   const handleDelete = async () => {
     if (!deleteModal.user) return;
-
     try {
       await userService.delete(deleteModal.user.id);
       toast.success('User berhasil dihapus');
@@ -284,7 +211,7 @@ export function UsersPage() {
   const handleToggleStatus = async (user: User) => {
     try {
       await userService.toggleStatus(user.id);
-      toast.success(`Status user berhasil diubah`);
+      toast.success('Status user berhasil diubah');
       fetchUsers();
       fetchStats();
     } catch (error: any) {
@@ -293,28 +220,19 @@ export function UsersPage() {
   };
 
   const handleOpenCredentialModal = async (user: User) => {
-    // Auto-detect username from existing email
     const emailDomain = user.employee?.company?.email_domain;
     const currentEmail = user.email;
     let autoUsername = '';
-
     if (emailDomain && currentEmail && !currentEmail.endsWith('@temp.local')) {
-      // Extract username from existing email if domain matches
       const emailParts = currentEmail.split('@');
-      if (emailParts[1] === emailDomain) {
-        autoUsername = emailParts[0];
-      }
+      if (emailParts[1] === emailDomain) autoUsername = emailParts[0];
     }
-
     setCredentialUsername(autoUsername);
     setCredentialLicenseSkuId('');
     setM365UserStatus({ available: false, exists: false, licenses: [] });
     setCredentialModal({ open: true, user });
-
-    // Fetch M365 licenses and user status in parallel
     const emailToCheck = autoUsername && emailDomain ? `${autoUsername}@${emailDomain}` : currentEmail;
     const validEmail = emailToCheck && !emailToCheck.endsWith('@temp.local') ? emailToCheck : null;
-
     try {
       const [licensesResult, userStatusResult] = await Promise.all([
         userService.getM365Licenses().catch(() => ({ available: false, licenses: [] as import('@/services/user.service').M365License[] })),
@@ -332,14 +250,9 @@ export function UsersPage() {
 
   const handleSendCredentials = async () => {
     if (!credentialModal.user) return;
-
     try {
       setIsSendingCredentials(true);
-      const result = await userService.sendCredentials(
-        credentialModal.user.id,
-        credentialUsername || undefined,
-        credentialLicenseSkuId || undefined,
-      );
+      const result = await userService.sendCredentials(credentialModal.user.id, credentialUsername || undefined, credentialLicenseSkuId || undefined);
       toast.success(result.message || `Credentials sent to ${result.sentTo}`);
       setCredentialModal({ open: false, user: null });
       setCredentialUsername('');
@@ -351,336 +264,287 @@ export function UsersPage() {
     }
   };
 
-  const getRoleBadgeColor = (role: string) => {
-    switch (role) {
-      case 'Super Admin':
-        return 'bg-gradient-to-r from-purple-500 to-purple-600 text-white';
-      case 'Group CEO':
-        return 'bg-gradient-to-r from-red-500 to-red-600 text-white';
-      case 'CEO':
-        return 'bg-gradient-to-r from-orange-500 to-orange-600 text-white';
-      case 'HR Manager':
-        return 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white';
-      case 'HR Staff':
-        return 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white';
-      case 'Manager':
-        return 'bg-gradient-to-r from-amber-500 to-orange-500 text-white';
-      default:
-        return 'bg-gray-100 text-gray-700';
-    }
-  };
-
-  if (isLoading && users.length === 0) {
-    return <PageSpinner />;
-  }
-
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
-          <p className="text-gray-500 mt-1">Manage system users and their access</p>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-gradient-to-br from-slate-700 to-slate-800 rounded-xl flex items-center justify-center shadow">
+            <UserCog className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-gray-900">User Management</h1>
+            <p className="text-sm text-gray-500">Kelola akun dan hak akses sistem</p>
+          </div>
         </div>
-        <Button
+        <button
           onClick={handleOpenCreateModal}
-          className="bg-gradient-to-r from-slate-700 to-slate-800 hover:from-slate-800 hover:to-slate-900 shadow-md"
+          className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-xl hover:bg-slate-700 transition-colors"
         >
-          <Plus className="mr-2 h-4 w-4" />
-          Add User
-        </Button>
+          <Plus className="w-4 h-4" />
+          Tambah User
+        </button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="border-0 shadow-sm bg-gradient-to-br from-slate-700 to-slate-800">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-slate-300 text-sm">Total Users</p>
-                <p className="text-3xl font-bold text-white mt-1">{stats?.total || 0}</p>
-              </div>
-              <UserCog className="h-10 w-10 text-slate-400" />
+      {/* Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Total Users', value: stats?.total ?? 0, icon: UserCog, color: 'text-slate-600' },
+          { label: 'Aktif', value: stats?.active ?? 0, icon: CheckCircle, color: 'text-emerald-600' },
+          { label: 'Nonaktif', value: stats?.inactive ?? 0, icon: XCircle, color: 'text-red-500' },
+          { label: 'Login (7 hari)', value: stats?.recentLogins ?? 0, icon: Shield, color: 'text-purple-600' },
+        ].map(({ label, value, icon: Icon, color }) => (
+          <div key={label} className="bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-center gap-3">
+            <Icon className={`w-5 h-5 shrink-0 ${color}`} />
+            <div>
+              <p className="text-xs text-gray-500">{label}</p>
+              <p className="text-xl font-bold text-gray-900">{value}</p>
             </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-0 shadow-sm bg-gradient-to-br from-green-500 to-emerald-600">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-green-100 text-sm">Active</p>
-                <p className="text-3xl font-bold text-white mt-1">{stats?.active || 0}</p>
-              </div>
-              <CheckCircle className="h-10 w-10 text-green-200" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-0 shadow-sm bg-gradient-to-br from-red-500 to-red-600">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-red-100 text-sm">Inactive</p>
-                <p className="text-3xl font-bold text-white mt-1">{stats?.inactive || 0}</p>
-              </div>
-              <XCircle className="h-10 w-10 text-red-200" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-0 shadow-sm bg-gradient-to-br from-purple-500 to-purple-600">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-purple-100 text-sm">Recent Logins (7d)</p>
-                <p className="text-3xl font-bold text-white mt-1">{stats?.recentLogins || 0}</p>
-              </div>
-              <Shield className="h-10 w-10 text-purple-200" />
-            </div>
-          </CardContent>
-        </Card>
+          </div>
+        ))}
       </div>
 
-      {/* Search & Filter */}
-      <Card className="border-0 shadow-sm">
-        <CardContent className="p-4">
-          <div className="flex items-center gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search by email, name, or role..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="h-10 w-full rounded-xl border border-gray-200 bg-gray-50/50 pl-10 pr-4 text-sm transition-all focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-500/20 focus:bg-white"
-              />
-            </div>
-            <button
-              onClick={() => { fetchUsers(); fetchStats(); }}
-              className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-              title="Refresh"
-            >
-              <RefreshCw className="h-5 w-5 text-gray-500" />
-            </button>
+      {/* Table Panel */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+        {/* Toolbar */}
+        <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-3">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Cari email, nama, atau role..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-8 pr-3 py-2 text-sm rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:border-slate-400 focus:outline-none transition-all"
+            />
           </div>
-        </CardContent>
-      </Card>
+          <button
+            onClick={() => { fetchUsers(); fetchStats(); }}
+            className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+            title="Refresh"
+          >
+            <RefreshCw className="w-4 h-4 text-gray-500" />
+          </button>
+          <span className="text-xs text-gray-400 ml-auto hidden sm:block">
+            {users.length} dari {total} user
+          </span>
+        </div>
 
-      {/* Users Table */}
-      <Card className="border-0 shadow-sm overflow-hidden">
-        <CardHeader className="pb-2 border-b border-gray-100">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base font-semibold text-gray-800">User List</CardTitle>
-            <span className="text-sm text-gray-500">
-              Showing {users.length} of {total} users
-            </span>
-          </div>
-        </CardHeader>
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-gray-50/50">
-              <TableHead className="font-semibold text-gray-700">User</TableHead>
-              <TableHead className="font-semibold text-gray-700">Employee</TableHead>
-              <TableHead className="font-semibold text-gray-700">Roles</TableHead>
-              <TableHead className="font-semibold text-gray-700">Status</TableHead>
-              <TableHead className="font-semibold text-gray-700">Last Login</TableHead>
-              <TableHead className="font-semibold text-gray-700 text-center w-28">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {users.length === 0 ? (
-              <TableEmpty message="No users found" />
-            ) : (
-              users.map((user) => (
-                <TableRow key={user.id} className="hover:bg-gray-50/50 transition-colors">
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <div className={`h-10 w-10 rounded-full flex items-center justify-center text-white font-semibold text-sm shadow-md ${user.email.endsWith('@temp.local') ? 'bg-gradient-to-br from-amber-500 to-amber-600' : 'bg-gradient-to-br from-slate-600 to-slate-700'}`}>
-                        {user.email.endsWith('@temp.local') ? '?' : user.email.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <Mail className="h-3.5 w-3.5 text-gray-400" />
-                          {user.email.endsWith('@temp.local') ? (
-                            <span className="text-sm text-amber-600 italic">No email set — send credentials to assign</span>
-                          ) : (
-                            <span className="text-sm text-gray-900">{user.email}</span>
-                          )}
+        {/* Table */}
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-100">
+                {['User', 'Karyawan', 'Role', 'Status', 'Last Login', ''].map((h) => (
+                  <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider last:text-center last:w-28">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {isLoading ? (
+                <tr>
+                  <td colSpan={6} className="py-16 text-center">
+                    <Loader2 className="w-6 h-6 animate-spin text-gray-300 mx-auto" />
+                  </td>
+                </tr>
+              ) : users.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-16 text-center">
+                    <UserCog className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+                    <p className="text-sm text-gray-400">Tidak ada user ditemukan</p>
+                  </td>
+                </tr>
+              ) : (
+                users.map((user) => (
+                  <tr key={user.id} className="hover:bg-gray-50/50 transition-colors">
+                    {/* User */}
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold text-white ${user.email.endsWith('@temp.local') ? 'bg-amber-400' : 'bg-gradient-to-br from-slate-600 to-slate-700'}`}>
+                          {user.email.endsWith('@temp.local') ? '?' : user.email.charAt(0).toUpperCase()}
                         </div>
-                        <p className="text-xs text-gray-500 mt-0.5">
-                          Created {formatDate(user.created_at)}
-                        </p>
+                        <div className="min-w-0">
+                          {user.email.endsWith('@temp.local') ? (
+                            <p className="text-xs text-amber-600 italic">No email — kirim credentials</p>
+                          ) : (
+                            <div className="flex items-center gap-1.5">
+                              <Mail className="w-3 h-3 text-gray-400 shrink-0" />
+                              <p className="text-sm text-gray-900 truncate">{user.email}</p>
+                            </div>
+                          )}
+                          <p className="text-xs text-gray-400 mt-0.5">Dibuat {formatDate(user.created_at)}</p>
+                        </div>
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {user.employee ? (
-                      <div>
-                        <p className="font-medium text-gray-900">{user.employee.name}</p>
-                        <span className="text-xs font-mono text-gray-500">{user.employee.employee_id}</span>
+                    </td>
+                    {/* Employee */}
+                    <td className="px-5 py-3">
+                      {user.employee ? (
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{user.employee.name}</p>
+                          <p className="text-xs font-mono text-gray-400">{user.employee.employee_id}</p>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400">—</span>
+                      )}
+                    </td>
+                    {/* Roles */}
+                    <td className="px-5 py-3">
+                      <div className="flex flex-wrap gap-1">
+                        {user.roles.length === 0 ? (
+                          <span className="text-xs text-gray-400">—</span>
+                        ) : user.roles.map((role) => (
+                          <span key={role.id} className={`px-2 py-0.5 rounded-full text-xs font-medium ${getRoleColor(role.name)}`}>
+                            {role.name}
+                          </span>
+                        ))}
                       </div>
-                    ) : (
-                      <span className="text-gray-400 text-sm">No employee linked</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {user.roles.map((role) => (
-                        <span
-                          key={role.id}
-                          className={`px-2 py-1 rounded-lg text-xs font-semibold ${getRoleBadgeColor(role.name)}`}
+                    </td>
+                    {/* Status */}
+                    <td className="px-5 py-3">
+                      <button
+                        onClick={() => handleToggleStatus(user)}
+                        className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${
+                          user.is_active
+                            ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                        }`}
+                      >
+                        {user.is_active ? 'Aktif' : 'Nonaktif'}
+                      </button>
+                    </td>
+                    {/* Last Login */}
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                        <Clock className="w-3 h-3 text-gray-400" />
+                        {user.last_login_at ? formatDate(user.last_login_at) : 'Belum pernah'}
+                      </div>
+                    </td>
+                    {/* Actions */}
+                    <td className="px-5 py-3">
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          onClick={() => handleOpenCredentialModal(user)}
+                          title="Kirim Credentials"
+                          className="p-1.5 rounded-lg hover:bg-blue-50 transition-colors group"
                         >
-                          {role.name}
-                        </span>
-                      ))}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <button
-                      onClick={() => handleToggleStatus(user)}
-                      className="focus:outline-none"
-                    >
-                      <Badge variant={user.is_active ? 'success' : 'error'}>
-                        {user.is_active ? 'Active' : 'Inactive'}
-                      </Badge>
-                    </button>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <Clock className="h-3.5 w-3.5 text-gray-400" />
-                      {user.last_login_at
-                        ? formatDate(user.last_login_at)
-                        : 'Never'}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center justify-center gap-1">
-                      <button
-                        className="p-2 rounded-lg hover:bg-blue-50 transition-colors group"
-                        title="Send Credentials"
-                        onClick={() => handleOpenCredentialModal(user)}
-                      >
-                        <Send className="h-4 w-4 text-gray-400 group-hover:text-blue-600" />
-                      </button>
-                      <button
-                        className="p-2 rounded-lg hover:bg-slate-100 transition-colors group"
-                        title="Edit"
-                        onClick={() => handleOpenEditModal(user)}
-                      >
-                        <Edit className="h-4 w-4 text-gray-400 group-hover:text-slate-600" />
-                      </button>
-                      <button
-                        className="p-2 rounded-lg hover:bg-red-50 transition-colors group"
-                        title="Delete"
-                        onClick={() => setDeleteModal({ open: true, user })}
-                      >
-                        <Trash2 className="h-4 w-4 text-gray-400 group-hover:text-red-600" />
-                      </button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+                          <Send className="w-3.5 h-3.5 text-gray-400 group-hover:text-blue-600" />
+                        </button>
+                        <button
+                          onClick={() => handleOpenEditModal(user)}
+                          title="Edit"
+                          className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors group"
+                        >
+                          <Edit className="w-3.5 h-3.5 text-gray-400 group-hover:text-slate-700" />
+                        </button>
+                        <button
+                          onClick={() => setDeleteModal({ open: true, user })}
+                          title="Hapus"
+                          className="p-1.5 rounded-lg hover:bg-red-50 transition-colors group"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-gray-400 group-hover:text-red-600" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination */}
         {totalPages > 1 && (
-          <div className="p-4 border-t border-gray-100 flex items-center justify-between">
-            <span className="text-sm text-gray-500">
-              Page {page} of {totalPages}
-            </span>
-            <div className="flex items-center gap-2">
+          <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between">
+            <span className="text-xs text-gray-500">Halaman {page} dari {totalPages}</span>
+            <div className="flex items-center gap-1.5">
               <button
                 onClick={() => setPage(Math.max(1, page - 1))}
                 disabled={page === 1}
-                className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
-                <ChevronLeft className="h-4 w-4" />
+                <ChevronLeft className="w-4 h-4" />
               </button>
               <button
                 onClick={() => setPage(Math.min(totalPages, page + 1))}
                 disabled={page === totalPages}
-                className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
-                <ChevronRight className="h-4 w-4" />
+                <ChevronRight className="w-4 h-4" />
               </button>
             </div>
           </div>
         )}
-      </Card>
+      </div>
 
-      {/* Create/Edit Modal */}
+      {/* Create / Edit Modal */}
       {formModal.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={() => setFormModal({ open: false, user: null })}
-          />
-          <div className="relative bg-white rounded-2xl shadow-xl max-w-md w-full mx-4 border-0">
-            <div className="flex items-center justify-between p-4 border-b">
-              <h3 className="text-lg font-semibold text-gray-900">
-                {formModal.user ? 'Edit User' : 'Create New User'}
-              </h3>
-              <button
-                onClick={() => setFormModal({ open: false, user: null })}
-                className="p-1 hover:bg-gray-100 rounded-lg"
-              >
-                <X className="w-5 h-5" />
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setFormModal({ open: false, user: null })} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div>
+                <h3 className="font-semibold text-gray-900">{formModal.user ? 'Edit User' : 'Tambah User'}</h3>
+                <p className="text-xs text-gray-400 mt-0.5">{formModal.user ? `Editing ${formModal.user.email}` : 'Buat akun user baru'}</p>
+              </div>
+              <button onClick={() => setFormModal({ open: false, user: null })} className="p-1.5 hover:bg-gray-100 rounded-lg">
+                <X className="w-4 h-4 text-gray-500" />
               </button>
             </div>
 
-            <div className="p-4 space-y-4">
+            {/* Body */}
+            <div className="p-5 space-y-4">
               {/* Email */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Email</label>
                 <input
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className={INPUT}
                   placeholder="user@example.com"
                 />
               </div>
 
               {/* Password */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Password {formModal.user && <span className="text-gray-400">(kosongkan jika tidak diubah)</span>}
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                  Password {formModal.user && <span className="normal-case text-gray-400 font-normal">(kosongkan jika tidak diubah)</span>}
                 </label>
                 <div className="relative">
                   <input
                     type={showPassword ? 'text' : 'password'}
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="w-full px-4 py-2 pr-10 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="********"
+                    className={INPUT + ' pr-9'}
+                    placeholder="••••••••"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                   >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
 
-              {/* Employee (only for create) */}
+              {/* Employee (create only) */}
               {!formModal.user && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Link to Employee <span className="text-gray-400">(optional)</span>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                    Link Karyawan <span className="normal-case font-normal text-gray-400">(opsional)</span>
                   </label>
                   <select
                     value={formData.employee_id || ''}
                     onChange={(e) => setFormData({ ...formData, employee_id: e.target.value ? parseInt(e.target.value) : null })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className={INPUT}
                   >
-                    <option value="">No employee</option>
+                    <option value="">Tidak ada</option>
                     {unlinkedEmployees.map((emp) => (
-                      <option key={emp.id} value={emp.id}>
-                        {emp.name} ({emp.employee_id})
-                      </option>
+                      <option key={emp.id} value={emp.id}>{emp.name} ({emp.employee_id})</option>
                     ))}
                   </select>
                 </div>
@@ -688,372 +552,303 @@ export function UsersPage() {
 
               {/* Roles */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Roles</label>
-                <div className="space-y-2 max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-3">
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Roles</label>
+                <div className="space-y-1.5 max-h-40 overflow-y-auto border border-gray-200 rounded-xl p-3 bg-gray-50">
                   {roles.map((role) => (
-                    <label key={role.id} className="flex items-center gap-2 cursor-pointer">
+                    <label key={role.id} className="flex items-center gap-2.5 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={formData.role_ids.includes(role.id)}
                         onChange={(e) => {
-                          if (e.target.checked) {
-                            setFormData({ ...formData, role_ids: [...formData.role_ids, role.id] });
-                          } else {
-                            setFormData({ ...formData, role_ids: formData.role_ids.filter((id) => id !== role.id) });
-                          }
+                          if (e.target.checked) setFormData({ ...formData, role_ids: [...formData.role_ids, role.id] });
+                          else setFormData({ ...formData, role_ids: formData.role_ids.filter((id) => id !== role.id) });
                         }}
-                        className="w-4 h-4 text-blue-600 rounded"
+                        className="w-3.5 h-3.5 rounded accent-slate-700"
                       />
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${getRoleBadgeColor(role.name)}`}>
-                        {role.name}
-                      </span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getRoleColor(role.name)}`}>{role.name}</span>
                     </label>
                   ))}
                 </div>
               </div>
 
               {/* Status */}
-              <div className="flex items-center gap-2">
+              <label className="flex items-center gap-2.5 cursor-pointer">
                 <input
                   type="checkbox"
-                  id="is_active"
                   checked={formData.is_active}
                   onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                  className="w-4 h-4 text-blue-600 rounded"
+                  className="w-3.5 h-3.5 rounded accent-slate-700"
                 />
-                <label htmlFor="is_active" className="text-sm text-gray-700">Active</label>
-              </div>
+                <span className="text-sm text-gray-700">Aktifkan akun</span>
+              </label>
             </div>
 
-            <div className="flex justify-end gap-3 p-4 border-t bg-gray-50 rounded-b-2xl">
-              <Button
-                variant="outline"
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-100 bg-gray-50">
+              <button
                 onClick={() => setFormModal({ open: false, user: null })}
-                className="rounded-xl"
+                className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-200 rounded-xl transition-colors"
               >
-                Cancel
-              </Button>
-              <Button
+                Batal
+              </button>
+              <button
                 onClick={handleSubmit}
                 disabled={isSubmitting}
-                className="rounded-xl bg-gradient-to-r from-slate-700 to-slate-800"
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-xl hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isSubmitting ? 'Saving...' : formModal.user ? 'Update' : 'Create'}
-              </Button>
+                {isSubmitting ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Menyimpan...</> : formModal.user ? 'Update' : 'Buat User'}
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Send Credentials Confirmation Modal */}
+      {/* Send Credentials Modal */}
       {credentialModal.open && credentialModal.user && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
             onClick={() => !isSendingCredentials && setCredentialModal({ open: false, user: null })}
           />
-          <div className="relative bg-white rounded-2xl shadow-xl max-w-md w-full mx-4 p-6 border-0">
-            <div className="flex items-center gap-4 mb-4">
-              <div className="p-3 rounded-xl bg-blue-100">
-                <Send className="h-6 w-6 text-blue-600" />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center">
+                  <Send className="w-4 h-4 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">Kirim Credentials</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">{credentialModal.user.employee?.name || credentialModal.user.email}</p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">Send Credentials</h3>
-                <p className="text-sm text-gray-500">
-                  {credentialModal.user.employee?.name || credentialModal.user.email}
-                </p>
-              </div>
+              <button onClick={() => { setCredentialModal({ open: false, user: null }); setCredentialUsername(''); setCredentialLicenseSkuId(''); }} className="p-1.5 hover:bg-gray-100 rounded-lg">
+                <X className="w-4 h-4 text-gray-500" />
+              </button>
             </div>
 
-            {/* Office Email Section */}
-            {(() => {
-              const emailDomain = credentialModal.user.employee?.company?.email_domain || '';
-              const currentEmail = credentialModal.user.email;
-              const hasOfficeEmail = emailDomain && currentEmail && !currentEmail.endsWith('@temp.local') && currentEmail.endsWith(`@${emailDomain}`);
-              const hasNoOfficeEmail = !emailDomain || !currentEmail || currentEmail.endsWith('@temp.local') || !currentEmail.endsWith(`@${emailDomain}`);
-              const personalEmail = credentialModal.user.employee?.personal_email;
+            <div className="p-5 space-y-4">
+              {(() => {
+                const emailDomain = credentialModal.user.employee?.company?.email_domain || '';
+                const currentEmail = credentialModal.user.email;
+                const hasOfficeEmail = emailDomain && currentEmail && !currentEmail.endsWith('@temp.local') && currentEmail.endsWith(`@${emailDomain}`);
+                const hasNoOfficeEmail = !emailDomain || !currentEmail || currentEmail.endsWith('@temp.local') || !currentEmail.endsWith(`@${emailDomain}`);
+                const personalEmail = credentialModal.user.employee?.personal_email;
 
-              // Case 1: Has existing office email (matching company domain)
-              if (hasOfficeEmail) {
                 return (
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Office Email
-                    </label>
-                    <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
-                      <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
-                      <span className="font-mono text-sm text-green-800">{currentEmail}</span>
-                    </div>
-                    {m365UserStatus.exists && m365UserStatus.licenses.length > 0 ? (
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {m365UserStatus.licenses.map((lic) => (
-                          <span key={lic.skuId} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                            {lic.displayName}
-                          </span>
-                        ))}
-                      </div>
-                    ) : m365UserStatus.exists ? (
-                      <p className="text-xs text-amber-600 mt-1">M365 account exists but has no license assigned</p>
-                    ) : !m365UserStatus.available ? (
-                      <p className="text-xs text-gray-400 mt-1">M365 integration not configured on server</p>
-                    ) : (
-                      <p className="text-xs text-red-500 mt-1">M365 account not found — will be created when sending credentials</p>
-                    )}
-                  </div>
-                );
-              }
-
-              // Case 2: No office email — show info + optional M365 setup toggle
-              if (hasNoOfficeEmail) {
-                return (
-                  <div className="mb-4">
-                    <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg mb-3">
-                      <AlertCircle className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  <>
+                    {/* Office Email Section */}
+                    {hasOfficeEmail && (
                       <div>
-                        <span className="text-sm text-gray-600">No office email</span>
-                        {personalEmail && (
-                          <p className="text-xs text-gray-400">Login via personal email: <span className="font-mono">{personalEmail}</span></p>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Office Email</label>
+                        <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-xl">
+                          <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span className="font-mono text-sm text-emerald-800">{currentEmail}</span>
+                        </div>
+                        {m365UserStatus.exists && m365UserStatus.licenses.length > 0 ? (
+                          <div className="mt-1.5 flex flex-wrap gap-1">
+                            {m365UserStatus.licenses.map((lic) => (
+                              <span key={lic.skuId} className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">{lic.displayName}</span>
+                            ))}
+                          </div>
+                        ) : m365UserStatus.exists ? (
+                          <p className="text-xs text-amber-600 mt-1">M365 account ada tapi tidak ada lisensi</p>
+                        ) : !m365UserStatus.available ? (
+                          <p className="text-xs text-gray-400 mt-1">M365 integration belum dikonfigurasi</p>
+                        ) : (
+                          <p className="text-xs text-red-500 mt-1">M365 account tidak ditemukan — akan dibuat saat kirim credentials</p>
                         )}
                       </div>
-                    </div>
+                    )}
 
-                    {/* Toggle to set up M365 if company has domain */}
-                    {emailDomain && (
+                    {hasNoOfficeEmail && (
                       <div>
-                        <button
-                          type="button"
-                          onClick={() => setCredentialUsername(credentialUsername ? '' : (credentialModal.user?.employee?.name?.split(' ')[0]?.toLowerCase() || ''))}
-                          className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                          {credentialUsername ? 'Cancel M365 setup' : 'Set up office email & M365'}
-                        </button>
-
-                        {credentialUsername && (
-                          <div className="mt-2">
-                            <div className="flex items-center gap-0">
-                              <input
-                                type="text"
-                                value={credentialUsername}
-                                onChange={(e) => setCredentialUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''))}
-                                placeholder="username"
-                                className="flex-1 px-3 py-2 border border-gray-200 rounded-l-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                              />
-                              <span className="px-3 py-2 bg-gray-100 border border-l-0 border-gray-200 rounded-r-lg text-sm text-gray-500">
-                                @{emailDomain}
-                              </span>
-                            </div>
-                            {m365UsernameStatus.checking ? (
-                              <p className="text-xs text-gray-400 mt-1">Checking M365...</p>
-                            ) : m365UsernameStatus.exists === true ? (
-                              <p className="text-xs text-amber-600 mt-1">⚠ Email already exists in M365 — will link to existing account</p>
-                            ) : m365UsernameStatus.exists === false ? (
-                              <p className="text-xs text-green-600 mt-1">✓ Available — new M365 account will be created</p>
-                            ) : (
-                              <p className="text-xs text-gray-400 mt-1">Will create Microsoft 365 mailbox & set as login email</p>
+                        <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl mb-3">
+                          <AlertCircle className="w-4 h-4 text-gray-400 shrink-0" />
+                          <div>
+                            <span className="text-sm text-gray-600">Tidak ada office email</span>
+                            {personalEmail && (
+                              <p className="text-xs text-gray-400">Login via personal: <span className="font-mono">{personalEmail}</span></p>
+                            )}
+                          </div>
+                        </div>
+                        {emailDomain && (
+                          <div>
+                            <button
+                              type="button"
+                              onClick={() => setCredentialUsername(credentialUsername ? '' : (credentialModal.user?.employee?.name?.split(' ')[0]?.toLowerCase() || ''))}
+                              className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              {credentialUsername ? 'Batal setup M365' : 'Setup office email & M365'}
+                            </button>
+                            {credentialUsername && (
+                              <div className="mt-2">
+                                <div className="flex items-center">
+                                  <input
+                                    type="text"
+                                    value={credentialUsername}
+                                    onChange={(e) => setCredentialUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''))}
+                                    placeholder="username"
+                                    className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-l-xl bg-gray-50 focus:bg-white focus:border-slate-400 focus:outline-none transition-all"
+                                  />
+                                  <span className="px-3 py-2 bg-gray-100 border border-l-0 border-gray-200 rounded-r-xl text-sm text-gray-500">@{emailDomain}</span>
+                                </div>
+                                {m365UsernameStatus.checking ? (
+                                  <p className="text-xs text-gray-400 mt-1">Memeriksa M365...</p>
+                                ) : m365UsernameStatus.exists === true ? (
+                                  <p className="text-xs text-amber-600 mt-1">⚠ Email sudah ada di M365 — akan dihubungkan ke akun existing</p>
+                                ) : m365UsernameStatus.exists === false ? (
+                                  <p className="text-xs text-emerald-600 mt-1">✓ Tersedia — akun M365 baru akan dibuat</p>
+                                ) : (
+                                  <p className="text-xs text-gray-400 mt-1">Akan membuat mailbox M365 dan set sebagai email login</p>
+                                )}
+                              </div>
                             )}
                           </div>
                         )}
                       </div>
                     )}
-                  </div>
-                );
-              }
 
-              return null;
-            })()}
-
-            {/* M365 License Section */}
-            {m365Licenses.available && credentialModal.user.employee?.company?.email_domain && (credentialUsername || (credentialModal.user.email && !credentialModal.user.email.endsWith('@temp.local') && credentialModal.user.email.endsWith(`@${credentialModal.user.employee.company.email_domain}`))) && (
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  M365 License
-                </label>
-                {/* Existing username typed + already has license */}
-                {credentialUsername && m365UsernameStatus.exists && m365UsernameStatus.licenses.length > 0 ? (
-                  <div className="px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
-                    <p className="text-sm text-blue-800 font-medium">Already licensed:</p>
-                    {m365UsernameStatus.licenses.map((lic) => (
-                      <p key={lic.skuId} className="text-sm text-blue-700">{lic.displayName}</p>
-                    ))}
-                    <p className="text-xs text-blue-500 mt-1">No license change needed</p>
-                  </div>
-                ) : m365UserStatus.licenses.length > 0 ? (
-                  /* Current email already has license */
-                  <div className="px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
-                    <p className="text-sm text-blue-800 font-medium">Already licensed:</p>
-                    {m365UserStatus.licenses.map((lic) => (
-                      <p key={lic.skuId} className="text-sm text-blue-700">{lic.displayName}</p>
-                    ))}
-                    <p className="text-xs text-blue-500 mt-1">No license change needed</p>
-                  </div>
-                ) : m365Licenses.licenses.length > 0 ? (
-                  /* No license yet — show picker */
-                  <>
-                    <select
-                      value={credentialLicenseSkuId}
-                      onChange={(e) => setCredentialLicenseSkuId(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                    >
-                      <option value="">No license (Unlicensed)</option>
-                      {m365Licenses.licenses.map((lic) => (
-                        <option key={lic.skuId} value={lic.skuId} disabled={lic.availableUnits <= 0}>
-                          {lic.displayName} ({lic.availableUnits}/{lic.totalUnits} available)
-                        </option>
-                      ))}
-                    </select>
-                    <p className="text-xs text-gray-400 mt-1">Assign Microsoft 365 license to user</p>
-                  </>
-                ) : null}
-              </div>
-            )}
-
-            {(() => {
-              const emailDomain = credentialModal.user.employee?.company?.email_domain || '';
-              const currentEmail = credentialModal.user.email;
-              const hasOfficeEmail = emailDomain && currentEmail && !currentEmail.endsWith('@temp.local') && currentEmail.endsWith(`@${emailDomain}`);
-              const personalEmail = credentialModal.user.employee?.personal_email;
-
-              // Determine mode
-              // PeopleHub-only when: (1) M365 exists + licensed, OR (2) no office email and not setting up M365
-              const isM365Licensed = m365UserStatus.exists && m365UserStatus.licenses.length > 0;
-              const isNoOfficeEmailMode = !hasOfficeEmail && !credentialUsername;
-              const isPeopleHubOnly = isM365Licensed || isNoOfficeEmailMode;
-
-              // Determine send-to
-              let sendToEmail: string | null = null;
-              let sendToLabel = '';
-              if (isPeopleHubOnly) {
-                if (hasOfficeEmail) {
-                  // Has office email + M365 licensed → send to office email
-                  sendToEmail = currentEmail;
-                  sendToLabel = 'office email';
-                } else if (personalEmail) {
-                  // No office email → send to personal email
-                  sendToEmail = personalEmail;
-                  sendToLabel = 'personal email';
-                }
-              } else {
-                // Onboarding mode → send to personal email
-                sendToEmail = personalEmail || null;
-                sendToLabel = 'personal email';
-              }
-              const canSend = !!sendToEmail && !sendToEmail.endsWith('@temp.local');
-
-              return (
-                <>
-                  <div className="space-y-2 mb-4 text-sm">
-                    <div className="flex items-center justify-between py-1">
-                      <span className="text-gray-500">Current login</span>
-                      {currentEmail.endsWith('@temp.local') ? (
-                        <span className="text-amber-600 italic text-xs">Not set yet</span>
-                      ) : (
-                        <span className="font-mono text-gray-700">{currentEmail}</span>
-                      )}
-                    </div>
-                    {credentialUsername && emailDomain &&
-                      currentEmail !== `${credentialUsername}@${emailDomain}` && (
-                      <div className="flex items-center justify-between py-1">
-                        <span className="text-gray-500">New login</span>
-                        <span className="font-mono text-blue-600 font-medium">
-                          {credentialUsername}@{emailDomain}
-                        </span>
+                    {/* M365 License */}
+                    {m365Licenses.available && credentialModal.user.employee?.company?.email_domain && (credentialUsername || (credentialModal.user.email && !credentialModal.user.email.endsWith('@temp.local') && credentialModal.user.email.endsWith(`@${credentialModal.user.employee.company.email_domain}`))) && (
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">M365 License</label>
+                        {credentialUsername && m365UsernameStatus.exists && m365UsernameStatus.licenses.length > 0 ? (
+                          <div className="px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl">
+                            <p className="text-xs font-medium text-blue-700">Sudah berlisensi:</p>
+                            {m365UsernameStatus.licenses.map((lic) => (
+                              <p key={lic.skuId} className="text-sm text-blue-600">{lic.displayName}</p>
+                            ))}
+                          </div>
+                        ) : m365UserStatus.licenses.length > 0 ? (
+                          <div className="px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl">
+                            <p className="text-xs font-medium text-blue-700">Sudah berlisensi:</p>
+                            {m365UserStatus.licenses.map((lic) => (
+                              <p key={lic.skuId} className="text-sm text-blue-600">{lic.displayName}</p>
+                            ))}
+                          </div>
+                        ) : m365Licenses.licenses.length > 0 ? (
+                          <>
+                            <select
+                              value={credentialLicenseSkuId}
+                              onChange={(e) => setCredentialLicenseSkuId(e.target.value)}
+                              className={INPUT}
+                            >
+                              <option value="">Tanpa lisensi</option>
+                              {m365Licenses.licenses.map((lic) => (
+                                <option key={lic.skuId} value={lic.skuId} disabled={lic.availableUnits <= 0}>
+                                  {lic.displayName} ({lic.availableUnits}/{lic.totalUnits} tersedia)
+                                </option>
+                              ))}
+                            </select>
+                            <p className="text-xs text-gray-400 mt-1">Assign lisensi Microsoft 365</p>
+                          </>
+                        ) : null}
                       </div>
                     )}
-                    <div className="flex items-center justify-between py-1">
-                      <span className="text-gray-500">Credential sent to</span>
-                      {canSend ? (
-                        <span className="font-mono text-green-700 text-xs">{sendToEmail} <span className="text-gray-400">({sendToLabel})</span></span>
-                      ) : (
-                        <span className="font-mono text-red-500">Not set</span>
-                      )}
-                    </div>
-                  </div>
 
-                  {isPeopleHubOnly && isNoOfficeEmailMode && (
-                    <p className="text-sm text-blue-600 bg-blue-50 p-3 rounded-lg mb-4">
-                      PeopleHub credential only. Will be sent to personal email.
-                    </p>
-                  )}
+                    {/* Summary */}
+                    {(() => {
+                      const isM365Licensed = m365UserStatus.exists && m365UserStatus.licenses.length > 0;
+                      const isNoOfficeEmailMode = !hasOfficeEmail && !credentialUsername;
+                      const isPeopleHubOnly = isM365Licensed || isNoOfficeEmailMode;
+                      let sendToEmail: string | null = null;
+                      let sendToLabel = '';
+                      if (isPeopleHubOnly) {
+                        if (hasOfficeEmail) { sendToEmail = currentEmail; sendToLabel = 'office email'; }
+                        else if (personalEmail) { sendToEmail = personalEmail; sendToLabel = 'personal email'; }
+                      } else {
+                        sendToEmail = personalEmail || null;
+                        sendToLabel = 'personal email';
+                      }
+                      const canSend = !!sendToEmail && !sendToEmail.endsWith('@temp.local');
 
-                  {isPeopleHubOnly && isM365Licensed && hasOfficeEmail && (
-                    <p className="text-sm text-blue-600 bg-blue-50 p-3 rounded-lg mb-4">
-                      PeopleHub credential only. M365 already configured. Will be sent to office email.
-                    </p>
-                  )}
+                      return (
+                        <>
+                          <div className="bg-gray-50 rounded-xl p-3 space-y-1.5 text-sm">
+                            <div className="flex items-center justify-between">
+                              <span className="text-gray-500 text-xs">Login saat ini</span>
+                              {currentEmail.endsWith('@temp.local') ? (
+                                <span className="text-amber-600 italic text-xs">Belum diset</span>
+                              ) : (
+                                <span className="font-mono text-gray-700 text-xs">{currentEmail}</span>
+                              )}
+                            </div>
+                            {credentialUsername && emailDomain && currentEmail !== `${credentialUsername}@${emailDomain}` && (
+                              <div className="flex items-center justify-between">
+                                <span className="text-gray-500 text-xs">Login baru</span>
+                                <span className="font-mono text-blue-600 text-xs font-medium">{credentialUsername}@{emailDomain}</span>
+                              </div>
+                            )}
+                            <div className="flex items-center justify-between">
+                              <span className="text-gray-500 text-xs">Kirim ke</span>
+                              {canSend ? (
+                                <span className="font-mono text-emerald-700 text-xs">{sendToEmail} <span className="text-gray-400">({sendToLabel})</span></span>
+                              ) : (
+                                <span className="text-red-500 text-xs">Tidak ada email</span>
+                              )}
+                            </div>
+                          </div>
 
-                  {!canSend && !personalEmail && (
-                    <p className="text-sm text-red-600 bg-red-50 p-3 rounded-lg mb-4">
-                      No email available. Please update employee personal email before sending credentials.
-                    </p>
-                  )}
+                          {isPeopleHubOnly && isNoOfficeEmailMode && (
+                            <p className="text-xs text-blue-600 bg-blue-50 px-3 py-2 rounded-xl">PeopleHub credential saja. Akan dikirim ke personal email.</p>
+                          )}
+                          {isPeopleHubOnly && isM365Licensed && hasOfficeEmail && (
+                            <p className="text-xs text-blue-600 bg-blue-50 px-3 py-2 rounded-xl">PeopleHub credential saja. M365 sudah dikonfigurasi.</p>
+                          )}
+                          {!canSend && !personalEmail && (
+                            <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-xl">Tidak ada email tersedia. Update personal email karyawan terlebih dahulu.</p>
+                          )}
+                          <p className="text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-xl">Password sementara baru akan digenerate. User harus menggantinya saat login pertama.</p>
 
-                  <p className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg mb-6">
-                    A new temporary password will be generated. The user must change it on first login.
-                  </p>
-
-                  <div className="flex justify-end gap-3">
-                    <Button
-                      variant="outline"
-                      onClick={() => { setCredentialModal({ open: false, user: null }); setCredentialUsername(''); setCredentialLicenseSkuId(''); }}
-                      disabled={isSendingCredentials}
-                      className="rounded-xl"
-                    >
-                      Cancel
-                    </Button>
-                    <button
-                      onClick={handleSendCredentials}
-                      disabled={isSendingCredentials || !canSend}
-                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white font-medium hover:from-blue-600 hover:to-blue-700 transition-all shadow-md shadow-blue-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {isSendingCredentials ? 'Sending...' : isPeopleHubOnly ? 'Send PeopleHub Credential' : 'Send Credentials'}
-                    </button>
-                  </div>
-                </>
-              );
-            })()}
+                          <div className="flex items-center justify-end gap-2 pt-1">
+                            <button
+                              onClick={() => { setCredentialModal({ open: false, user: null }); setCredentialUsername(''); setCredentialLicenseSkuId(''); }}
+                              disabled={isSendingCredentials}
+                              className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-xl transition-colors disabled:opacity-50"
+                            >
+                              Batal
+                            </button>
+                            <button
+                              onClick={handleSendCredentials}
+                              disabled={isSendingCredentials || !canSend}
+                              className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-xl hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {isSendingCredentials ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Mengirim...</> : isPeopleHubOnly ? 'Kirim PeopleHub Credential' : 'Kirim Credentials'}
+                            </button>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </>
+                );
+              })()}
+            </div>
           </div>
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Modal */}
       {deleteModal.open && deleteModal.user && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={() => setDeleteModal({ open: false, user: null })}
-          />
-          <div className="relative bg-white rounded-2xl shadow-xl max-w-md w-full mx-4 p-6 border-0">
-            <div className="flex items-center gap-4 mb-4">
-              <div className="p-3 rounded-xl bg-red-100">
-                <AlertCircle className="h-6 w-6 text-red-600" />
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setDeleteModal({ open: false, user: null })} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-red-50 rounded-xl flex items-center justify-center shrink-0">
+                <AlertCircle className="w-5 h-5 text-red-600" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Delete User</h3>
-                <p className="text-sm text-gray-500">This action cannot be undone</p>
+                <h3 className="font-semibold text-gray-900">Hapus User</h3>
+                <p className="text-xs text-gray-400">Tindakan ini tidak dapat dibatalkan</p>
               </div>
             </div>
-
-            <p className="text-gray-600 mb-6">
-              Are you sure you want to delete{' '}
-              <span className="font-semibold text-gray-900">{deleteModal.user.email}</span>?
-              This will revoke all access.
+            <p className="text-sm text-gray-600 mb-5">
+              Yakin hapus <span className="font-semibold text-gray-900">{deleteModal.user.email}</span>? Semua akses akan dicabut.
             </p>
-
-            <div className="flex justify-end gap-3">
-              <Button
-                variant="outline"
-                onClick={() => setDeleteModal({ open: false, user: null })}
-                className="rounded-xl"
-              >
-                Cancel
-              </Button>
-              <button
-                onClick={handleDelete}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-red-500 to-red-600 text-white font-medium hover:from-red-600 hover:to-red-700 transition-all shadow-md shadow-red-500/25"
-              >
-                Delete
-              </button>
+            <div className="flex items-center justify-end gap-2">
+              <button onClick={() => setDeleteModal({ open: false, user: null })} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-xl transition-colors">Batal</button>
+              <button onClick={handleDelete} className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-xl hover:bg-red-700 transition-colors">Hapus</button>
             </div>
           </div>
         </div>

@@ -131,7 +131,7 @@ export function HRDashboard({ user, stats, overview, payrollSummary, greeting }:
               <div className="flex flex-wrap items-center gap-3 mt-4">
                 <span className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-xl rounded-xl text-sm text-white font-medium">
                   <Users className="h-4 w-4" />
-                  {formatNumber(stats?.total_employees || 0)} Employees
+                  {formatNumber(stats?.active_employees || 0)} Active Employees
                 </span>
                 <span className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-xl rounded-xl text-sm text-white font-medium">
                   <Building2 className="h-4 w-4" />
@@ -157,8 +157,8 @@ export function HRDashboard({ user, stats, overview, payrollSummary, greeting }:
             </div>
             <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-1 rounded-lg">Active</span>
           </div>
-          <p className="text-3xl font-bold text-gray-900 mb-1">{formatNumber(stats?.total_employees || 0)}</p>
-          <p className="text-sm text-gray-500">Total Employees</p>
+          <p className="text-3xl font-bold text-gray-900 mb-1">{formatNumber(stats?.active_employees || 0)}</p>
+          <p className="text-sm text-gray-500">Active Employees</p>
         </div>
 
         {/* Departments */}
