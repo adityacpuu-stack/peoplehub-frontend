@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Building2,
   Search,
@@ -11,7 +12,6 @@ import {
   Loader2,
   ToggleLeft,
   ToggleRight,
-  AlertCircle,
   Eye,
   EyeOff,
   Save,
@@ -399,7 +399,10 @@ function MenuRoleConfigTab() {
 type Tab = 'company-features' | 'menu-config';
 
 export function SystemConfigPage() {
-  const [activeTab, setActiveTab] = useState<Tab>('company-features');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = (searchParams.get('tab') as Tab) || 'company-features';
+
+  const setActiveTab = (tab: Tab) => setSearchParams({ tab }, { replace: true });
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'company-features', label: 'Company Features', icon: <Building2 className="w-4 h-4" /> },
@@ -415,7 +418,7 @@ export function SystemConfigPage() {
         </div>
         <div>
           <h1 className="text-xl font-bold text-gray-900">System Configuration</h1>
-          <p className="text-sm text-gray-500">Kelola fitur perusahaan dan tampilan menu per role</p>
+          <p className="text-sm text-gray-500">Kelola fitur perusahaan, tampilan menu, dan akses karyawan</p>
         </div>
       </div>
 
@@ -438,7 +441,8 @@ export function SystemConfigPage() {
       </div>
 
       {/* Tab Content */}
-      {activeTab === 'company-features' ? <CompanyFeaturesTab /> : <MenuRoleConfigTab />}
+      {activeTab === 'company-features' && <CompanyFeaturesTab />}
+      {activeTab === 'menu-config' && <MenuRoleConfigTab />}
     </div>
   );
 }

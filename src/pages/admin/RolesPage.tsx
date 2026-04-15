@@ -1,54 +1,209 @@
 import { useState, useEffect } from 'react';
 import {
-  Shield,
-  Search,
-  Plus,
-  Edit,
-  Trash2,
-  Key,
-  Users,
-  Lock,
-  AlertCircle,
-  ChevronDown,
-  ChevronRight,
-  CheckCircle2,
-  Loader2,
+  Shield, Search, Plus, Save, RotateCcw, Loader2,
+  Lock, Eye, EyeOff, Trash2, AlertCircle, X,
 } from 'lucide-react';
-import {
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  Badge,
-  PageSpinner,
-} from '@/components/ui';
-import { rbacService, type Role, type Permission } from '@/services/rbac.service';
 import toast from 'react-hot-toast';
+import { rbacService, type Role, type RoleDetail, type Permission } from '@/services/rbac.service';
 
-interface PermissionGroup {
-  module: string;
-  label: string;
-  permissions: Permission[];
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function groupPermissions(permissions: Permission[]) {
+  const map: Record<string, Permission[]> = {};
+  for (const p of permissions) {
+    const g = p.group || p.name.split('.')[0] || 'other';
+    if (!map[g]) map[g] = [];
+    map[g].push(p);
+  }
+  return map;
 }
+
+const GROUP_LABELS: Record<string, string> = {
+  employee: 'Employee', department: 'Department', position: 'Position',
+  attendance: 'Attendance', leave: 'Leave', overtime: 'Overtime',
+  payroll: 'Payroll', performance: 'Performance', contract: 'Contract',
+  document: 'Document', company: 'Company', holiday: 'Holiday',
+  setting: 'Setting', user: 'User', role: 'Role & Permission', report: 'Report',
+};
+
+// ─── Role Form Modal ──────────────────────────────────────────────────────────
+
+interface RoleFormModalProps {
+  role: Role | null; // null = create, non-null = edit
+  onClose: () => void;
+  onSaved: () => void;
+}
+
+function RoleFormModal({ role, onClose, onSaved }: RoleFormModalProps) {
+  const isEdit = !!role;
+  const [name, setName] = useState(role?.name ?? '');
+  const [description, setDescription] = useState(role?.description ?? '');
+  const [level, setLevel] = useState(role?.level ?? 8);
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      if (isEdit) {
+        await rbacService.updateRole(role!.id, { name, description, level });
+        toast.success('Role diperbarui');
+      } else {
+        await rbacService.createRole({ name, description, level });
+        toast.success('Role dibuat');
+      }
+      onSaved();
+      onClose();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Gagal menyimpan role');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6">
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="text-base font-semibold text-gray-900">
+            {isEdit ? 'Edit Role' : 'Buat Role Baru'}
+          </h3>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100">
+            <X className="w-4 h-4 text-gray-400" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Nama Role</label>
+            <input
+              value={name}
+              onChange={e => setName(e.target.value)}
+              required
+              disabled={role?.is_system}
+              placeholder="cth: Finance Auditor"
+              className="w-full h-9 border border-gray-200 rounded-xl px-3 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/20 focus:border-slate-400 bg-gray-50 focus:bg-white disabled:opacity-50"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Deskripsi</label>
+            <textarea
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              rows={2}
+              placeholder="Deskripsi singkat tentang role ini..."
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/20 focus:border-slate-400 bg-gray-50 focus:bg-white resize-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Level <span className="text-gray-400 font-normal">(1 = tertinggi)</span></label>
+            <input
+              type="number" min={1} max={10}
+              value={level}
+              onChange={e => setLevel(Number(e.target.value))}
+              className="w-full h-9 border border-gray-200 rounded-xl px-3 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400/20 focus:border-slate-400 bg-gray-50 focus:bg-white"
+            />
+          </div>
+
+          <div className="flex gap-2 pt-2">
+            <button
+              type="button" onClick={onClose}
+              className="flex-1 h-9 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50"
+            >
+              Batal
+            </button>
+            <button
+              type="submit" disabled={saving}
+              className="flex-1 h-9 bg-slate-800 text-white rounded-xl text-sm font-medium hover:bg-slate-700 disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Simpan
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Delete Modal ─────────────────────────────────────────────────────────────
+
+function DeleteModal({ role, onClose, onDeleted }: { role: Role; onClose: () => void; onDeleted: () => void }) {
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await rbacService.deleteRole(role.id);
+      toast.success('Role dihapus');
+      onDeleted();
+      onClose();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Gagal menghapus role');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-2.5 rounded-xl bg-red-100">
+            <AlertCircle className="w-5 h-5 text-red-600" />
+          </div>
+          <div>
+            <h3 className="text-base font-semibold text-gray-900">Hapus Role</h3>
+            <p className="text-xs text-gray-500">Tindakan ini tidak bisa dibatalkan</p>
+          </div>
+        </div>
+        <p className="text-sm text-gray-600 mb-5">
+          Hapus role <span className="font-semibold text-gray-900">{role.name}</span>?
+          Semua user yang memiliki role ini akan kehilangan akses.
+        </p>
+        <div className="flex gap-2">
+          <button onClick={onClose} className="flex-1 h-9 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50">
+            Batal
+          </button>
+          <button
+            onClick={handleDelete} disabled={deleting}
+            className="flex-1 h-9 bg-red-500 text-white rounded-xl text-sm font-medium hover:bg-red-600 disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+            Hapus
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export function RolesPage() {
   const [roles, setRoles] = useState<Role[]>([]);
-  const [permissions, setPermissions] = useState<Permission[]>([]);
+  const [allPermissions, setAllPermissions] = useState<Permission[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [selectedRole, setSelectedRole] = useState<Role | null>(null);
-  const [rolePermissions, setRolePermissions] = useState<Permission[]>([]);
-  const [expandedModules, setExpandedModules] = useState<string[]>([]);
-  const [deleteModal, setDeleteModal] = useState<{ open: boolean; role: Role | null }>({
-    open: false,
-    role: null,
-  });
-  const [deleting, setDeleting] = useState(false);
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  const [selectedRole, setSelectedRole] = useState<RoleDetail | null>(null);
+  const [loadingRole, setLoadingRole] = useState(false);
+
+  // Pending permission IDs (editable)
+  const [pendingIds, setPendingIds] = useState<Set<number>>(new Set());
+  const [isDirty, setIsDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Modals
+  const [formModal, setFormModal] = useState<{ open: boolean; role: Role | null }>({ open: false, role: null });
+  const [deleteModal, setDeleteModal] = useState<{ open: boolean; role: Role | null }>({ open: false, role: null });
+
+  useEffect(() => { fetchData(); }, []);
 
   const fetchData = async () => {
     try {
@@ -58,377 +213,319 @@ export function RolesPage() {
         rbacService.getPermissions(),
       ]);
       setRoles(rolesRes.data);
-      setPermissions(permsRes.data);
+      setAllPermissions(permsRes.data);
     } catch {
-      toast.error('Failed to load roles');
+      toast.error('Gagal memuat data');
     } finally {
       setLoading(false);
     }
   };
 
   const handleSelectRole = async (role: Role) => {
-    setSelectedRole(role);
+    setLoadingRole(true);
+    setIsDirty(false);
     try {
-      // For Super Admin with wildcard, show all permissions
-      const userPerms = await rbacService.getUserPermissions(role.id);
-      setRolePermissions(userPerms);
+      const detail = await rbacService.getRoleById(role.id);
+      setSelectedRole(detail);
+      const ids = new Set(detail.rolePermissions.map(rp => rp.permission.id));
+      setPendingIds(ids);
     } catch {
-      setRolePermissions([]);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!deleteModal.role) return;
-    setDeleting(true);
-    try {
-      await rbacService.deleteRole(deleteModal.role.id);
-      toast.success('Role deleted');
-      setDeleteModal({ open: false, role: null });
-      if (selectedRole?.id === deleteModal.role.id) setSelectedRole(null);
-      fetchData();
-    } catch {
-      toast.error('Failed to delete role');
+      toast.error('Gagal memuat detail role');
     } finally {
-      setDeleting(false);
+      setLoadingRole(false);
     }
   };
 
-  // Group permissions by module
-  const permissionGroups: PermissionGroup[] = permissions.reduce<PermissionGroup[]>((groups, perm) => {
-    const module = perm.group || perm.name.split('.')[0] || 'other';
-    const existing = groups.find((g) => g.module === module);
-    if (existing) {
-      existing.permissions.push(perm);
-    } else {
-      groups.push({
-        module,
-        label: module.charAt(0).toUpperCase() + module.slice(1).replace(/_/g, ' '),
-        permissions: [perm],
-      });
-    }
-    return groups;
-  }, []);
+  const togglePermission = (permId: number) => {
+    setPendingIds(prev => {
+      const next = new Set(prev);
+      next.has(permId) ? next.delete(permId) : next.add(permId);
+      return next;
+    });
+    setIsDirty(true);
+  };
 
-  const filteredRoles = roles.filter(
-    (role) =>
-      role.name.toLowerCase().includes(search.toLowerCase()) ||
-      role.description?.toLowerCase().includes(search.toLowerCase())
+  const toggleGroup = (perms: Permission[], on: boolean) => {
+    setPendingIds(prev => {
+      const next = new Set(prev);
+      perms.forEach(p => on ? next.add(p.id) : next.delete(p.id));
+      return next;
+    });
+    setIsDirty(true);
+  };
+
+  const handleSave = async () => {
+    if (!selectedRole) return;
+    setSaving(true);
+    try {
+      await rbacService.assignPermissionsToRole(selectedRole.id, [...pendingIds]);
+      toast.success('Permission berhasil disimpan');
+      setIsDirty(false);
+      // refresh role detail
+      const detail = await rbacService.getRoleById(selectedRole.id);
+      setSelectedRole(detail);
+    } catch {
+      toast.error('Gagal menyimpan permission');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleReset = () => {
+    if (!selectedRole) return;
+    const ids = new Set(selectedRole.rolePermissions.map(rp => rp.permission.id));
+    setPendingIds(ids);
+    setIsDirty(false);
+  };
+
+  const grouped = groupPermissions(allPermissions);
+  const filteredRoles = roles.filter(r =>
+    r.name.toLowerCase().includes(search.toLowerCase()) ||
+    (r.description ?? '').toLowerCase().includes(search.toLowerCase())
   );
 
-  const toggleModule = (module: string) => {
-    setExpandedModules((prev) =>
-      prev.includes(module) ? prev.filter((m) => m !== module) : [...prev, module]
-    );
-  };
-
-  const totalUsers = roles.reduce((acc, role) => acc + ((role as any).user_count || 0), 0);
-  const systemRoles = roles.filter((r) => r.is_system).length;
-
-  if (loading) return <PageSpinner />;
+  if (loading) return (
+    <div className="flex items-center justify-center py-20">
+      <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
+    </div>
+  );
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Roles & Permissions</h1>
-          <p className="text-gray-500 mt-1">Manage user roles and access control</p>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-purple-700 rounded-xl flex items-center justify-center shadow">
+            <Shield className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-gray-900">Roles & Permissions</h1>
+            <p className="text-sm text-gray-500">Kelola role dan hak akses per role</p>
+          </div>
         </div>
-        <Button className="bg-gradient-to-r from-slate-700 to-slate-800 hover:from-slate-800 hover:to-slate-900 shadow-md">
-          <Plus className="mr-2 h-4 w-4" />
-          Create Role
-        </Button>
+        <button
+          onClick={() => setFormModal({ open: true, role: null })}
+          className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-xl hover:bg-slate-700 transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          Buat Role
+        </button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="border-0 shadow-sm bg-gradient-to-br from-slate-700 to-slate-800">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-slate-300 text-sm">Total Roles</p>
-                <p className="text-3xl font-bold text-white mt-1">{roles.length}</p>
-              </div>
-              <Shield className="h-10 w-10 text-slate-400" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-0 shadow-sm bg-gradient-to-br from-purple-500 to-purple-600">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-purple-100 text-sm">System Roles</p>
-                <p className="text-3xl font-bold text-white mt-1">{systemRoles}</p>
-              </div>
-              <Lock className="h-10 w-10 text-purple-200" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-0 shadow-sm bg-gradient-to-br from-blue-500 to-indigo-600">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-blue-100 text-sm">Custom Roles</p>
-                <p className="text-3xl font-bold text-white mt-1">{roles.length - systemRoles}</p>
-              </div>
-              <Users className="h-10 w-10 text-blue-200" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-0 shadow-sm bg-gradient-to-br from-amber-500 to-orange-500">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-amber-100 text-sm">Permissions</p>
-                <p className="text-3xl font-bold text-white mt-1">{permissions.length}</p>
-              </div>
-              <Key className="h-10 w-10 text-amber-200" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Main Content - Split View */}
       <div className="grid lg:grid-cols-3 gap-6">
-        {/* Roles List */}
-        <div className="lg:col-span-1">
-          <Card className="border-0 shadow-sm">
-            <CardHeader className="pb-2 border-b border-gray-100">
-              <CardTitle className="text-base font-semibold text-gray-800">Roles</CardTitle>
-            </CardHeader>
-            <CardContent className="p-4">
-              <div className="relative mb-4">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search roles..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-gray-200 bg-gray-50/50 pl-10 pr-4 text-sm transition-all focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-500/20 focus:bg-white"
-                />
-              </div>
+        {/* Left: Role List */}
+        <div className="space-y-3">
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Cari role..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="h-9 w-full rounded-xl border border-gray-200 bg-gray-50 pl-9 pr-4 text-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400/20 focus:bg-white transition-all"
+            />
+          </div>
 
-              <div className="space-y-2">
-                {filteredRoles.map((role) => (
-                  <button
-                    key={role.id}
-                    onClick={() => handleSelectRole(role)}
-                    className={`w-full p-4 rounded-xl border transition-all text-left ${
-                      selectedRole?.id === role.id
-                        ? 'border-slate-300 bg-slate-50 shadow-sm'
-                        : 'border-gray-100 hover:border-gray-200 hover:bg-gray-50'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <div
-                          className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                            role.level === 1
-                              ? 'bg-gradient-to-br from-purple-500 to-purple-600'
-                              : role.level <= 3
-                              ? 'bg-gradient-to-br from-blue-500 to-indigo-600'
-                              : role.level <= 5
-                              ? 'bg-gradient-to-br from-cyan-500 to-blue-500'
-                              : 'bg-gradient-to-br from-gray-400 to-gray-500'
-                          }`}
-                        >
-                          <Shield className="h-4 w-4 text-white" />
-                        </div>
-                        <span className="font-semibold text-gray-900">{role.name}</span>
-                      </div>
-                      {role.is_system && <Lock className="h-3.5 w-3.5 text-gray-400" />}
-                    </div>
-                    <p className="text-xs text-gray-500 line-clamp-1">{role.description || 'No description'}</p>
-                    <div className="flex items-center gap-3 mt-2">
-                      <span className="text-xs text-gray-400">Level {role.level}</span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          {/* Role Pills */}
+          <div className="flex flex-col gap-1.5">
+            {filteredRoles.map(role => {
+              const isActive = selectedRole?.id === role.id;
+              const count = role._count;
+              return (
+                <button
+                  key={role.id}
+                  onClick={() => handleSelectRole(role)}
+                  className={`flex items-center justify-between px-4 py-2.5 rounded-xl text-sm font-medium transition-all text-left ${
+                    isActive
+                      ? 'bg-slate-800 text-white shadow'
+                      : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    {role.is_system && (
+                      <Lock className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-white/60' : 'text-gray-400'}`} />
+                    )}
+                    <span className="truncate">{role.name}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                    {count && (
+                      <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                        isActive ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'
+                      }`}>
+                        {count.userRoles} user
+                      </span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <p className="text-xs text-gray-400 text-center">{roles.length} role terdaftar</p>
         </div>
 
-        {/* Permissions Panel */}
+        {/* Right: Permission Panel */}
         <div className="lg:col-span-2">
-          <Card className="border-0 shadow-sm">
-            <CardHeader className="pb-2 border-b border-gray-100">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base font-semibold text-gray-800">
-                  {selectedRole ? `${selectedRole.name} Permissions` : 'Select a Role'}
-                </CardTitle>
-                {selectedRole && !selectedRole.is_system && (
-                  <div className="flex items-center gap-2">
-                    <button className="p-2 rounded-lg hover:bg-slate-100 transition-colors group">
-                      <Edit className="h-4 w-4 text-gray-400 group-hover:text-slate-600" />
-                    </button>
-                    <button
-                      className="p-2 rounded-lg hover:bg-red-50 transition-colors group"
-                      onClick={() => setDeleteModal({ open: true, role: selectedRole })}
-                    >
-                      <Trash2 className="h-4 w-4 text-gray-400 group-hover:text-red-600" />
-                    </button>
+          {!selectedRole && !loadingRole ? (
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col items-center justify-center py-20 text-center">
+              <Shield className="w-10 h-10 text-gray-200 mb-3" />
+              <p className="text-sm font-medium text-gray-400">Pilih role di kiri untuk melihat permissions</p>
+            </div>
+          ) : loadingRole ? (
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex items-center justify-center py-20">
+              <Loader2 className="w-6 h-6 animate-spin text-indigo-500" />
+            </div>
+          ) : selectedRole && (
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+              {/* Panel Header */}
+              <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shrink-0">
+                    <Shield className="w-4 h-4 text-white" />
                   </div>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent className="p-4">
-              {selectedRole ? (
-                <div className="space-y-4">
-                  {/* Role Info */}
-                  <div className="p-4 rounded-xl bg-gray-50 border border-gray-100">
-                    <div className="flex items-center gap-3 mb-2">
-                      <div
-                        className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-md ${
-                          selectedRole.level === 1
-                            ? 'bg-gradient-to-br from-purple-500 to-purple-600'
-                            : 'bg-gradient-to-br from-slate-600 to-slate-700'
-                        }`}
-                      >
-                        <Shield className="h-5 w-5 text-white" />
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-gray-900">{selectedRole.name}</h3>
-                        <p className="text-sm text-gray-500">{selectedRole.description || 'No description'}</p>
-                      </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="font-semibold text-gray-900">{selectedRole.name}</h2>
+                      {selectedRole.is_system && (
+                        <span className="text-xs bg-amber-50 text-amber-600 border border-amber-200 px-2 py-0.5 rounded-full">System</span>
+                      )}
                     </div>
-                    <div className="flex items-center gap-4 mt-3">
-                      <Badge variant={selectedRole.is_system ? 'warning' : 'success'}>
-                        {selectedRole.is_system ? 'System Role' : 'Custom Role'}
-                      </Badge>
-                      <span className="text-sm text-gray-500">Level {selectedRole.level}</span>
-                    </div>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {pendingIds.size} dari {allPermissions.length} permission aktif
+                    </p>
                   </div>
+                </div>
 
-                  {/* Permissions */}
-                  <div className="space-y-2">
-                    {selectedRole.level === 1 ? (
-                      <div className="p-4 rounded-xl bg-purple-50 border border-purple-100">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center">
-                            <Key className="h-5 w-5 text-white" />
-                          </div>
-                          <div>
-                            <p className="font-semibold text-purple-900">Full Access</p>
-                            <p className="text-sm text-purple-600">
-                              This role has all permissions in the system
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      permissionGroups.map((group) => {
-                        const grantedInGroup = group.permissions.filter((p) =>
-                          rolePermissions.some((rp) => rp.id === p.id || rp.name === p.name)
-                        );
-                        return (
-                          <div key={group.module} className="border border-gray-100 rounded-xl overflow-hidden">
-                            <button
-                              onClick={() => toggleModule(group.module)}
-                              className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
-                            >
-                              <div className="flex items-center gap-3">
-                                {expandedModules.includes(group.module) ? (
-                                  <ChevronDown className="h-4 w-4 text-gray-400" />
-                                ) : (
-                                  <ChevronRight className="h-4 w-4 text-gray-400" />
-                                )}
-                                <span className="font-medium text-gray-900">{group.label}</span>
-                              </div>
-                              <span className="text-xs text-gray-400">
-                                {grantedInGroup.length} / {group.permissions.length}
-                              </span>
-                            </button>
-                            {expandedModules.includes(group.module) && (
-                              <div className="px-4 pb-4 space-y-2">
-                                {group.permissions.map((perm) => {
-                                  const hasPermission = rolePermissions.some(
-                                    (rp) => rp.id === perm.id || rp.name === perm.name
-                                  );
-                                  return (
-                                    <div
-                                      key={perm.id}
-                                      className={`flex items-center justify-between p-3 rounded-lg ${
-                                        hasPermission ? 'bg-green-50' : 'bg-gray-50'
-                                      }`}
-                                    >
-                                      <div>
-                                        <span className={`text-sm ${hasPermission ? 'text-green-700' : 'text-gray-500'}`}>
-                                          {perm.description || perm.name}
-                                        </span>
-                                        <p className="text-xs text-gray-400 font-mono">{perm.name}</p>
-                                      </div>
-                                      {hasPermission ? (
-                                        <CheckCircle2 className="h-4 w-4 text-green-500" />
-                                      ) : (
-                                        <div className="w-4 h-4 rounded-full border-2 border-gray-300" />
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })
-                    )}
+                <div className="flex items-center gap-2">
+                  {!selectedRole.is_system && (
+                    <>
+                      <button
+                        onClick={() => setFormModal({ open: true, role: selectedRole })}
+                        className="text-xs px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => setDeleteModal({ open: true, role: selectedRole })}
+                        className="text-xs px-3 py-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                      >
+                        Hapus
+                      </button>
+                    </>
+                  )}
+                  {isDirty && (
+                    <>
+                      <button
+                        onClick={handleReset}
+                        className="flex items-center gap-1.5 text-xs px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        Reset
+                      </button>
+                      <button
+                        onClick={handleSave}
+                        disabled={saving}
+                        className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-slate-800 text-white rounded-lg hover:bg-slate-700 disabled:opacity-50"
+                      >
+                        {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                        Simpan
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Super Admin shortcut */}
+              {selectedRole.level === 1 ? (
+                <div className="p-6">
+                  <div className="flex items-center gap-3 px-4 py-3 bg-purple-50 border border-purple-200 rounded-xl">
+                    <Lock className="w-4 h-4 text-purple-600 shrink-0" />
+                    <p className="text-sm font-medium text-purple-800">Role ini memiliki akses penuh ke semua fitur sistem</p>
                   </div>
                 </div>
               ) : (
-                <div className="text-center py-12">
-                  <Shield className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                  <p className="text-gray-500">Select a role to view its permissions</p>
+                <div className="p-6 space-y-6">
+                  {Object.entries(grouped).map(([group, perms]) => {
+                    const enabledInGroup = perms.filter(p => pendingIds.has(p.id)).length;
+                    return (
+                      <div key={group}>
+                        <div className="flex items-center justify-between mb-3">
+                          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                            {GROUP_LABELS[group] || group}
+                          </h3>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-400">{enabledInGroup}/{perms.length}</span>
+                            <button
+                              onClick={() => toggleGroup(perms, true)}
+                              className="text-xs px-2 py-1 bg-emerald-50 text-emerald-700 rounded-lg hover:bg-emerald-100 transition-colors"
+                            >
+                              Semua
+                            </button>
+                            <button
+                              onClick={() => toggleGroup(perms, false)}
+                              className="text-xs px-2 py-1 bg-gray-50 text-gray-500 rounded-lg hover:bg-gray-100 transition-colors"
+                            >
+                              Hapus
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {perms.map(perm => {
+                            const enabled = pendingIds.has(perm.id);
+                            return (
+                              <button
+                                key={perm.id}
+                                onClick={() => togglePermission(perm.id)}
+                                className={`flex items-center justify-between px-4 py-2.5 rounded-xl border text-sm font-medium transition-all text-left ${
+                                  enabled
+                                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                                    : 'bg-gray-50 border-gray-200 text-gray-400'
+                                }`}
+                              >
+                                <div className="min-w-0">
+                                  <p className="truncate">{perm.description || perm.name}</p>
+                                  <p className="text-xs font-mono opacity-60 truncate">{perm.name}</p>
+                                </div>
+                                {enabled
+                                  ? <Eye className="w-4 h-4 text-emerald-500 shrink-0 ml-2" />
+                                  : <EyeOff className="w-4 h-4 text-gray-300 shrink-0 ml-2" />
+                                }
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
-            </CardContent>
-          </Card>
+
+              {isDirty && (
+                <div className="px-6 pb-4">
+                  <p className="text-xs text-amber-600 text-center">Ada perubahan yang belum disimpan</p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Delete Confirmation Modal */}
+      {/* Modals */}
+      {formModal.open && (
+        <RoleFormModal
+          role={formModal.role}
+          onClose={() => setFormModal({ open: false, role: null })}
+          onSaved={fetchData}
+        />
+      )}
       {deleteModal.open && deleteModal.role && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={() => setDeleteModal({ open: false, role: null })}
-          />
-          <div className="relative bg-white rounded-2xl shadow-xl max-w-md w-full mx-4 p-6 border-0">
-            <div className="flex items-center gap-4 mb-4">
-              <div className="p-3 rounded-xl bg-red-100">
-                <AlertCircle className="h-6 w-6 text-red-600" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">Delete Role</h3>
-                <p className="text-sm text-gray-500">This action cannot be undone</p>
-              </div>
-            </div>
-
-            <p className="text-gray-600 mb-6">
-              Are you sure you want to delete the{' '}
-              <span className="font-semibold text-gray-900">{deleteModal.role.name}</span> role?
-            </p>
-
-            <div className="flex justify-end gap-3">
-              <Button
-                variant="outline"
-                onClick={() => setDeleteModal({ open: false, role: null })}
-                className="rounded-xl"
-              >
-                Cancel
-              </Button>
-              <button
-                onClick={handleDelete}
-                disabled={deleting}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-red-500 to-red-600 text-white font-medium hover:from-red-600 hover:to-red-700 transition-all shadow-md shadow-red-500/25 disabled:opacity-50"
-              >
-                {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <DeleteModal
+          role={deleteModal.role}
+          onClose={() => setDeleteModal({ open: false, role: null })}
+          onDeleted={() => { fetchData(); setSelectedRole(null); }}
+        />
       )}
     </div>
   );

@@ -9,6 +9,11 @@ export interface Role {
   is_system: boolean;
   created_at: string;
   updated_at: string;
+  _count?: { userRoles: number; rolePermissions: number };
+}
+
+export interface RoleDetail extends Role {
+  rolePermissions: { permission: Permission }[];
 }
 
 export interface Permission {
@@ -38,7 +43,7 @@ export const rbacService = {
     return response.data;
   },
 
-  getRoleById: async (id: number): Promise<Role> => {
+  getRoleById: async (id: number): Promise<RoleDetail> => {
     const response = await api.get(`/rbac/roles/${id}`);
     return response.data;
   },
@@ -71,7 +76,7 @@ export const rbacService = {
 
   // Role-Permission assignments
   assignPermissionsToRole: async (roleId: number, permissionIds: number[]): Promise<void> => {
-    await api.post('/rbac/roles/assign-permissions', { roleId, permissionIds });
+    await api.post('/rbac/roles/assign-permissions', { role_id: roleId, permission_ids: permissionIds });
   },
 
   // User-Role assignments
