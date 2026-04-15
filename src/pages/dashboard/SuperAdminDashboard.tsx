@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import {
   Users,
   Building2,
@@ -32,12 +33,15 @@ import {
 import type { SuperAdminStats, AuditLogEntry, AuditStatistics } from '@/services/dashboard.service';
 import { formatNumber } from '@/lib/utils';
 
-const systemHealthData = [
-  { name: 'API',      status: 'healthy', uptime: 99.9 },
-  { name: 'Database', status: 'healthy', uptime: 99.8 },
-  { name: 'Storage',  status: 'healthy', uptime: 100 },
-  { name: 'Cache',    status: 'healthy', uptime: 99.5 },
-];
+type ServiceStatus = 'healthy' | 'unhealthy' | 'disabled' | 'loading';
+interface ServiceHealth {
+  name: string;
+  status: ServiceStatus;
+  latency?: number;
+  error?: string;
+}
+
+const API_BASE = (import.meta.env.VITE_API_URL || 'https://peoplehub-backend-production.up.railway.app').replace(/\/api\/v1\/?$/, '');
 
 const ACTION_ICON: Record<string, React.ElementType> = {
   login: LogIn, logout: LogOut, create: Plus, update: Edit,
@@ -82,6 +86,34 @@ interface Props {
 export function SuperAdminDashboard({ user, superAdminStats, recentLogs, auditStats }: Props) {
   const name = user?.employee?.name?.split(' ')[0] || user?.email?.split('@')[0] || 'Admin';
   const today = new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+  const [systemHealth, setSystemHealth] = useState<ServiceHealth[]>([
+    { name: 'API',      status: 'loading' },
+    { name: 'Database', status: 'loading' },
+    { name: 'Storage',  status: 'loading' },
+    { name: 'Cache',    status: 'loading' },
+  ]);
+
+  useEffect(() => {
+    const fetchHealth = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/health`);
+        const data = await res.json();
+        const s = data.services || {};
+        setSystemHealth([
+          { name: 'API',      status: s.api?.status      ?? 'unhealthy', latency: s.api?.latency },
+          { name: 'Database', status: s.database?.status ?? 'unhealthy', latency: s.database?.latency, error: s.database?.error },
+          { name: 'Storage',  status: s.storage?.status  ?? 'unhealthy', latency: s.storage?.latency,  error: s.storage?.error },
+          { name: 'Cache',    status: s.cache?.status    ?? 'disabled',  latency: s.cache?.latency },
+        ]);
+      } catch {
+        setSystemHealth(prev => prev.map(s => ({ ...s, status: 'unhealthy' as ServiceStatus })));
+      }
+    };
+    fetchHealth();
+    const interval = setInterval(fetchHealth, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -168,24 +200,47 @@ export function SuperAdminDashboard({ user, superAdminStats, recentLogs, auditSt
           <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
             <div>
               <h3 className="font-semibold text-gray-900">System Health</h3>
-              <p className="text-xs text-gray-400 mt-0.5">Status layanan</p>
+              <p className="text-xs text-gray-400 mt-0.5">Status layanan realtime</p>
             </div>
-            <span className="px-2 py-1 bg-emerald-50 text-emerald-700 text-xs font-semibold rounded-lg">Healthy</span>
+            <span className={`px-2 py-1 text-xs font-semibold rounded-lg ${
+              systemHealth.every(s => s.status === 'healthy' || s.status === 'disabled')
+                ? 'bg-emerald-50 text-emerald-700'
+                : systemHealth.some(s => s.status === 'loading')
+                ? 'bg-gray-50 text-gray-500'
+                : 'bg-red-50 text-red-700'
+            }`}>
+              {systemHealth.some(s => s.status === 'loading') ? 'Checking...' :
+               systemHealth.every(s => s.status === 'healthy' || s.status === 'disabled') ? 'Healthy' : 'Degraded'}
+            </span>
           </div>
           <div className="p-4 space-y-2">
-            {systemHealthData.map(service => (
+            {systemHealth.map(service => (
               <div key={service.name} className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-gray-50">
                 <div className="flex items-center gap-2.5">
-                  <div className={`w-2 h-2 rounded-full shrink-0 ${service.status === 'healthy' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                  <div className={`w-2 h-2 rounded-full shrink-0 ${
+                    service.status === 'loading'   ? 'bg-gray-300 animate-pulse' :
+                    service.status === 'healthy'   ? 'bg-emerald-500' :
+                    service.status === 'disabled'  ? 'bg-gray-400' : 'bg-red-500'
+                  }`} />
                   <div>
                     <p className="text-sm font-medium text-gray-900">{service.name}</p>
-                    <p className="text-xs text-gray-400">{service.uptime}% uptime</p>
+                    <p className="text-xs text-gray-400">
+                      {service.status === 'loading' ? 'Checking...' :
+                       service.latency !== undefined ? `${service.latency}ms latency` :
+                       service.status === 'disabled' ? 'Disabled' :
+                       service.error ? service.error.slice(0, 30) : 'No data'}
+                    </p>
                   </div>
                 </div>
                 <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                  service.status === 'healthy' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                  service.status === 'loading'  ? 'bg-gray-100 text-gray-400' :
+                  service.status === 'healthy'  ? 'bg-emerald-100 text-emerald-700' :
+                  service.status === 'disabled' ? 'bg-gray-100 text-gray-500' :
+                                                  'bg-red-100 text-red-700'
                 }`}>
-                  {service.status === 'healthy' ? 'OK' : 'Warning'}
+                  {service.status === 'loading' ? '...' :
+                   service.status === 'healthy' ? 'OK' :
+                   service.status === 'disabled' ? 'Off' : 'Error'}
                 </span>
               </div>
             ))}
