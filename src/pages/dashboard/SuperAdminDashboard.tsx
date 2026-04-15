@@ -19,8 +19,11 @@ import {
   Download,
   ArrowRight,
   Clock,
+  Wifi,
+  MapPin,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useAuthStore } from '@/stores/auth.store';
 import {
   BarChart,
   Bar,
@@ -83,9 +86,68 @@ interface Props {
   greeting: () => string;
 }
 
+interface OnlineUser {
+  user_id: number;
+  email: string;
+  name?: string;
+  page?: string;
+  last_seen: string;
+}
+
+const PAGE_LABEL: Record<string, string> = {
+  '/dashboard': 'Dashboard',
+  '/employees': 'Employees',
+  '/attendance': 'Attendance',
+  '/leaves': 'Leave',
+  '/payroll': 'Payroll',
+  '/performance': 'Performance',
+  '/users': 'Users',
+  '/audit-logs': 'Audit Logs',
+};
+
+const getPageLabel = (page?: string) => {
+  if (!page) return 'Unknown';
+  for (const [key, label] of Object.entries(PAGE_LABEL)) {
+    if (page.startsWith(key)) return label;
+  }
+  return page.replace(/^\//, '').replace(/-/g, ' ') || 'Unknown';
+};
+
+const formatLastSeen = (dateStr: string) => {
+  const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+  if (diff < 10) return 'just now';
+  if (diff < 60) return `${diff}s ago`;
+  return `${Math.floor(diff / 60)}m ago`;
+};
+
 export function SuperAdminDashboard({ user, superAdminStats, recentLogs, auditStats }: Props) {
   const name = user?.employee?.name?.split(' ')[0] || user?.email?.split('@')[0] || 'Admin';
   const today = new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const token = useAuthStore(s => s.token);
+
+  const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
+  const [onlineLoading, setOnlineLoading] = useState(true);
+
+  useEffect(() => {
+    if (!token) return;
+    const apiBase = (import.meta.env.VITE_API_URL || '');
+    const fetchOnline = async () => {
+      try {
+        const res = await fetch(`${apiBase}/presence`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        setOnlineUsers(data.data || []);
+      } catch {
+        // silent
+      } finally {
+        setOnlineLoading(false);
+      }
+    };
+    fetchOnline();
+    const interval = setInterval(fetchOnline, 15000);
+    return () => clearInterval(interval);
+  }, [token]);
 
   const [systemHealth, setSystemHealth] = useState<ServiceHealth[]>([
     { name: 'API',      status: 'loading' },
@@ -280,39 +342,56 @@ export function SuperAdminDashboard({ user, superAdminStats, recentLogs, auditSt
 
       {/* Bottom Row */}
       <div className="grid lg:grid-cols-3 gap-5">
-        {/* Recent Activity */}
+        {/* Online Now */}
         <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
             <div>
-              <h3 className="font-semibold text-gray-900">Aktivitas Terbaru</h3>
-              <p className="text-xs text-gray-400 mt-0.5">Audit log sistem terkini</p>
+              <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                Online Now
+                {!onlineLoading && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    {onlineUsers.length}
+                  </span>
+                )}
+              </h3>
+              <p className="text-xs text-gray-400 mt-0.5">User aktif saat ini · refresh tiap 15 detik</p>
             </div>
             <Link to="/audit-logs" className="inline-flex items-center gap-1 text-xs text-slate-600 hover:text-slate-800 font-medium transition-colors">
-              Lihat Semua <ArrowRight className="w-3.5 h-3.5" />
+              Audit Logs <ArrowRight className="w-3.5 h-3.5" />
             </Link>
           </div>
           <div className="divide-y divide-gray-50">
-            {recentLogs.length === 0 ? (
+            {onlineLoading ? (
               <div className="py-12 text-center">
-                <History className="w-8 h-8 text-gray-200 mx-auto mb-2" />
-                <p className="text-sm text-gray-400">Belum ada aktivitas</p>
+                <Wifi className="w-8 h-8 text-gray-200 mx-auto mb-2 animate-pulse" />
+                <p className="text-sm text-gray-400">Loading...</p>
               </div>
-            ) : recentLogs.map(log => {
-              const Icon = ACTION_ICON[log.action] ?? Settings;
+            ) : onlineUsers.length === 0 ? (
+              <div className="py-12 text-center">
+                <Wifi className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+                <p className="text-sm text-gray-400">No users online right now</p>
+              </div>
+            ) : onlineUsers.map(u => {
+              const initials = (u.name || u.email).slice(0, 2).toUpperCase();
               return (
-                <div key={log.id} className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50/50 transition-colors">
-                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${ACTION_COLOR[log.action] ?? 'bg-gray-100 text-gray-500'}`}>
-                    <Icon className="w-3.5 h-3.5" />
+                <div key={u.user_id} className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50/50 transition-colors">
+                  <div className="relative shrink-0">
+                    <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-white text-xs font-semibold">
+                      {initials}
+                    </div>
+                    <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 capitalize">{log.action}
-                      {log.model ? <span className="text-gray-400 font-normal"> · {log.model}</span> : null}
-                    </p>
-                    <p className="text-xs text-gray-400 truncate">{log.employee_name || log.user_email || 'System'}</p>
+                    <p className="text-sm font-medium text-gray-900 truncate">{u.name || u.email}</p>
+                    <p className="text-xs text-gray-400 truncate">{u.email}</p>
                   </div>
-                  <div className="flex items-center gap-1 text-xs text-gray-400 shrink-0">
-                    <Clock className="w-3 h-3" />
-                    {formatRelativeTime(log.created_at)}
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    <div className="flex items-center gap-1 text-xs text-gray-500">
+                      <MapPin className="w-3 h-3" />
+                      <span>{getPageLabel(u.page)}</span>
+                    </div>
+                    <span className="text-xs text-gray-400">{formatLastSeen(u.last_seen)}</span>
                   </div>
                 </div>
               );

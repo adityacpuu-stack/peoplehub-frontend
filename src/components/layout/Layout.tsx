@@ -3,10 +3,14 @@ import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { AnnouncementPopup } from '@/components/AnnouncementPopup';
 import { useSidebarStore } from '@/stores/sidebar.store';
+import { useAuthStore } from '@/stores/auth.store';
+import { usePresence } from '@/hooks/usePresence';
 import { cn } from '@/lib/utils';
 
 export function Layout() {
   const { isCollapsed, isOpen } = useSidebarStore();
+  const token = useAuthStore(s => s.token);
+  usePresence(token);
 
   return (
     <div className="min-h-screen bg-gray-50">
