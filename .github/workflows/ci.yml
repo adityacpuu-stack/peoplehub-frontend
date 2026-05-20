@@ -1,0 +1,51 @@
+name: Frontend CI
+
+on:
+  pull_request:
+    branches: [main, staging]
+  push:
+    branches: [main, staging]
+
+jobs:
+  lint-and-build:
+    name: Typecheck + Build
+    runs-on: ubuntu-latest
+
+    env:
+      VITE_API_URL: /api/v1
+      VITE_SENTRY_DSN: ''   # disabled in CI; no error tracking needed
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+        continue-on-error: true  # warning-only until lint config stabilizes
+
+      - name: TypeScript check
+        run: npx tsc -b --noEmit
+
+      - name: Build
+        run: npm run build
+
+      - name: Bundle-size warning
+        run: |
+          BUNDLE_SIZE=$(du -sb dist/assets/index-*.js | head -1 | awk '{print $1}')
+          MAX_SIZE=3145728  # 3 MB raw
+          echo "Bundle size: $BUNDLE_SIZE bytes (max recommended: $MAX_SIZE)"
+          if [ "$BUNDLE_SIZE" -gt "$MAX_SIZE" ]; then
+            echo "::warning::Main JS bundle is $BUNDLE_SIZE bytes (over $MAX_SIZE). Consider code-splitting."
+          fi
+
+      - name: npm audit (high+)
+        run: npm audit --audit-level=high
+        continue-on-error: true
