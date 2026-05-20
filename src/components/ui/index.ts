@@ -9,3 +9,4 @@ export * from './Avatar';
 export * from './Select';
 export * from './SearchableSelect';
 export * from './ErrorModal';
+export * from './PreviewBanner';

@@ -138,9 +138,8 @@ export function LeaveAnalyticsPage() {
     const avgDays = approved > 0 ? (totalDays / approved).toFixed(1) : '0';
     const approvalRate = total > 0 ? ((approved / (approved + rejected)) * 100).toFixed(1) : '0';
 
-    // Compare with previous period (mock data for demonstration)
-    const prevTotal = Math.floor(total * (0.8 + Math.random() * 0.4));
-    const totalChange = total > 0 ? (((total - prevTotal) / prevTotal) * 100).toFixed(1) : '0';
+    // Previous-period comparison removed — was Math.random() mock shown as real metric.
+    // To restore: fetch prior period leave count from API and compute real delta.
 
     return {
       total,
@@ -150,7 +149,7 @@ export function LeaveAnalyticsPage() {
       totalDays,
       avgDays,
       approvalRate,
-      totalChange: parseFloat(totalChange),
+      totalChange: null as number | null, // null = not available; UI should hide the badge
     };
   }, [filteredLeaves]);
 
@@ -387,16 +386,18 @@ export function LeaveAnalyticsPage() {
                 <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-rose-500 to-pink-600 rounded-xl flex items-center justify-center shadow-lg">
                   <Calendar className="w-6 h-6 text-white" />
                 </div>
-                <div className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold ${
-                  overallStats.totalChange >= 0 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-                }`}>
-                  {overallStats.totalChange >= 0 ? (
-                    <ArrowUpRight className="w-3 h-3" />
-                  ) : (
-                    <ArrowDownRight className="w-3 h-3" />
-                  )}
-                  {Math.abs(overallStats.totalChange)}%
-                </div>
+                {overallStats.totalChange !== null && (
+                  <div className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold ${
+                    overallStats.totalChange >= 0 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                  }`}>
+                    {overallStats.totalChange >= 0 ? (
+                      <ArrowUpRight className="w-3 h-3" />
+                    ) : (
+                      <ArrowDownRight className="w-3 h-3" />
+                    )}
+                    {Math.abs(overallStats.totalChange)}%
+                  </div>
+                )}
               </div>
               <p className="text-3xl font-bold text-gray-900 mb-1">{overallStats.total}</p>
               <p className="text-sm text-gray-500">Total Requests</p>

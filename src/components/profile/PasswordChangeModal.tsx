@@ -92,19 +92,25 @@ export function PasswordChangeModal({ isOpen, onComplete }: PasswordChangeModalP
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
       {/* Backdrop - Non-dismissable */}
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" aria-hidden="true" />
 
-      {/* Modal */}
-      <div className="relative z-50 w-full max-w-md bg-white rounded-xl sm:rounded-2xl shadow-2xl overflow-hidden">
+      {/* Modal — alertdialog because it's blocking + non-dismissable */}
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="password-change-title"
+        aria-describedby="password-change-desc"
+        className="relative z-50 w-full max-w-md bg-white rounded-xl sm:rounded-2xl shadow-2xl overflow-hidden"
+      >
         {/* Header */}
         <div className="bg-gradient-to-r from-slate-700 to-slate-800 px-4 py-4 sm:px-6 sm:py-6 text-white">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0" aria-hidden="true">
               <Lock className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-lg sm:text-xl font-bold">Ubah Password</h2>
-              <p className="text-xs sm:text-sm text-slate-300">
+              <h2 id="password-change-title" className="text-lg sm:text-xl font-bold">Ubah Password</h2>
+              <p id="password-change-desc" className="text-xs sm:text-sm text-slate-300">
                 Demi keamanan, silakan ubah password Anda
               </p>
             </div>

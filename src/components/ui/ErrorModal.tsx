@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { X, AlertTriangle, WifiOff, ShieldX, RefreshCw } from 'lucide-react';
 
 interface ErrorModalProps {
@@ -18,18 +18,27 @@ export function ErrorModal({
   type = 'error',
   onRetry,
 }: ErrorModalProps) {
-  // Close on escape key
+  const titleId = useId();
+  const messageId = useId();
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Focus management + ESC handling
   useEffect(() => {
+    if (!isOpen) return;
+    previousFocusRef.current = document.activeElement as HTMLElement | null;
+    document.body.style.overflow = 'hidden';
+    // Auto-focus the close button so SR users land on a useful target
+    closeButtonRef.current?.focus();
+
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
-    if (isOpen) {
-      document.addEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'hidden';
-    }
+    document.addEventListener('keydown', handleEscape);
     return () => {
       document.removeEventListener('keydown', handleEscape);
       document.body.style.overflow = 'unset';
+      previousFocusRef.current?.focus?.();
     };
   }, [isOpen, onClose]);
 
@@ -75,13 +84,22 @@ export function ErrorModal({
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
         onClick={onClose}
+        aria-hidden="true"
       />
 
       {/* Modal */}
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm animate-in zoom-in-95 fade-in duration-200">
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={messageId}
+        className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm animate-in zoom-in-95 fade-in duration-200"
+      >
         {/* Close button */}
         <button
+          ref={closeButtonRef}
           onClick={onClose}
+          aria-label="Close dialog"
           className="absolute top-4 right-4 p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
         >
           <X className="h-5 w-5" />
@@ -90,18 +108,18 @@ export function ErrorModal({
         <div className="p-6 pt-8 text-center">
           {/* Icon */}
           <div className="flex justify-center mb-4">
-            <div className={`w-16 h-16 ${getIconBg()} rounded-full flex items-center justify-center shadow-lg`}>
+            <div className={`w-16 h-16 ${getIconBg()} rounded-full flex items-center justify-center shadow-lg`} aria-hidden="true">
               {getIcon()}
             </div>
           </div>
 
           {/* Title */}
-          <h3 className="text-xl font-bold text-gray-900 mb-2">
+          <h3 id={titleId} className="text-xl font-bold text-gray-900 mb-2">
             {getTitle()}
           </h3>
 
           {/* Message */}
-          <p className="text-gray-600 text-sm leading-relaxed mb-6">
+          <p id={messageId} className="text-gray-600 text-sm leading-relaxed mb-6">
             {message}
           </p>
 

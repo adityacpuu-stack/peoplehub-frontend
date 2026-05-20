@@ -47,10 +47,17 @@ export function AttendancePage() {
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedDepartment, setSelectedDepartment] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
   const [selectedCompany, setSelectedCompany] = useState('');
+
+  // Debounce search to avoid hitting API on every keystroke
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchQuery), 400);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
 
   // Summary stats
   const [summary, setSummary] = useState({
@@ -88,7 +95,7 @@ export function AttendancePage() {
 
   useEffect(() => {
     fetchData();
-  }, [pagination.page, selectedDate, selectedDepartment, selectedStatus, selectedCompany]);
+  }, [pagination.page, selectedDate, selectedDepartment, selectedStatus, selectedCompany, debouncedSearch]);
 
   useEffect(() => {
     fetchDepartments();
@@ -143,6 +150,9 @@ export function AttendancePage() {
       }
       if (selectedCompany) {
         params.company_id = parseInt(selectedCompany);
+      }
+      if (debouncedSearch) {
+        params.search = debouncedSearch;
       }
 
       const response = await attendanceService.getAll(params);

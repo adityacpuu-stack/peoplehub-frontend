@@ -205,31 +205,54 @@ export function LeavePolicyPage() {
 
     setSubmitting(true);
     try {
-      // Note: This is a placeholder - actual API implementation may vary
-      // For now, we'll show a success message
-      toast.success(editingPolicy ? 'Policy updated successfully' : 'Policy created successfully');
+      // Convert empty-string company_id to undefined; coerce numbers.
+      const payload = {
+        name: formData.name,
+        code: formData.code,
+        description: formData.description || undefined,
+        default_days: Number(formData.default_days) || 0,
+        max_days: formData.max_days ? Number(formData.max_days) : undefined,
+        carry_forward: !!formData.carry_forward,
+        carry_forward_days: Number(formData.carry_forward_days) || 0,
+        prorate_enabled: !!formData.prorate_enabled,
+        gender_specific: formData.gender_specific || undefined,
+        min_tenure_months: Number(formData.min_tenure_months) || 0,
+        requires_document: !!formData.requires_document,
+        company_id: formData.company_id !== '' ? Number(formData.company_id) : undefined,
+        is_active: formData.is_active,
+      };
+
+      if (editingPolicy) {
+        await leaveService.updateType(editingPolicy.id, payload);
+        toast.success('Policy updated successfully');
+      } else {
+        await leaveService.createType(payload);
+        toast.success('Policy created successfully');
+      }
       handleCloseModal();
       fetchPolicies();
     } catch (error: unknown) {
       console.error('Failed to save policy:', error);
       const err = error as { response?: { data?: { message?: string } } };
-      toast.error(err.response?.data?.message || 'Failed to save policy');
+      // Axios interceptor already toasts generic 4xx/5xx; only toast field-level here
+      if (!err.response) {
+        toast.error('Failed to save policy');
+      }
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleDelete = async (_id: number) => {
+  const handleDelete = async (id: number) => {
     if (!confirm('Are you sure you want to delete this leave policy?')) return;
 
     try {
-      // Note: This is a placeholder - actual API implementation may vary
+      await leaveService.deleteType(id);
       toast.success('Policy deleted successfully');
       fetchPolicies();
     } catch (error: unknown) {
       console.error('Failed to delete policy:', error);
-      const err = error as { response?: { data?: { message?: string } } };
-      toast.error(err.response?.data?.message || 'Failed to delete policy');
+      // Axios interceptor already toasts
     }
   };
 

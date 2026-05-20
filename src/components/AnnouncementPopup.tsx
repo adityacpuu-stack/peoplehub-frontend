@@ -1,6 +1,37 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { X, Megaphone, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
+import DOMPurify from 'dompurify';
 import { notificationService, type AnnouncementPopup as AnnouncementPopupType } from '@/services/notification.service';
+
+// Conservative HTML allowlist for announcement content. Strips script/style/iframe/
+// event handlers / javascript: URLs / inline styles entirely.
+const SANITIZE_CONFIG = {
+  ALLOWED_TAGS: [
+    'p', 'br', 'strong', 'em', 'u', 's', 'b', 'i',
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    'ul', 'ol', 'li',
+    'blockquote', 'code', 'pre',
+    'a',
+    'img',
+    'div', 'span',
+    'table', 'thead', 'tbody', 'tr', 'th', 'td',
+  ],
+  ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'target', 'rel', 'class'],
+  ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
+  ADD_ATTR: ['target'],
+  FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form', 'input'],
+  FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur', 'style'],
+};
+
+function SanitizedHtml({ html }: { html: string }) {
+  const clean = useMemo(() => DOMPurify.sanitize(html ?? '', SANITIZE_CONFIG), [html]);
+  return (
+    <div
+      className="text-gray-600 prose prose-sm max-w-none max-h-64 overflow-y-auto"
+      dangerouslySetInnerHTML={{ __html: clean }}
+    />
+  );
+}
 
 export function AnnouncementPopup() {
   const [announcements, setAnnouncements] = useState<AnnouncementPopupType[]>([]);
@@ -91,10 +122,15 @@ export function AnnouncementPopup() {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" aria-hidden="true" />
 
       {/* Modal */}
-      <div className={`relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden transform transition-all ${isUrgent ? 'ring-4 ring-red-500' : ''}`}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="announcement-popup-title"
+        className={`relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden transform transition-all ${isUrgent ? 'ring-4 ring-red-500' : ''}`}
+      >
         {/* Header */}
         <div className={`px-6 py-4 ${isUrgent ? 'bg-gradient-to-r from-red-500 to-orange-500' : 'bg-gradient-to-r from-blue-500 to-indigo-600'}`}>
           <div className="flex items-center justify-between">
@@ -140,15 +176,12 @@ export function AnnouncementPopup() {
           </div>
 
           {/* Title */}
-          <h4 className="text-xl font-bold text-gray-900 mb-3">
+          <h4 id="announcement-popup-title" className="text-xl font-bold text-gray-900 mb-3">
             {current.announcement.title}
           </h4>
 
-          {/* Content */}
-          <div
-            className="text-gray-600 prose prose-sm max-w-none max-h-64 overflow-y-auto"
-            dangerouslySetInnerHTML={{ __html: current.announcement.content }}
-          />
+          {/* Content — sanitized via DOMPurify to defang XSS in user-authored HTML */}
+          <SanitizedHtml html={current.announcement.content} />
 
           {/* Meta */}
           <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between text-sm text-gray-500">

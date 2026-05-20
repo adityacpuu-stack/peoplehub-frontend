@@ -431,10 +431,16 @@ export function ProfileCompletionModal({ isOpen, onComplete }: ProfileCompletion
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       {/* Backdrop */}
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-[2px]" />
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-[2px]" aria-hidden="true" />
 
-      {/* Modal */}
-      <div className="relative z-50 w-full sm:max-w-2xl bg-white sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[100dvh] sm:max-h-[92vh] sm:mx-4 rounded-t-2xl sm:rounded-b-2xl animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-300">
+      {/* Modal — alertdialog: blocking, non-dismissable until profile complete */}
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="profile-completion-title"
+        aria-describedby="profile-completion-desc"
+        className="relative z-50 w-full sm:max-w-2xl bg-white sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[100dvh] sm:max-h-[92vh] sm:mx-4 rounded-t-2xl sm:rounded-b-2xl animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-300"
+      >
 
         {/* Header - Compact & Clean */}
         <div className="relative overflow-hidden flex-shrink-0">
@@ -449,10 +455,10 @@ export function ProfileCompletionModal({ isOpen, onComplete }: ProfileCompletion
                 <User className="w-5 h-5 text-white" />
               </div>
               <div className="min-w-0 flex-1">
-                <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">
+                <h2 id="profile-completion-title" className="text-lg sm:text-xl font-bold text-white tracking-tight">
                   Lengkapi Profil Anda
                 </h2>
-                <p className="text-xs sm:text-sm text-blue-200 mt-0.5">
+                <p id="profile-completion-desc" className="text-xs sm:text-sm text-blue-200 mt-0.5">
                   Data diperlukan untuk administrasi perusahaan
                 </p>
               </div>

@@ -22,7 +22,7 @@ import {
   RadialBarChart,
   RadialBar,
 } from 'recharts';
-import { PageSpinner } from '@/components/ui';
+import { PageSpinner, PreviewBanner } from '@/components/ui';
 import {
   dashboardService,
   type GroupDashboard,
@@ -137,6 +137,7 @@ export function CEOKPIDashboardPage() {
 
   return (
     <div className="space-y-6">
+      <PreviewBanner message="KPI dashboard menggunakan period dan trend data mock. Real integration with performance + payroll metrics belum tersedia." />
       {/* Header */}
       <div className="bg-gradient-to-r from-slate-900 via-indigo-900 to-slate-900 rounded-2xl shadow-xl overflow-hidden">
         <div className="px-4 md:px-8 py-6 md:py-8 relative">

@@ -5,6 +5,7 @@ import {
   Award,
   ChevronRight,
 } from 'lucide-react';
+import { PreviewBanner } from '@/components/ui';
 
 // Mock succession data
 const mockSuccessionPlans = [
@@ -78,6 +79,7 @@ export function CEOSuccessionPlanningPage() {
 
   return (
     <div className="space-y-6">
+      <PreviewBanner message="Succession planning belum terintegrasi dengan data real. Data adalah contoh untuk preview UI." />
       {/* Header */}
       <div className="bg-gradient-to-r from-slate-900 via-indigo-900 to-slate-900 rounded-2xl shadow-xl overflow-hidden">
         <div className="px-4 md:px-8 py-6 md:py-8 relative">

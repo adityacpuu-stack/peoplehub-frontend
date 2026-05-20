@@ -109,17 +109,46 @@ function OrgCard({
   );
 }
 
+// Hard depth limit to prevent runaway recursion if backend data ever contains
+// a manager-cycle (employee A → B → A) or pathological depth. Browser stack would
+// blow up otherwise. 20 is well beyond any real org structure.
+const MAX_ORG_TREE_DEPTH = 20;
+
 function OrgTree({
   node,
   onSelect,
   selectedId,
   level = 0,
+  visited,
 }: {
   node: OrgNode;
   onSelect: (node: OrgNode) => void;
   selectedId: number | null;
   level?: number;
+  visited?: Set<number>;
 }) {
+  // Initialize visited set at root and track current branch for cycle detection.
+  const branchVisited = visited ?? new Set<number>();
+  if (branchVisited.has(node.id)) {
+    // Cycle detected — render leaf-only to break the loop.
+    return (
+      <div className="flex flex-col items-center">
+        <OrgCard node={node} onSelect={onSelect} isSelected={selectedId === node.id} />
+        <div className="text-xs text-red-500 mt-1">⚠ cycle detected (skipped descendants)</div>
+      </div>
+    );
+  }
+  if (level >= MAX_ORG_TREE_DEPTH) {
+    return (
+      <div className="flex flex-col items-center">
+        <OrgCard node={node} onSelect={onSelect} isSelected={selectedId === node.id} />
+        <div className="text-xs text-amber-600 mt-1">⚠ depth limit reached</div>
+      </div>
+    );
+  }
+  const nextVisited = new Set(branchVisited);
+  nextVisited.add(node.id);
+
   const hasChildren = node.children && node.children.length > 0;
 
   return (
@@ -151,7 +180,13 @@ function OrgTree({
                 <div key={child.id} className="flex flex-col items-center">
                   {/* Vertical line to child */}
                   <div className="w-0.5 h-6 bg-gray-300"></div>
-                  <OrgTree node={child} onSelect={onSelect} selectedId={selectedId} level={level + 1} />
+                  <OrgTree
+                    node={child}
+                    onSelect={onSelect}
+                    selectedId={selectedId}
+                    level={level + 1}
+                    visited={nextVisited}
+                  />
                 </div>
               ))}
             </div>
@@ -221,21 +256,27 @@ export function OrgChartPage() {
     setSelectedNode(node);
   };
 
-  // Search filter function
+  // Search filter function with cycle + depth guard (matches OrgTree).
   const filterNodes = (nodes: OrgNode[], query: string): OrgNode[] => {
     if (!query.trim()) return nodes;
 
     const lowerQuery = query.toLowerCase();
 
-    const filterRecursive = (node: OrgNode): OrgNode | null => {
+    const filterRecursive = (node: OrgNode, visited: Set<number>, depth: number): OrgNode | null => {
+      if (visited.has(node.id) || depth >= MAX_ORG_TREE_DEPTH) {
+        return null;
+      }
       const matches =
         node.name.toLowerCase().includes(lowerQuery) ||
         node.position.toLowerCase().includes(lowerQuery) ||
         node.department.toLowerCase().includes(lowerQuery) ||
         node.email.toLowerCase().includes(lowerQuery);
 
+      const nextVisited = new Set(visited);
+      nextVisited.add(node.id);
+
       const filteredChildren = node.children
-        ?.map(filterRecursive)
+        ?.map((c) => filterRecursive(c, nextVisited, depth + 1))
         .filter((child): child is OrgNode => child !== null);
 
       if (matches || (filteredChildren && filteredChildren.length > 0)) {
@@ -245,7 +286,9 @@ export function OrgChartPage() {
       return null;
     };
 
-    return nodes.map(filterRecursive).filter((node): node is OrgNode => node !== null);
+    return nodes
+      .map((n) => filterRecursive(n, new Set<number>(), 0))
+      .filter((node): node is OrgNode => node !== null);
   };
 
   const filteredData = filterNodes(orgData, searchQuery);
