@@ -30,6 +30,23 @@ export const leaveService = {
     return response.data.data;
   },
 
+  // Create leave type
+  createType: async (data: Partial<LeaveType> & { name: string; code: string }): Promise<LeaveType> => {
+    const response = await api.post<ApiResponse<LeaveType>>('/leave-types', data);
+    return response.data.data;
+  },
+
+  // Update leave type
+  updateType: async (id: number, data: Partial<LeaveType>): Promise<LeaveType> => {
+    const response = await api.put<ApiResponse<LeaveType>>(`/leave-types/${id}`, data);
+    return response.data.data;
+  },
+
+  // Delete leave type (backend will soft-deactivate if referenced, else hard-delete)
+  deleteType: async (id: number): Promise<void> => {
+    await api.delete(`/leave-types/${id}`);
+  },
+
   // ==========================================
   // SELF-SERVICE ROUTES
   // ==========================================
@@ -76,15 +93,19 @@ export const leaveService = {
     return response.data.data;
   },
 
-  // Approve leave request
-  approve: async (id: number, comment?: string): Promise<LeaveRequest> => {
-    const response = await api.post<ApiResponse<LeaveRequest>>(`/leaves/${id}/approve`, { comment });
+  // Approve leave request. Backend expects `approval_notes` (not `comment`).
+  approve: async (id: number, approvalNotes?: string): Promise<LeaveRequest> => {
+    const response = await api.post<ApiResponse<LeaveRequest>>(`/leaves/${id}/approve`, {
+      approval_notes: approvalNotes,
+    });
     return response.data.data;
   },
 
-  // Reject leave request
-  reject: async (id: number, reason: string): Promise<LeaveRequest> => {
-    const response = await api.post<ApiResponse<LeaveRequest>>(`/leaves/${id}/reject`, { reason });
+  // Reject leave request. Backend expects `rejection_reason` (not `reason`).
+  reject: async (id: number, rejectionReason: string): Promise<LeaveRequest> => {
+    const response = await api.post<ApiResponse<LeaveRequest>>(`/leaves/${id}/reject`, {
+      rejection_reason: rejectionReason,
+    });
     return response.data.data;
   },
 

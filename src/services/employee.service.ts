@@ -62,16 +62,34 @@ export const employeeService = {
     return response.data.data;
   },
 
-  // Get employees by company
+  // Get employees by company. Backend returns `meta`, transform to `pagination`.
   getByCompany: async (companyId: number, params?: PaginationParams): Promise<PaginatedResponse<Employee>> => {
-    const response = await api.get<PaginatedResponse<Employee>>(`/employees/company/${companyId}`, { params });
-    return response.data;
+    const response = await api.get<BackendPaginatedResponse<Employee>>(`/employees/company/${companyId}`, { params });
+    return {
+      success: true,
+      data: response.data.data,
+      pagination: {
+        page: response.data.meta.page,
+        limit: response.data.meta.limit,
+        total: response.data.meta.total,
+        totalPages: response.data.meta.totalPages,
+      },
+    };
   },
 
-  // Get employees by department
+  // Get employees by department. Backend returns `meta`, transform to `pagination`.
   getByDepartment: async (departmentId: number, params?: PaginationParams): Promise<PaginatedResponse<Employee>> => {
-    const response = await api.get<PaginatedResponse<Employee>>(`/employees/department/${departmentId}`, { params });
-    return response.data;
+    const response = await api.get<BackendPaginatedResponse<Employee>>(`/employees/department/${departmentId}`, { params });
+    return {
+      success: true,
+      data: response.data.data,
+      pagination: {
+        page: response.data.meta.page,
+        limit: response.data.meta.limit,
+        total: response.data.meta.total,
+        totalPages: response.data.meta.totalPages,
+      },
+    };
   },
 
   // Get subordinates of an employee
