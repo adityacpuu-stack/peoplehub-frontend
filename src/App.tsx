@@ -1,105 +1,139 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
 import * as Sentry from '@sentry/react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { useAuthStore } from '@/stores/auth.store';
 import { Layout } from '@/components/layout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
+import { RoleRoute } from '@/components/auth/RoleRoute';
 import { FullPageSpinner } from '@/components/ui';
 import { ProfileCompletionModal, PasswordChangeModal } from '@/components/profile';
-import {
-  LoginPage,
-  ForgotPasswordPage,
-  ResetPasswordPage,
-  DashboardPage,
-  CEODashboardPage,
-  CEOCompanyPerformancePage,
-  CEOWorkforceAnalyticsPage,
-  CEOFinancialOverviewPage,
-  CEOHeadcountReportPage,
-  CEOTurnoverReportPage,
-  CEOCostReportPage,
-  CEODepartmentReportPage,
-  CEOKPIDashboardPage,
-  CEOCompanyGoalsPage,
-  CEOOKRTrackingPage,
-  CEOApprovalsPage,
-  CEOBudgetRequestsPage,
-  CEOLeadershipTeamPage,
-  CEOSuccessionPlanningPage,
-  CEOPerformanceSummaryPage,
-  CEOTalentOverviewPage,
-  CEOAnnouncementsPage,
-  CEOPayrollReportPage,
-  EmployeesPage,
-  EmployeeDetailPage,
-  EmployeeFormPage,
-  DepartmentsPage,
-  WorkLocationsPage,
-  PositionsPage,
-  ContractsPage,
-  GroupContractsPage,
-  PerformancePage,
-  MovementPage,
-  ProfilePage,
-  SettingsPage,
-  AttendancePage,
-  RequestsPage,
-  OrgChartPage,
-  CompaniesPage,
-  PayrollPage,
-  FreelanceInternshipPayrollPage,
-  UsersPage,
-  RolesPage,
-  AdminCompaniesPage,
-  AuditLogsPage,
-  CompanyAssignmentsPage,
-  PayrollSettingsPage,
-  ApprovalSettingsPage,
-  CompanyFeaturesPage,
-  RoleDashboardConfigPage,
-  SystemConfigPage,
-  TemplatesPage,
-  AnnouncementsPage,
-  MyTeamPage,
-  TeamAttendancePage,
-  TeamOvertimePage,
-  LeaveApprovalPage,
-  MyLeavePage,
-  TeamTemplatesPage,
-  TeamAnnouncementsPage,
-  EmployeeTemplatesPage,
-  EmployeeAnnouncementsPage,
-  EmployeeDocumentsPage,
-  ManagerDocumentsPage,
-  HolidayCalendarPage,
-  OvertimePage,
-  AllowancesPage,
-  DeductionsPage,
-  LeaveRequestsPage,
-  LeavePolicyPage,
-  LeaveEntitlementsPage,
-  LeaveAnalyticsPage,
-  WorkforceAnalyticsPage,
-  AttendanceReportsPage,
-  TurnoverAnalysisPage,
-  HeadcountTrendsPage,
-  KPIDashboardPage,
-  GoalsOKRsPage,
-  PPh21Page,
-  TaxCalculationPage,
-  PaymentHistoryPage,
-  BPJSKesehatanPage,
-  BPJSKetenagakerjaanPage,
-  BPJSReportsPage,
-  ESPTPage,
-  EBupotPage,
-  MonthlyReportsPage,
-  AnnualReportsPage,
-  TaxRatesPage,
-  PTKPSettingsPage,
-  CompanyNPWPPage,
-} from '@/pages';
+
+// Eager imports — small pages loaded early (login flow + 403).
+import { LoginPage, ForgotPasswordPage, ResetPasswordPage, ForbiddenPage } from '@/pages';
+
+// Helper: convert named-export module → default-export shape for React.lazy.
+// Returns `ComponentType<any>` so prop types propagate from JSX usage rather
+// than being constrained to `unknown`.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const lazyNamed = (loader: () => Promise<Record<string, any>>, name: string) =>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  lazy(() => loader().then((m) => ({ default: m[name] as React.ComponentType<any> })));
+
+// Dashboard
+const DashboardPage = lazyNamed(() => import('@/pages/dashboard/DashboardPage'), 'DashboardPage');
+
+// CEO bundle (18 pages — heavy, lazy load all)
+const CEODashboardPage = lazyNamed(() => import('@/pages/ceo/CEODashboardPage' as never), 'CEODashboardPage');
+const CEOCompanyPerformancePage = lazyNamed(() => import('@/pages/ceo/CEOCompanyPerformancePage' as never), 'CEOCompanyPerformancePage');
+const CEOWorkforceAnalyticsPage = lazyNamed(() => import('@/pages/ceo/CEOWorkforceAnalyticsPage' as never), 'CEOWorkforceAnalyticsPage');
+const CEOFinancialOverviewPage = lazyNamed(() => import('@/pages/ceo/CEOFinancialOverviewPage' as never), 'CEOFinancialOverviewPage');
+const CEOHeadcountReportPage = lazyNamed(() => import('@/pages/ceo/CEOHeadcountReportPage' as never), 'CEOHeadcountReportPage');
+const CEOTurnoverReportPage = lazyNamed(() => import('@/pages/ceo/CEOTurnoverReportPage' as never), 'CEOTurnoverReportPage');
+const CEOCostReportPage = lazyNamed(() => import('@/pages/ceo/CEOCostReportPage' as never), 'CEOCostReportPage');
+const CEODepartmentReportPage = lazyNamed(() => import('@/pages/ceo/CEODepartmentReportPage' as never), 'CEODepartmentReportPage');
+const CEOKPIDashboardPage = lazyNamed(() => import('@/pages/ceo/CEOKPIDashboardPage' as never), 'CEOKPIDashboardPage');
+const CEOCompanyGoalsPage = lazyNamed(() => import('@/pages/ceo/CEOCompanyGoalsPage' as never), 'CEOCompanyGoalsPage');
+const CEOOKRTrackingPage = lazyNamed(() => import('@/pages/ceo/CEOOKRTrackingPage' as never), 'CEOOKRTrackingPage');
+const CEOApprovalsPage = lazyNamed(() => import('@/pages/ceo/CEOApprovalsPage' as never), 'CEOApprovalsPage');
+const CEOBudgetRequestsPage = lazyNamed(() => import('@/pages/ceo/CEOBudgetRequestsPage' as never), 'CEOBudgetRequestsPage');
+const CEOLeadershipTeamPage = lazyNamed(() => import('@/pages/ceo/CEOLeadershipTeamPage' as never), 'CEOLeadershipTeamPage');
+const CEOSuccessionPlanningPage = lazyNamed(() => import('@/pages/ceo/CEOSuccessionPlanningPage' as never), 'CEOSuccessionPlanningPage');
+const CEOPerformanceSummaryPage = lazyNamed(() => import('@/pages/ceo/CEOPerformanceSummaryPage' as never), 'CEOPerformanceSummaryPage');
+const CEOTalentOverviewPage = lazyNamed(() => import('@/pages/ceo/CEOTalentOverviewPage' as never), 'CEOTalentOverviewPage');
+const CEOAnnouncementsPage = lazyNamed(() => import('@/pages/ceo/CEOAnnouncementsPage' as never), 'CEOAnnouncementsPage');
+const CEOPayrollReportPage = lazyNamed(() => import('@/pages/ceo/CEOPayrollReportPage' as never), 'CEOPayrollReportPage');
+
+// Employees / Org
+const EmployeesPage = lazyNamed(() => import('@/pages/employees/EmployeesPage'), 'EmployeesPage');
+const EmployeeDetailPage = lazyNamed(() => import('@/pages/employees/EmployeeDetailPage' as never), 'EmployeeDetailPage');
+const EmployeeFormPage = lazyNamed(() => import('@/pages/employees/EmployeeFormPage' as never), 'EmployeeFormPage');
+const DepartmentsPage = lazyNamed(() => import('@/pages/departments/DepartmentsPage' as never), 'DepartmentsPage');
+const WorkLocationsPage = lazyNamed(() => import('@/pages/work-locations/WorkLocationsPage' as never), 'WorkLocationsPage');
+const PositionsPage = lazyNamed(() => import('@/pages/positions/PositionsPage' as never), 'PositionsPage');
+const OrgChartPage = lazyNamed(() => import('@/pages/org-chart/OrgChartPage' as never), 'OrgChartPage');
+const MovementPage = lazyNamed(() => import('@/pages/movement/MovementPage' as never), 'MovementPage');
+
+// Contracts / Performance
+const ContractsPage = lazyNamed(() => import('@/pages/contracts/ContractsPage' as never), 'ContractsPage');
+const GroupContractsPage = lazyNamed(() => import('@/pages/contracts/GroupContractsPage' as never), 'GroupContractsPage');
+const PerformancePage = lazyNamed(() => import('@/pages/performance/PerformancePage' as never), 'PerformancePage');
+const KPIDashboardPage = lazyNamed(() => import('@/pages/performance/KPIDashboardPage' as never), 'KPIDashboardPage');
+const GoalsOKRsPage = lazyNamed(() => import('@/pages/performance/GoalsOKRsPage' as never), 'GoalsOKRsPage');
+
+// Self-service / Misc
+const ProfilePage = lazyNamed(() => import('@/pages/profile/ProfilePage' as never), 'ProfilePage');
+const SettingsPage = lazyNamed(() => import('@/pages/settings/SettingsPage' as never), 'SettingsPage');
+const RequestsPage = lazyNamed(() => import('@/pages/requests/RequestsPage' as never), 'RequestsPage');
+
+// HR Operations (Attendance / Leave / Overtime / Payroll)
+const AttendancePage = lazyNamed(() => import('@/pages/attendance/AttendancePage'), 'AttendancePage');
+const PayrollPage = lazyNamed(() => import('@/pages/payroll/PayrollPage' as never), 'PayrollPage');
+const FreelanceInternshipPayrollPage = lazyNamed(() => import('@/pages/payroll/FreelanceInternshipPayrollPage' as never), 'FreelanceInternshipPayrollPage');
+const HolidayCalendarPage = lazyNamed(() => import('@/pages/holiday-calendar/HolidayCalendarPage' as never), 'HolidayCalendarPage');
+const OvertimePage = lazyNamed(() => import('@/pages/overtime/OvertimePage' as never), 'OvertimePage');
+const AllowancesPage = lazyNamed(() => import('@/pages/allowances/AllowancesPage' as never), 'AllowancesPage');
+const DeductionsPage = lazyNamed(() => import('@/pages/deductions/DeductionsPage' as never), 'DeductionsPage');
+const LeaveRequestsPage = lazyNamed(() => import('@/pages/leave/LeaveRequestsPage' as never), 'LeaveRequestsPage');
+const LeavePolicyPage = lazyNamed(() => import('@/pages/leave/LeavePolicyPage'), 'LeavePolicyPage');
+const LeaveEntitlementsPage = lazyNamed(() => import('@/pages/leave/LeaveEntitlementsPage' as never), 'LeaveEntitlementsPage');
+const LeaveAnalyticsPage = lazyNamed(() => import('@/pages/leave/LeaveAnalyticsPage' as never), 'LeaveAnalyticsPage');
+
+// Manager
+const MyTeamPage = lazyNamed(() => import('@/pages/manager/MyTeamPage' as never), 'MyTeamPage');
+const TeamAttendancePage = lazyNamed(() => import('@/pages/manager/TeamAttendancePage' as never), 'TeamAttendancePage');
+const TeamOvertimePage = lazyNamed(() => import('@/pages/manager/TeamOvertimePage' as never), 'TeamOvertimePage');
+const LeaveApprovalPage = lazyNamed(() => import('@/pages/manager/LeaveApprovalPage' as never), 'LeaveApprovalPage');
+const MyLeavePage = lazyNamed(() => import('@/pages/manager/MyLeavePage' as never), 'MyLeavePage');
+const TeamTemplatesPage = lazyNamed(() => import('@/pages/manager/TeamTemplatesPage' as never), 'TeamTemplatesPage');
+const TeamAnnouncementsPage = lazyNamed(() => import('@/pages/manager/TeamAnnouncementsPage' as never), 'TeamAnnouncementsPage');
+const ManagerDocumentsPage = lazyNamed(() => import('@/pages/manager/ManagerDocumentsPage' as never), 'ManagerDocumentsPage');
+
+// Employee self-service
+const EmployeeTemplatesPage = lazyNamed(() => import('@/pages/employee/EmployeeTemplatesPage' as never), 'EmployeeTemplatesPage');
+const EmployeeAnnouncementsPage = lazyNamed(() => import('@/pages/employee/EmployeeAnnouncementsPage' as never), 'EmployeeAnnouncementsPage');
+const EmployeeDocumentsPage = lazyNamed(() => import('@/pages/employee/EmployeeDocumentsPage' as never), 'EmployeeDocumentsPage');
+
+// Resources
+const TemplatesPage = lazyNamed(() => import('@/pages/resources/TemplatesPage' as never), 'TemplatesPage');
+const AnnouncementsPage = lazyNamed(() => import('@/pages/resources/AnnouncementsPage' as never), 'AnnouncementsPage');
+
+// Analytics
+const WorkforceAnalyticsPage = lazyNamed(() => import('@/pages/analytics/WorkforceAnalyticsPage' as never), 'WorkforceAnalyticsPage');
+const AttendanceReportsPage = lazyNamed(() => import('@/pages/analytics/AttendanceReportsPage' as never), 'AttendanceReportsPage');
+const TurnoverAnalysisPage = lazyNamed(() => import('@/pages/analytics/TurnoverAnalysisPage' as never), 'TurnoverAnalysisPage');
+const HeadcountTrendsPage = lazyNamed(() => import('@/pages/analytics/HeadcountTrendsPage' as never), 'HeadcountTrendsPage');
+
+// Companies
+const CompaniesPage = lazyNamed(() => import('@/pages/companies/CompaniesPage' as never), 'CompaniesPage');
+// AdminCompaniesPage is an alias of admin/CompaniesPage in pages/index.ts.
+const AdminCompaniesPage = lazyNamed(() => import('@/pages/admin/CompaniesPage' as never), 'CompaniesPage');
+
+// Admin
+const UsersPage = lazyNamed(() => import('@/pages/admin/UsersPage' as never), 'UsersPage');
+const RolesPage = lazyNamed(() => import('@/pages/admin/RolesPage' as never), 'RolesPage');
+const AuditLogsPage = lazyNamed(() => import('@/pages/admin/AuditLogsPage' as never), 'AuditLogsPage');
+const CompanyAssignmentsPage = lazyNamed(() => import('@/pages/admin/CompanyAssignmentsPage' as never), 'CompanyAssignmentsPage');
+const PayrollSettingsPage = lazyNamed(() => import('@/pages/admin/PayrollSettingsPage' as never), 'PayrollSettingsPage');
+const ApprovalSettingsPage = lazyNamed(() => import('@/pages/admin/ApprovalSettingsPage' as never), 'ApprovalSettingsPage');
+const CompanyFeaturesPage = lazyNamed(() => import('@/pages/admin/CompanyFeaturesPage' as never), 'CompanyFeaturesPage');
+const RoleDashboardConfigPage = lazyNamed(() => import('@/pages/admin/RoleDashboardConfigPage' as never), 'RoleDashboardConfigPage');
+const SystemConfigPage = lazyNamed(() => import('@/pages/admin/SystemConfigPage' as never), 'SystemConfigPage');
+
+// Tax
+const PPh21Page = lazyNamed(() => import('@/pages/tax/PPh21Page' as never), 'PPh21Page');
+const TaxCalculationPage = lazyNamed(() => import('@/pages/tax/TaxCalculationPage' as never), 'TaxCalculationPage');
+const PaymentHistoryPage = lazyNamed(() => import('@/pages/tax/PaymentHistoryPage' as never), 'PaymentHistoryPage');
+const BPJSKesehatanPage = lazyNamed(() => import('@/pages/tax/BPJSKesehatanPage' as never), 'BPJSKesehatanPage');
+const BPJSKetenagakerjaanPage = lazyNamed(() => import('@/pages/tax/BPJSKetenagakerjaanPage' as never), 'BPJSKetenagakerjaanPage');
+const BPJSReportsPage = lazyNamed(() => import('@/pages/tax/BPJSReportsPage' as never), 'BPJSReportsPage');
+const ESPTPage = lazyNamed(() => import('@/pages/tax/ESPTPage' as never), 'ESPTPage');
+const EBupotPage = lazyNamed(() => import('@/pages/tax/EBupotPage' as never), 'EBupotPage');
+const MonthlyReportsPage = lazyNamed(() => import('@/pages/tax/MonthlyReportsPage' as never), 'MonthlyReportsPage');
+const AnnualReportsPage = lazyNamed(() => import('@/pages/tax/AnnualReportsPage' as never), 'AnnualReportsPage');
+const TaxRatesPage = lazyNamed(() => import('@/pages/tax/TaxRatesPage' as never), 'TaxRatesPage');
+const PTKPSettingsPage = lazyNamed(() => import('@/pages/tax/PTKPSettingsPage' as never), 'PTKPSettingsPage');
+const CompanyNPWPPage = lazyNamed(() => import('@/pages/tax/CompanyNPWPPage' as never), 'CompanyNPWPPage');
 
 // Role-based Companies Page Wrapper
 function CompaniesPageWrapper() {
@@ -179,11 +213,13 @@ function App() {
 
   return (
     <BrowserRouter>
+      <Suspense fallback={<FullPageSpinner />}>
       <Routes>
         {/* Public routes */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/403" element={<ForbiddenPage />} />
 
         {/* Protected routes */}
         <Route
@@ -197,24 +233,26 @@ function App() {
 
           {/* CEO Routes - Keep /ceo-dashboard as alias for backwards compatibility */}
           <Route path="/ceo-dashboard" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/ceo/company-performance" element={<CEOCompanyPerformancePage />} />
-          <Route path="/ceo/workforce-analytics" element={<CEOWorkforceAnalyticsPage />} />
-          <Route path="/ceo/financial-overview" element={<CEOFinancialOverviewPage />} />
-          <Route path="/ceo/reports/headcount" element={<CEOHeadcountReportPage />} />
-          <Route path="/ceo/reports/turnover" element={<CEOTurnoverReportPage />} />
-          <Route path="/ceo/reports/cost" element={<CEOCostReportPage />} />
-          <Route path="/ceo/reports/department" element={<CEODepartmentReportPage />} />
-          <Route path="/ceo/kpi/dashboard" element={<CEOKPIDashboardPage />} />
-          <Route path="/ceo/kpi/company-goals" element={<CEOCompanyGoalsPage />} />
-          <Route path="/ceo/kpi/okr" element={<CEOOKRTrackingPage />} />
-          <Route path="/ceo/approvals" element={<CEOApprovalsPage />} />
-          <Route path="/ceo/budget-requests" element={<CEOBudgetRequestsPage />} />
-          <Route path="/ceo/leadership-team" element={<CEOLeadershipTeamPage />} />
-          <Route path="/ceo/succession-planning" element={<CEOSuccessionPlanningPage />} />
-          <Route path="/ceo/performance-summary" element={<CEOPerformanceSummaryPage />} />
-          <Route path="/ceo/talent-overview" element={<CEOTalentOverviewPage />} />
-          <Route path="/ceo/announcements" element={<CEOAnnouncementsPage />} />
-          <Route path="/ceo/payroll-report" element={<CEOPayrollReportPage />} />
+          {/* All /ceo/* routes gated to CEO, Group CEO, HR Manager (Super Admin bypasses).
+              Defense in depth — backend RBAC remains the source of truth. */}
+          <Route path="/ceo/company-performance" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOCompanyPerformancePage /></RoleRoute>} />
+          <Route path="/ceo/workforce-analytics" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOWorkforceAnalyticsPage /></RoleRoute>} />
+          <Route path="/ceo/financial-overview" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'Finance Manager']}><CEOFinancialOverviewPage /></RoleRoute>} />
+          <Route path="/ceo/reports/headcount" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOHeadcountReportPage /></RoleRoute>} />
+          <Route path="/ceo/reports/turnover" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOTurnoverReportPage /></RoleRoute>} />
+          <Route path="/ceo/reports/cost" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'Finance Manager']}><CEOCostReportPage /></RoleRoute>} />
+          <Route path="/ceo/reports/department" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEODepartmentReportPage /></RoleRoute>} />
+          <Route path="/ceo/kpi/dashboard" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOKPIDashboardPage /></RoleRoute>} />
+          <Route path="/ceo/kpi/company-goals" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOCompanyGoalsPage /></RoleRoute>} />
+          <Route path="/ceo/kpi/okr" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOOKRTrackingPage /></RoleRoute>} />
+          <Route path="/ceo/approvals" element={<RoleRoute allowedRoles={['CEO', 'Group CEO']}><CEOApprovalsPage /></RoleRoute>} />
+          <Route path="/ceo/budget-requests" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'Finance Manager']}><CEOBudgetRequestsPage /></RoleRoute>} />
+          <Route path="/ceo/leadership-team" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOLeadershipTeamPage /></RoleRoute>} />
+          <Route path="/ceo/succession-planning" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOSuccessionPlanningPage /></RoleRoute>} />
+          <Route path="/ceo/performance-summary" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOPerformanceSummaryPage /></RoleRoute>} />
+          <Route path="/ceo/talent-overview" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOTalentOverviewPage /></RoleRoute>} />
+          <Route path="/ceo/announcements" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOAnnouncementsPage /></RoleRoute>} />
+          <Route path="/ceo/payroll-report" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'Finance Manager', 'HR Manager']}><CEOPayrollReportPage /></RoleRoute>} />
 
           <Route path="/employees" element={<EmployeesPage />} />
           <Route path="/employees/create" element={<EmployeeFormPage />} />
@@ -223,17 +261,17 @@ function App() {
           <Route path="/departments" element={<DepartmentsPage />} />
           <Route path="/work-locations" element={<WorkLocationsPage />} />
 
-          {/* Admin pages */}
-          <Route path="/users" element={<UsersPage />} />
-          <Route path="/roles" element={<RolesPage />} />
+          {/* Admin pages — gated to admin-level roles */}
+          <Route path="/users" element={<RoleRoute allowedRoles={['HR Manager']}><UsersPage /></RoleRoute>} />
+          <Route path="/roles" element={<RoleRoute allowedRoles={[]}><RolesPage /></RoleRoute>} />
           <Route path="/companies" element={<CompaniesPageWrapper />} />
-          <Route path="/company-assignments" element={<CompanyAssignmentsPage />} />
-          <Route path="/company-features" element={<CompanyFeaturesPage />} />
-          <Route path="/role-dashboard-config" element={<RoleDashboardConfigPage />} />
-          <Route path="/system-config" element={<SystemConfigPage />} />
-          <Route path="/audit-logs" element={<AuditLogsPage />} />
-          <Route path="/payroll-settings" element={<PayrollSettingsPage />} />
-          <Route path="/approval-settings" element={<ApprovalSettingsPage />} />
+          <Route path="/company-assignments" element={<RoleRoute allowedRoles={[]}><CompanyAssignmentsPage /></RoleRoute>} />
+          <Route path="/company-features" element={<RoleRoute allowedRoles={[]}><CompanyFeaturesPage /></RoleRoute>} />
+          <Route path="/role-dashboard-config" element={<RoleRoute allowedRoles={[]}><RoleDashboardConfigPage /></RoleRoute>} />
+          <Route path="/system-config" element={<RoleRoute allowedRoles={[]}><SystemConfigPage /></RoleRoute>} />
+          <Route path="/audit-logs" element={<RoleRoute allowedRoles={['HR Manager']}><AuditLogsPage /></RoleRoute>} />
+          <Route path="/payroll-settings" element={<RoleRoute allowedRoles={['HR Manager', 'Finance Manager']}><PayrollSettingsPage /></RoleRoute>} />
+          <Route path="/approval-settings" element={<RoleRoute allowedRoles={['HR Manager']}><ApprovalSettingsPage /></RoleRoute>} />
 
           {/* System Settings → redirect to SettingsPage with appropriate tab */}
           <Route path="/settings/general" element={<SettingsPage defaultTab="general" />} />
@@ -249,26 +287,26 @@ function App() {
           {/* Attendance */}
           <Route path="/attendance" element={<AttendancePage />} />
 
-          {/* Manager pages */}
-          <Route path="/my-team" element={<MyTeamPage />} />
-          <Route path="/team-attendance" element={<TeamAttendancePage />} />
-          <Route path="/team-overtime" element={<TeamOvertimePage />} />
-          <Route path="/leave-approval" element={<LeaveApprovalPage />} />
+          {/* Manager pages — Manager and up; /my-leave is self-service so unrestricted */}
+          <Route path="/my-team" element={<RoleRoute allowedRoles={['Manager', 'HR Manager', 'HR Staff', 'CEO', 'Group CEO']}><MyTeamPage /></RoleRoute>} />
+          <Route path="/team-attendance" element={<RoleRoute allowedRoles={['Manager', 'HR Manager', 'HR Staff', 'CEO', 'Group CEO']}><TeamAttendancePage /></RoleRoute>} />
+          <Route path="/team-overtime" element={<RoleRoute allowedRoles={['Manager', 'HR Manager', 'HR Staff', 'CEO', 'Group CEO']}><TeamOvertimePage /></RoleRoute>} />
+          <Route path="/leave-approval" element={<RoleRoute allowedRoles={['Manager', 'HR Manager', 'HR Staff', 'CEO', 'Group CEO']}><LeaveApprovalPage /></RoleRoute>} />
           <Route path="/my-leave" element={<MyLeavePage />} />
-          <Route path="/manager/templates" element={<TeamTemplatesPage />} />
-          <Route path="/manager/announcements" element={<TeamAnnouncementsPage />} />
-          <Route path="/manager/documents" element={<ManagerDocumentsPage />} />
+          <Route path="/manager/templates" element={<RoleRoute allowedRoles={['Manager', 'HR Manager', 'HR Staff']}><TeamTemplatesPage /></RoleRoute>} />
+          <Route path="/manager/announcements" element={<RoleRoute allowedRoles={['Manager', 'HR Manager', 'HR Staff']}><TeamAnnouncementsPage /></RoleRoute>} />
+          <Route path="/manager/documents" element={<RoleRoute allowedRoles={['Manager', 'HR Manager', 'HR Staff']}><ManagerDocumentsPage /></RoleRoute>} />
 
           {/* Employee pages */}
           <Route path="/employee/templates" element={<EmployeeTemplatesPage />} />
           <Route path="/employee/announcements" element={<EmployeeAnnouncementsPage />} />
           <Route path="/employee/documents" element={<EmployeeDocumentsPage />} />
 
-          {/* Analytics (Group CEO) */}
-          <Route path="/analytics/workforce" element={<WorkforceAnalyticsPage />} />
-          <Route path="/analytics/attendance" element={<AttendanceReportsPage />} />
-          <Route path="/analytics/turnover" element={<TurnoverAnalysisPage />} />
-          <Route path="/analytics/headcount" element={<HeadcountTrendsPage />} />
+          {/* Analytics (Group CEO + HR Manager) */}
+          <Route path="/analytics/workforce" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><WorkforceAnalyticsPage /></RoleRoute>} />
+          <Route path="/analytics/attendance" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><AttendanceReportsPage /></RoleRoute>} />
+          <Route path="/analytics/turnover" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><TurnoverAnalysisPage /></RoleRoute>} />
+          <Route path="/analytics/headcount" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><HeadcountTrendsPage /></RoleRoute>} />
 
           {/* Leave Management */}
           <Route path="/leave" element={<LeaveRequestsPage />} />
@@ -301,20 +339,27 @@ function App() {
           <Route path="/performance/kpi" element={<KPIDashboardPage />} />
           <Route path="/performance/goals" element={<GoalsOKRsPage />} />
 
-          {/* Tax */}
-          <Route path="/tax/pph21" element={<PPh21Page />} />
-          <Route path="/tax/pph-calculation" element={<TaxCalculationPage />} />
-          <Route path="/tax/pph-history" element={<PaymentHistoryPage />} />
-          <Route path="/tax/bpjs-kesehatan" element={<BPJSKesehatanPage />} />
-          <Route path="/tax/bpjs-ketenagakerjaan" element={<BPJSKetenagakerjaanPage />} />
-          <Route path="/tax/bpjs-reports" element={<BPJSReportsPage />} />
-          <Route path="/tax/espt" element={<ESPTPage />} />
-          <Route path="/tax/ebupot" element={<EBupotPage />} />
-          <Route path="/tax/monthly-reports" element={<MonthlyReportsPage />} />
-          <Route path="/tax/annual-reports" element={<AnnualReportsPage />} />
-          <Route path="/tax/rates" element={<TaxRatesPage />} />
-          <Route path="/tax/ptkp" element={<PTKPSettingsPage />} />
-          <Route path="/tax/company-npwp" element={<CompanyNPWPPage />} />
+          {/* Tax — Tax Manager/Staff, Finance Manager, HR Manager. Super Admin bypasses. */}
+          {(() => {
+            const taxRoles = ['Tax Manager', 'Tax Staff', 'Finance Manager', 'HR Manager'];
+            return (
+              <>
+                <Route path="/tax/pph21" element={<RoleRoute allowedRoles={taxRoles}><PPh21Page /></RoleRoute>} />
+                <Route path="/tax/pph-calculation" element={<RoleRoute allowedRoles={taxRoles}><TaxCalculationPage /></RoleRoute>} />
+                <Route path="/tax/pph-history" element={<RoleRoute allowedRoles={taxRoles}><PaymentHistoryPage /></RoleRoute>} />
+                <Route path="/tax/bpjs-kesehatan" element={<RoleRoute allowedRoles={taxRoles}><BPJSKesehatanPage /></RoleRoute>} />
+                <Route path="/tax/bpjs-ketenagakerjaan" element={<RoleRoute allowedRoles={taxRoles}><BPJSKetenagakerjaanPage /></RoleRoute>} />
+                <Route path="/tax/bpjs-reports" element={<RoleRoute allowedRoles={taxRoles}><BPJSReportsPage /></RoleRoute>} />
+                <Route path="/tax/espt" element={<RoleRoute allowedRoles={taxRoles}><ESPTPage /></RoleRoute>} />
+                <Route path="/tax/ebupot" element={<RoleRoute allowedRoles={taxRoles}><EBupotPage /></RoleRoute>} />
+                <Route path="/tax/monthly-reports" element={<RoleRoute allowedRoles={taxRoles}><MonthlyReportsPage /></RoleRoute>} />
+                <Route path="/tax/annual-reports" element={<RoleRoute allowedRoles={taxRoles}><AnnualReportsPage /></RoleRoute>} />
+                <Route path="/tax/rates" element={<RoleRoute allowedRoles={taxRoles}><TaxRatesPage /></RoleRoute>} />
+                <Route path="/tax/ptkp" element={<RoleRoute allowedRoles={taxRoles}><PTKPSettingsPage /></RoleRoute>} />
+                <Route path="/tax/company-npwp" element={<RoleRoute allowedRoles={taxRoles}><CompanyNPWPPage /></RoleRoute>} />
+              </>
+            );
+          })()}
         </Route>
 
         {/* Redirect root to dashboard */}
@@ -323,6 +368,7 @@ function App() {
         {/* 404 */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
+      </Suspense>
 
       {/* Toast notifications */}
       <Toaster

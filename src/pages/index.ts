@@ -2,6 +2,7 @@
 export { LoginPage } from './auth/LoginPage';
 export { ForgotPasswordPage } from './auth/ForgotPasswordPage';
 export { ResetPasswordPage } from './auth/ResetPasswordPage';
+export { ForbiddenPage } from './auth/ForbiddenPage';
 
 // Dashboard
 export { DashboardPage } from './dashboard/DashboardPage';
