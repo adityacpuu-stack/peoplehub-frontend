@@ -88,6 +88,23 @@ function transformCompany(backend: BackendCompany): Company {
   };
 }
 
+// Inverse of transformCompany: FE shape → BE shape for create/update payloads.
+// Prisma Company model expects company_type / tax_id / status, NOT type / npwp / is_active.
+function toBackendCompany(input: Partial<Company> & { npwp?: string }): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (input.name !== undefined) out.name = input.name;
+  if (input.code !== undefined) out.code = input.code;
+  if (input.type !== undefined) out.company_type = String(input.type).toLowerCase();
+  if (input.address !== undefined) out.address = input.address || undefined;
+  if (input.phone !== undefined) out.phone = input.phone || undefined;
+  if (input.email !== undefined) out.email = input.email || undefined;
+  if (input.website !== undefined) out.website = input.website || undefined;
+  if (input.email_domain !== undefined) out.email_domain = input.email_domain || undefined;
+  if (input.npwp !== undefined) out.tax_id = input.npwp || undefined;
+  if (input.is_active !== undefined) out.status = input.is_active ? 'active' : 'inactive';
+  return out;
+}
+
 export interface CompanyQueryParams {
   page?: number;
   limit?: number;
@@ -116,7 +133,20 @@ export interface CompanyWithFeatures extends CompanyFeatureToggles {
   };
 }
 
+export interface CompanyOption {
+  id: number;
+  name: string;
+  code: string;
+}
+
 export const companyService = {
+  // Lightweight dropdown options ({id, name, code}, no pagination).
+  // Prefer this over getAll() when you only need to populate a select.
+  async getOptions(): Promise<CompanyOption[]> {
+    const response = await api.get('/companies/options');
+    return response.data.data;
+  },
+
   async getAll(params: CompanyQueryParams = {}): Promise<PaginatedResponse<Company>> {
     const response = await api.get('/companies', { params });
     // Transform each company from backend format
@@ -138,13 +168,13 @@ export const companyService = {
     return transformCompany(response.data.data || response.data);
   },
 
-  async create(data: Partial<Company>): Promise<Company> {
-    const response = await api.post('/companies', data);
+  async create(data: Partial<Company> & { npwp?: string }): Promise<Company> {
+    const response = await api.post('/companies', toBackendCompany(data));
     return transformCompany(response.data.data || response.data);
   },
 
-  async update(id: number, data: Partial<Company>): Promise<Company> {
-    const response = await api.put(`/companies/${id}`, data);
+  async update(id: number, data: Partial<Company> & { npwp?: string }): Promise<Company> {
+    const response = await api.put(`/companies/${id}`, toBackendCompany(data));
     return transformCompany(response.data.data || response.data);
   },
 

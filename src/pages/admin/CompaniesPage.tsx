@@ -138,6 +138,7 @@ export function CompaniesPage() {
     if (!formData.code.trim()) { toast.error('Kode perusahaan harus diisi'); return; }
     setIsSaving(true);
     try {
+      // companyService handles FE→BE field-name mapping (type→company_type, npwp→tax_id, is_active→status).
       if (formMode === 'create') {
         await companyService.create(formData);
         toast.success('Perusahaan berhasil ditambahkan');
