@@ -95,7 +95,7 @@ export function UsersPage() {
       setTotalPages(response.pagination.totalPages);
       setTotal(response.pagination.total);
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Gagal memuat data users');
+      toast.error(error.response?.data?.error?.message || error.response?.data?.message ||'Gagal memuat data users');
     } finally {
       setIsLoading(false);
     }
@@ -189,7 +189,7 @@ export function UsersPage() {
       fetchUsers();
       fetchStats();
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Gagal menyimpan user');
+      toast.error(error.response?.data?.error?.message || error.response?.data?.message ||'Gagal menyimpan user');
     } finally {
       setIsSubmitting(false);
     }
@@ -204,7 +204,7 @@ export function UsersPage() {
       fetchUsers();
       fetchStats();
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Gagal menghapus user');
+      toast.error(error.response?.data?.error?.message || error.response?.data?.message ||'Gagal menghapus user');
     }
   };
 
@@ -215,7 +215,7 @@ export function UsersPage() {
       fetchUsers();
       fetchStats();
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Gagal mengubah status');
+      toast.error(error.response?.data?.error?.message || error.response?.data?.message ||'Gagal mengubah status');
     }
   };
 
