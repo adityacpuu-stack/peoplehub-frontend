@@ -12,7 +12,7 @@ interface AssignmentCompany {
   company_type?: string;
 }
 
-export default function CompanyAssignmentsPage() {
+export function CompanyAssignmentsPage() {
   const [assignments, setAssignments] = useState<CompanyAssignment[]>([]);
   const [companies, setCompanies] = useState<AssignmentCompany[]>([]);
   const [availableEmployees, setAvailableEmployees] = useState<AvailableEmployee[]>([]);
