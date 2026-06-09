@@ -1416,30 +1416,56 @@ export function PayrollPage() {
                         </div>
                         BPJS (Karyawan)
                       </h3>
-                      <div className="space-y-2">
-                        {(selectedRecord.bpjs_kes_employee || 0) > 0 && (
+                      {selectedRecord.pph21_paid_by_company ? (
+                        /* Gross-up: company bears all employee BPJS via tunjangan;
+                           raw bpjs_*_employee fields still hold computed amounts but
+                           are NOT deducted from THP. Show "Ditanggung Perusahaan"
+                           to keep card consistent with THP. */
+                        <div className="space-y-2">
                           <div className="flex items-center justify-between text-sm">
                             <span className="text-gray-600">BPJS Kesehatan (1%)</span>
-                            <span className="font-medium text-red-600">-{formatCurrency(selectedRecord.bpjs_kes_employee!)}</span>
+                            <span className="font-medium text-gray-400 italic">Ditanggung Perusahaan</span>
                           </div>
-                        )}
-                        {(selectedRecord.bpjs_jht_employee || 0) > 0 && (
                           <div className="flex items-center justify-between text-sm">
                             <span className="text-gray-600">BPJS JHT (2%)</span>
-                            <span className="font-medium text-red-600">-{formatCurrency(selectedRecord.bpjs_jht_employee!)}</span>
+                            <span className="font-medium text-gray-400 italic">Ditanggung Perusahaan</span>
                           </div>
-                        )}
-                        {(selectedRecord.bpjs_jp_employee || 0) > 0 && (
                           <div className="flex items-center justify-between text-sm">
                             <span className="text-gray-600">BPJS JP (1%)</span>
-                            <span className="font-medium text-red-600">-{formatCurrency(selectedRecord.bpjs_jp_employee!)}</span>
+                            <span className="font-medium text-gray-400 italic">Ditanggung Perusahaan</span>
                           </div>
-                        )}
-                        <div className="border-t border-blue-200 pt-2 mt-2 flex items-center justify-between">
-                          <span className="font-semibold text-gray-900">Total BPJS</span>
-                          <span className="font-bold text-red-600">-{formatCurrency(selectedRecord.bpjs_employee_total || 0)}</span>
+                          <div className="border-t border-blue-200 pt-2 mt-2 flex items-center justify-between">
+                            <span className="font-semibold text-gray-900">Total Potongan BPJS</span>
+                            <span className="font-bold text-emerald-600">Rp 0</span>
+                          </div>
+                          <p className="text-xs text-blue-600 mt-1">* Skema gross-up — PFI tanggung BPJS karyawan</p>
                         </div>
-                      </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {(selectedRecord.bpjs_kes_employee || 0) > 0 && (
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-gray-600">BPJS Kesehatan (1%)</span>
+                              <span className="font-medium text-red-600">-{formatCurrency(selectedRecord.bpjs_kes_employee!)}</span>
+                            </div>
+                          )}
+                          {(selectedRecord.bpjs_jht_employee || 0) > 0 && (
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-gray-600">BPJS JHT (2%)</span>
+                              <span className="font-medium text-red-600">-{formatCurrency(selectedRecord.bpjs_jht_employee!)}</span>
+                            </div>
+                          )}
+                          {(selectedRecord.bpjs_jp_employee || 0) > 0 && (
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-gray-600">BPJS JP (1%)</span>
+                              <span className="font-medium text-red-600">-{formatCurrency(selectedRecord.bpjs_jp_employee!)}</span>
+                            </div>
+                          )}
+                          <div className="border-t border-blue-200 pt-2 mt-2 flex items-center justify-between">
+                            <span className="font-semibold text-gray-900">Total BPJS</span>
+                            <span className="font-bold text-red-600">-{formatCurrency(selectedRecord.bpjs_employee_total || 0)}</span>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Tax */}
@@ -1498,11 +1524,15 @@ export function PayrollPage() {
                           </div>
                         )}
                         <div className="border-t border-orange-200 pt-2 mt-2 flex items-center justify-between">
-                          <span className="font-semibold text-gray-900">PPh21</span>
-                          <span className="font-bold text-red-600">-{formatCurrency(selectedRecord.pph21)}</span>
+                          <span className="font-semibold text-gray-900">{selectedRecord.pph21_paid_by_company ? 'PPh21 (Ditanggung Perusahaan)' : 'PPh21'}</span>
+                          {selectedRecord.pph21_paid_by_company ? (
+                            <span className="font-bold text-emerald-600">Rp 0</span>
+                          ) : (
+                            <span className="font-bold text-red-600">-{formatCurrency(selectedRecord.pph21)}</span>
+                          )}
                         </div>
                         {selectedRecord.pph21_paid_by_company && (
-                          <p className="text-xs text-orange-600 mt-1">* Ditanggung perusahaan</p>
+                          <p className="text-xs text-orange-600 mt-1">* Tunjangan Jabatan {formatCurrency(selectedRecord.pph21)} = nilai PPh21 yang dibayar perusahaan (skema gross-up)</p>
                         )}
                       </div>
                     </div>
