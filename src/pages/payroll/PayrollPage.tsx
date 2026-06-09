@@ -1465,8 +1465,9 @@ export function PayrollPage() {
                             <span className="font-medium">TER {selectedRecord.ter_category}</span>
                           </div>
                         )}
-                        {/* Gross Up Iteration (for NET/NETT pay type) */}
-                        {(selectedRecord.pay_type === 'net' || selectedRecord.pay_type === 'gross_up') && selectedRecord.gross_up_initial && (
+                        {/* Gross Up Iteration — shown for any payroll where company bears
+                            PPh21 (Wave 6.5: PFI uses gross-up regardless of pay_type label) */}
+                        {selectedRecord.pph21_paid_by_company && selectedRecord.gross_up_initial && (
                           <>
                             <div className="border-t border-orange-200 pt-2 mt-2">
                               <p className="text-xs font-semibold text-orange-700 mb-2">Gross Up Calculation:</p>
@@ -1489,8 +1490,8 @@ export function PayrollPage() {
                             </div>
                           </>
                         )}
-                        {/* For GROSS pay type, show simple TER rate */}
-                        {selectedRecord.pay_type === 'gross' && selectedRecord.ter_rate && (
+                        {/* For pure GROSS (employee pays tax) — TER rate only, no iteration panel */}
+                        {!selectedRecord.pph21_paid_by_company && selectedRecord.ter_rate && (
                           <div className="flex items-center justify-between text-sm">
                             <span className="text-gray-600">TER Rate</span>
                             <span className="font-medium">{((Number(selectedRecord.ter_rate) || 0) * 100).toFixed(2)}%</span>
@@ -1557,11 +1558,11 @@ export function PayrollPage() {
                     </div>
                     <div className="text-center border-x border-white/20">
                       <p className="text-purple-100 text-sm">
-                        {(selectedRecord.pay_type === 'net' || selectedRecord.pay_type === 'gross_up') ? 'Gross Up Final' : 'Net Salary'}
+                        {selectedRecord.pph21_paid_by_company ? 'Gross Up Final' : 'Net Salary'}
                       </p>
                       <p className="text-2xl font-bold mt-1">
                         {formatCurrency(
-                          (selectedRecord.pay_type === 'net' || selectedRecord.pay_type === 'gross_up')
+                          selectedRecord.pph21_paid_by_company
                             ? (selectedRecord.final_gross_up || selectedRecord.gross_salary)
                             : selectedRecord.net_salary
                         )}
