@@ -285,6 +285,15 @@ export function ProfileCompletionModal({ isOpen, onComplete }: ProfileCompletion
       newErrors.mobile_number = 'Format nomor HP tidak valid';
       isValid = false;
     }
+    // Bank account: mirror BE regex /^[\d\-\s]{5,30}$/ so we fail fast on the client
+    if (formData.bank_account_number && !/^[\d\-\s]{5,30}$/.test(formData.bank_account_number)) {
+      newErrors.bank_account_number = 'Nomor rekening hanya angka, 5-30 digit';
+      isValid = false;
+    }
+    if (formData.bank_name && formData.bank_name.length > 100) {
+      newErrors.bank_name = 'Nama bank maksimal 100 karakter';
+      isValid = false;
+    }
     setErrors(newErrors);
     return isValid;
   };
@@ -325,9 +334,27 @@ export function ProfileCompletionModal({ isOpen, onComplete }: ProfileCompletion
       await profileService.updateMyProfile(updateData);
       toast.success('Profil berhasil dilengkapi!');
       onComplete();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to update profile:', error);
-      toast.error('Gagal menyimpan profil. Silakan coba lagi.');
+      // BE returns { success: false, error: { message, code, errors: [{field, message}] } }
+      // see peoplehub-backend/src/middlewares/error.middleware.ts:67-126
+      const apiError = error?.response?.data?.error;
+      const fieldErrors: Array<{ field: string; message: string }> = apiError?.errors || [];
+      if (fieldErrors.length > 0) {
+        // Map per-field errors back onto the form for inline display
+        const mapped: Partial<Record<keyof FormData, string>> = {};
+        for (const fe of fieldErrors) {
+          const key = fe.field as keyof FormData;
+          if (key in formData) mapped[key] = fe.message;
+        }
+        if (Object.keys(mapped).length > 0) setErrors((prev) => ({ ...prev, ...mapped }));
+        // Jump back to the earliest step that has an error so user can fix it
+        const stepWithError = STEPS.find((s) => s.fields.some((f) => mapped[f]));
+        if (stepWithError) setCurrentStep(stepWithError.id);
+        toast.error(fieldErrors[0].message || apiError?.message || 'Validasi gagal');
+      } else {
+        toast.error(apiError?.message || 'Gagal menyimpan profil. Silakan coba lagi.');
+      }
     } finally {
       setIsLoading(false);
     }
