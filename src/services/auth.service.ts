@@ -8,7 +8,11 @@ export const authService = {
   },
 
   logout: async (): Promise<void> => {
-    await api.post('/auth/logout');
+    // Send the refresh token so BE can block it too (W7.A security fix).
+    // Without this, an attacker holding the refresh token could mint a fresh
+    // access token via /auth/refresh even after we "logged out".
+    const refreshToken = localStorage.getItem('refreshToken') || undefined;
+    await api.post('/auth/logout', refreshToken ? { refreshToken } : {});
   },
 
   me: async (): Promise<User> => {
