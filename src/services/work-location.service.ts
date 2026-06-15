@@ -62,13 +62,23 @@ export interface CreateWorkLocationRequest {
 }
 
 interface BackendPaginatedResponse<T> {
+  success: boolean;
   data: T[];
-  pagination: {
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
+  meta: {
+    pagination: {
+      total: number;
+      page: number;
+      limit: number;
+      totalPages: number;
+    };
   };
+  message?: string;
+}
+
+interface BackendSingleResponse<T> {
+  success: boolean;
+  data: T;
+  message?: string;
 }
 
 interface WorkLocationListParams {
@@ -78,12 +88,30 @@ interface WorkLocationListParams {
   is_active?: boolean;
 }
 
+export interface WorkLocationOption {
+  id: number;
+  name: string;
+  code?: string;
+  company_id: number;
+}
+
+interface WorkLocationOptionsParams {
+  company_id?: number;
+}
+
 export const workLocationService = {
+  // Lightweight dropdown options ({id, name, code, company_id}, no pagination).
+  // Prefer this over getAll() when you only need to populate a select.
+  getOptions: async (params?: WorkLocationOptionsParams): Promise<WorkLocationOption[]> => {
+    const response = await api.get<BackendSingleResponse<WorkLocationOption[]>>('/work-locations/options', { params });
+    return response.data.data;
+  },
+
   getAll: async (params?: WorkLocationListParams): Promise<{ data: WorkLocation[]; total: number }> => {
     const response = await api.get<BackendPaginatedResponse<WorkLocation>>('/work-locations', { params });
     return {
       data: response.data.data,
-      total: response.data.pagination?.total || response.data.data.length,
+      total: response.data.meta?.pagination?.total ?? response.data.data.length,
     };
   },
 
@@ -95,18 +123,18 @@ export const workLocationService = {
   },
 
   getById: async (id: number): Promise<WorkLocation> => {
-    const response = await api.get<WorkLocation>(`/work-locations/${id}`);
-    return response.data;
+    const response = await api.get<BackendSingleResponse<WorkLocation>>(`/work-locations/${id}`);
+    return response.data.data;
   },
 
   create: async (data: CreateWorkLocationRequest): Promise<WorkLocation> => {
-    const response = await api.post<WorkLocation>('/work-locations', data);
-    return response.data;
+    const response = await api.post<BackendSingleResponse<WorkLocation>>('/work-locations', data);
+    return response.data.data;
   },
 
   update: async (id: number, data: Partial<CreateWorkLocationRequest>): Promise<WorkLocation> => {
-    const response = await api.put<WorkLocation>(`/work-locations/${id}`, data);
-    return response.data;
+    const response = await api.put<BackendSingleResponse<WorkLocation>>(`/work-locations/${id}`, data);
+    return response.data.data;
   },
 
   delete: async (id: number): Promise<void> => {

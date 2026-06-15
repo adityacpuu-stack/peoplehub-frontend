@@ -110,6 +110,12 @@ export interface M365UserStatus {
   licenses: M365UserLicense[];
 }
 
+export interface SendCredentialsResult {
+  officeEmail?: string;
+  sentTo: string;
+  [key: string]: unknown;
+}
+
 export interface PaginatedResponse<T> {
   data: T[];
   pagination: {
@@ -131,22 +137,25 @@ export const userService = {
     if (query.company_id) params.append('company_id', String(query.company_id));
 
     const response = await api.get(`/users?${params.toString()}`);
-    return response.data;
+    return {
+      data: response.data.data,
+      pagination: response.data.meta.pagination,
+    };
   },
 
   getById: async (id: number): Promise<UserDetail> => {
     const response = await api.get(`/users/${id}`);
-    return response.data;
+    return response.data.data;
   },
 
   create: async (data: CreateUserDTO): Promise<User> => {
     const response = await api.post('/users', data);
-    return response.data;
+    return response.data.data;
   },
 
   update: async (id: number, data: UpdateUserDTO): Promise<User> => {
     const response = await api.put(`/users/${id}`, data);
-    return response.data;
+    return response.data.data;
   },
 
   delete: async (id: number): Promise<{ success: boolean }> => {
@@ -154,28 +163,28 @@ export const userService = {
     return response.data;
   },
 
-  sendCredentials: async (id: number, username?: string, licenseSkuId?: string): Promise<{ success: boolean; officeEmail: string; sentTo: string; message: string }> => {
+  sendCredentials: async (id: number, username?: string, licenseSkuId?: string): Promise<SendCredentialsResult> => {
     const response = await api.post(`/users/${id}/send-credentials`, { username, licenseSkuId });
-    return response.data;
+    return response.data.data;
   },
 
   getM365Licenses: async (): Promise<{ available: boolean; licenses: M365License[] }> => {
     const response = await api.get('/users/m365-licenses');
-    return response.data;
+    return response.data.data;
   },
 
   getM365UserStatus: async (email: string): Promise<M365UserStatus> => {
     const response = await api.get('/users/m365-user-status', { params: { email } });
-    return response.data;
+    return response.data.data;
   },
 
   toggleStatus: async (id: number): Promise<User> => {
     const response = await api.patch(`/users/${id}/toggle-status`);
-    return response.data;
+    return response.data.data;
   },
 
   getStats: async (): Promise<UserStats> => {
     const response = await api.get('/users/stats');
-    return response.data;
+    return response.data.data;
   },
 };

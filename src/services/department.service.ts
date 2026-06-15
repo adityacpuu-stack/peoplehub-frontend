@@ -32,7 +32,23 @@ interface BackendPaginatedResponse<T> {
   };
 }
 
+export interface DepartmentOption {
+  id: number;
+  name: string;
+  code?: string;
+}
+
 export const departmentService = {
+  // Lightweight dropdown options ({id, name, code}, no pagination).
+  // Prefer this over getAll() / getAllDepartments() when populating a select.
+  getOptions: async (params?: { company_id?: number }): Promise<DepartmentOption[]> => {
+    const response = await api.get<{ success: boolean; data: DepartmentOption[] }>(
+      '/departments/options',
+      { params }
+    );
+    return response.data.data;
+  },
+
   // List departments
   getAll: async (params?: DepartmentListParams): Promise<PaginatedResponse<Department>> => {
     const response = await api.get<BackendPaginatedResponse<Department>>('/departments', { params });

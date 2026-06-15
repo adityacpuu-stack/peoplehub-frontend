@@ -157,6 +157,7 @@ export interface Employee {
   salary_currency?: string;
   pay_frequency?: string;
   pay_type?: string;
+  salary_status?: 'existing' | 'new_gross' | null;
   transport_allowance?: number;
   meal_allowance?: number;
   position_allowance?: number;
@@ -270,6 +271,7 @@ export interface CreateEmployeeRequest {
   salary_currency?: string;
   pay_frequency?: string;
   pay_type?: string;
+  salary_status?: 'existing' | 'new_gross';
   transport_allowance?: number;
   meal_allowance?: number;
   position_allowance?: number;
@@ -401,6 +403,11 @@ export interface LeaveRequest {
     id: number;
     name: string;
     employee_id: string;
+    // Wave 6.5: surfaces approver routing so /leave HR view can disable
+    // Approve/Reject buttons for non-routed requests.
+    leave_approver_id?: number | null;
+    manager_id?: number | null;
+    direct_manager_id?: number | null;
     department?: { id: number; name: string };
     position?: { id: number; name: string };
   };

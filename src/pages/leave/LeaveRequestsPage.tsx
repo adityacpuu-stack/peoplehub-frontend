@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useForm, Controller } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import toast from 'react-hot-toast';
 import {
   Calendar,
@@ -25,7 +27,31 @@ import {
 import { leaveService } from '../../services/leave.service';
 import { companyService } from '../../services/company.service';
 import { employeeService } from '../../services/employee.service';
+import { useAuthStore } from '@/stores/auth.store';
 import type { LeaveRequest, LeaveType } from '@/types';
+
+/**
+ * Wave 6.5: scope Approve/Reject actions to the designated approver only.
+ * Super Admin retains god-mode. /leave is HR oversight view — buttons stay
+ * visible but disabled for non-routed requests (with tooltip explaining
+ * who the approver is).
+ */
+function canApproveLeave(
+  leave: LeaveRequest,
+  currentEmployeeId: number | null | undefined,
+  isSuperAdmin: boolean,
+): boolean {
+  if (isSuperAdmin) return true;
+  if (!currentEmployeeId) return false;
+  const emp = leave.employee;
+  if (!emp) return false;
+  return (
+    emp.leave_approver_id === currentEmployeeId ||
+    emp.manager_id === currentEmployeeId ||
+    emp.direct_manager_id === currentEmployeeId
+  );
+}
+import { leaveRequestSchema, type LeaveRequestFormData } from '@/schemas/leave-request.schema';
 
 interface Company {
   id: number;
@@ -44,6 +70,10 @@ interface Employee {
 }
 
 export function LeaveRequestsPage() {
+  const { user } = useAuthStore();
+  const currentEmployeeId = user?.employee?.id ?? null;
+  const isSuperAdmin = (user?.roles ?? []).includes('Super Admin');
+
   const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -57,19 +87,32 @@ export function LeaveRequestsPage() {
   const [showModal, setShowModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedLeave, setSelectedLeave] = useState<LeaveRequest | null>(null);
-  const [submitting, setSubmitting] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const limit = 10;
 
-  const [formData, setFormData] = useState({
-    employee_id: '',
-    leave_type_id: '',
-    start_date: '',
-    end_date: '',
-    reason: '',
+  // ===== Leave request form (RHF + Zod) =====
+  const {
+    register,
+    handleSubmit,
+    control,
+    watch,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<LeaveRequestFormData>({
+    resolver: zodResolver(leaveRequestSchema),
+    defaultValues: {
+      employee_id: '',
+      leave_type_id: '',
+      start_date: '',
+      end_date: '',
+      reason: '',
+    },
   });
+
+  const watchedStart = watch('start_date');
+  const watchedEnd = watch('end_date');
 
   // Fetch leaves from API
   const fetchLeaves = useCallback(async () => {
@@ -105,21 +148,23 @@ export function LeaveRequestsPage() {
     }
   }, [page, filterCompany, filterStatus, filterLeaveType]);
 
-  // Fetch leave types
+  // Fetch leave types (lightweight options for filter / form dropdown).
   const fetchLeaveTypes = useCallback(async () => {
     try {
-      const types = await leaveService.getTypes();
-      setLeaveTypes(types);
+      const types = await leaveService.getTypeOptions();
+      // Cast: dropdown only consumes {id, name} so the full LeaveType shape is overkill.
+      setLeaveTypes(types as unknown as LeaveType[]);
     } catch (error) {
       console.error('Failed to fetch leave types:', error);
     }
   }, []);
 
-  // Fetch companies
+  // Fetch companies (lightweight options for filter dropdown).
   const fetchCompanies = useCallback(async () => {
     try {
-      const response = await companyService.getAll({ limit: 100 });
-      setCompanies(response.data);
+      const options = await companyService.getOptions();
+      // Map to Company-shaped objects so existing setCompanies state stays compatible.
+      setCompanies(options as unknown as typeof companies);
     } catch (error) {
       console.error('Failed to fetch companies:', error);
     }
@@ -246,7 +291,7 @@ export function LeaveRequestsPage() {
   };
 
   const handleOpenModal = () => {
-    setFormData({
+    reset({
       employee_id: '',
       leave_type_id: '',
       start_date: '',
@@ -258,6 +303,7 @@ export function LeaveRequestsPage() {
 
   const handleCloseModal = () => {
     setShowModal(false);
+    reset();
   };
 
   const handleViewDetail = (leave: LeaveRequest) => {
@@ -270,36 +316,21 @@ export function LeaveRequestsPage() {
     setSelectedLeave(null);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!formData.leave_type_id || !formData.start_date || !formData.end_date) {
-      toast.error('Please fill in all required fields');
-      return;
-    }
-
-    if (new Date(formData.end_date) < new Date(formData.start_date)) {
-      toast.error('End date must be after start date');
-      return;
-    }
-
-    setSubmitting(true);
+  const onSubmit = async (data: LeaveRequestFormData) => {
     try {
+      // NOTE: attachment is UI-only — backend doesn't accept attachment field yet.
       await leaveService.create({
-        leave_type_id: Number(formData.leave_type_id),
-        start_date: formData.start_date,
-        end_date: formData.end_date,
-        reason: formData.reason || undefined,
+        leave_type_id: Number(data.leave_type_id),
+        start_date: data.start_date,
+        end_date: data.end_date,
+        reason: data.reason && data.reason.trim() !== '' ? data.reason : undefined,
       });
       toast.success('Leave request created successfully');
       handleCloseModal();
       fetchLeaves();
-    } catch (error: unknown) {
+    } catch (error) {
+      // Axios interceptor handles error toast; just keep the modal open
       console.error('Failed to create leave request:', error);
-      const err = error as { response?: { data?: { message?: string } } };
-      toast.error(err.response?.data?.message || 'Failed to create leave request');
-    } finally {
-      setSubmitting(false);
     }
   };
 
@@ -312,9 +343,8 @@ export function LeaveRequestsPage() {
         handleCloseDetailModal();
       }
     } catch (error: unknown) {
+      // Axios interceptor handles 4xx/5xx toast; catch is for logging only
       console.error('Failed to approve leave:', error);
-      const err = error as { response?: { data?: { message?: string } } };
-      toast.error(err.response?.data?.message || 'Failed to approve leave');
     }
   };
 
@@ -333,9 +363,8 @@ export function LeaveRequestsPage() {
         handleCloseDetailModal();
       }
     } catch (error: unknown) {
+      // Axios interceptor handles 4xx/5xx toast; catch is for logging only
       console.error('Failed to reject leave:', error);
-      const err = error as { response?: { data?: { message?: string } } };
-      toast.error(err.response?.data?.message || 'Failed to reject leave');
     }
   };
 
@@ -347,9 +376,8 @@ export function LeaveRequestsPage() {
       toast.success('Leave request deleted');
       fetchLeaves();
     } catch (error: unknown) {
+      // Axios interceptor handles 4xx/5xx toast; catch is for logging only
       console.error('Failed to delete leave:', error);
-      const err = error as { response?: { data?: { message?: string } } };
-      toast.error(err.response?.data?.message || 'Failed to delete leave');
     }
   };
 
@@ -650,24 +678,40 @@ export function LeaveRequestsPage() {
                         >
                           <Eye className="w-4 h-4" />
                         </button>
-                        {leave.status === 'pending' && (
-                          <>
-                            <button
-                              onClick={() => handleApprove(leave.id)}
-                              className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                              title="Approve"
-                            >
-                              <Check className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleReject(leave.id)}
-                              className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                              title="Reject"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </>
-                        )}
+                        {leave.status === 'pending' && (() => {
+                          const isApprover = canApproveLeave(leave, currentEmployeeId, isSuperAdmin);
+                          const disabledTip = !isApprover
+                            ? 'Bukan approver — request ini dirouting ke manager/HR lain'
+                            : undefined;
+                          return (
+                            <>
+                              <button
+                                onClick={() => isApprover && handleApprove(leave.id)}
+                                disabled={!isApprover}
+                                className={`p-2 rounded-lg transition-colors ${
+                                  isApprover
+                                    ? 'text-gray-400 hover:text-green-600 hover:bg-green-50'
+                                    : 'text-gray-200 cursor-not-allowed'
+                                }`}
+                                title={disabledTip || 'Approve'}
+                              >
+                                <Check className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => isApprover && handleReject(leave.id)}
+                                disabled={!isApprover}
+                                className={`p-2 rounded-lg transition-colors ${
+                                  isApprover
+                                    ? 'text-gray-400 hover:text-red-600 hover:bg-red-50'
+                                    : 'text-gray-200 cursor-not-allowed'
+                                }`}
+                                title={disabledTip || 'Reject'}
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </>
+                          );
+                        })()}
                         <button
                           onClick={() => handleDelete(leave.id)}
                           className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -740,15 +784,14 @@ export function LeaveRequestsPage() {
                 </div>
               </div>
 
-              <form onSubmit={handleSubmit} className="p-6">
+              <form onSubmit={handleSubmit(onSubmit)} className="p-6" noValidate>
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Employee
                     </label>
                     <select
-                      value={formData.employee_id}
-                      onChange={(e) => setFormData(prev => ({ ...prev, employee_id: e.target.value }))}
+                      {...register('employee_id')}
                       className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500"
                       disabled={loadingEmployees}
                     >
@@ -761,6 +804,9 @@ export function LeaveRequestsPage() {
                         </option>
                       ))}
                     </select>
+                    {errors.employee_id && (
+                      <p className="mt-1 text-sm text-red-600">{errors.employee_id.message}</p>
+                    )}
                   </div>
 
                   <div>
@@ -768,16 +814,17 @@ export function LeaveRequestsPage() {
                       Leave Type <span className="text-red-500">*</span>
                     </label>
                     <select
-                      value={formData.leave_type_id}
-                      onChange={(e) => setFormData(prev => ({ ...prev, leave_type_id: e.target.value }))}
+                      {...register('leave_type_id')}
                       className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500"
-                      required
                     >
                       <option value="">Select Leave Type</option>
                       {leaveTypes.map(type => (
                         <option key={type.id} value={type.id}>{type.name}</option>
                       ))}
                     </select>
+                    {errors.leave_type_id && (
+                      <p className="mt-1 text-sm text-red-600">{errors.leave_type_id.message}</p>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
@@ -785,34 +832,50 @@ export function LeaveRequestsPage() {
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Start Date <span className="text-red-500">*</span>
                       </label>
-                      <input
-                        type="date"
-                        value={formData.start_date}
-                        onChange={(e) => setFormData(prev => ({ ...prev, start_date: e.target.value }))}
-                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500"
-                        required
+                      <Controller
+                        name="start_date"
+                        control={control}
+                        render={({ field }) => (
+                          <input
+                            type="date"
+                            {...field}
+                            value={field.value || ''}
+                            className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500"
+                          />
+                        )}
                       />
+                      {errors.start_date && (
+                        <p className="mt-1 text-sm text-red-600">{errors.start_date.message}</p>
+                      )}
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         End Date <span className="text-red-500">*</span>
                       </label>
-                      <input
-                        type="date"
-                        value={formData.end_date}
-                        onChange={(e) => setFormData(prev => ({ ...prev, end_date: e.target.value }))}
-                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500"
-                        required
+                      <Controller
+                        name="end_date"
+                        control={control}
+                        render={({ field }) => (
+                          <input
+                            type="date"
+                            {...field}
+                            value={field.value || ''}
+                            className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500"
+                          />
+                        )}
                       />
+                      {errors.end_date && (
+                        <p className="mt-1 text-sm text-red-600">{errors.end_date.message}</p>
+                      )}
                     </div>
                   </div>
 
-                  {formData.start_date && formData.end_date && (
+                  {watchedStart && watchedEnd && watchedEnd >= watchedStart && (
                     <div className="bg-violet-50 rounded-lg p-4 border border-violet-200">
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-violet-700">Total Days</span>
                         <span className="text-lg font-bold text-violet-700">
-                          {calculateDays(formData.start_date, formData.end_date)} days
+                          {calculateDays(watchedStart, watchedEnd)} days
                         </span>
                       </div>
                     </div>
@@ -820,15 +883,39 @@ export function LeaveRequestsPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Attachment
+                    </label>
+                    <Controller
+                      name="attachment"
+                      control={control}
+                      render={({ field }) => (
+                        <input
+                          type="file"
+                          onChange={(e) => field.onChange(e.target.files?.[0])}
+                          onBlur={field.onBlur}
+                          ref={field.ref}
+                          className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-sm file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100"
+                        />
+                      )}
+                    />
+                    {errors.attachment && (
+                      <p className="mt-1 text-sm text-red-600">{errors.attachment.message}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
                       Reason
                     </label>
                     <textarea
-                      value={formData.reason}
-                      onChange={(e) => setFormData(prev => ({ ...prev, reason: e.target.value }))}
+                      {...register('reason')}
                       className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500"
                       rows={3}
                       placeholder="Enter reason for leave request..."
                     />
+                    {errors.reason && (
+                      <p className="mt-1 text-sm text-red-600">{errors.reason.message}</p>
+                    )}
                   </div>
                 </div>
 
@@ -836,17 +923,17 @@ export function LeaveRequestsPage() {
                   <button
                     type="button"
                     onClick={handleCloseModal}
-                    disabled={submitting}
+                    disabled={isSubmitting}
                     className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    disabled={submitting}
+                    disabled={isSubmitting}
                     className="flex-1 px-4 py-2.5 bg-violet-600 text-white font-medium rounded-lg hover:bg-violet-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                   >
-                    {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
                     Submit Request
                   </button>
                 </div>
@@ -950,25 +1037,46 @@ export function LeaveRequestsPage() {
                   )}
                 </div>
 
-                {/* Action Buttons */}
-                {selectedLeave.status === 'pending' && (
-                  <div className="flex items-center gap-3 mt-6">
-                    <button
-                      onClick={() => handleReject(selectedLeave.id)}
-                      className="flex-1 px-4 py-2.5 border border-red-300 text-red-600 font-medium rounded-lg hover:bg-red-50 transition-colors flex items-center justify-center gap-2"
-                    >
-                      <X className="w-4 h-4" />
-                      Reject
-                    </button>
-                    <button
-                      onClick={() => handleApprove(selectedLeave.id)}
-                      className="flex-1 px-4 py-2.5 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
-                    >
-                      <Check className="w-4 h-4" />
-                      Approve
-                    </button>
-                  </div>
-                )}
+                {/* Action Buttons — disabled when current user is not the designated approver */}
+                {selectedLeave.status === 'pending' && (() => {
+                  const isApprover = canApproveLeave(selectedLeave, currentEmployeeId, isSuperAdmin);
+                  return (
+                    <div className="flex flex-col gap-2 mt-6">
+                      {!isApprover && (
+                        <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-2">
+                          <AlertCircle className="w-4 h-4" />
+                          Bukan approver — request ini dirouting ke manager/HR lain
+                        </p>
+                      )}
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => isApprover && handleReject(selectedLeave.id)}
+                          disabled={!isApprover}
+                          className={`flex-1 px-4 py-2.5 border font-medium rounded-lg transition-colors flex items-center justify-center gap-2 ${
+                            isApprover
+                              ? 'border-red-300 text-red-600 hover:bg-red-50'
+                              : 'border-gray-200 text-gray-300 cursor-not-allowed'
+                          }`}
+                        >
+                          <X className="w-4 h-4" />
+                          Reject
+                        </button>
+                        <button
+                          onClick={() => isApprover && handleApprove(selectedLeave.id)}
+                          disabled={!isApprover}
+                          className={`flex-1 px-4 py-2.5 font-medium rounded-lg transition-colors flex items-center justify-center gap-2 ${
+                            isApprover
+                              ? 'bg-green-600 text-white hover:bg-green-700'
+                              : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                          }`}
+                        >
+                          <Check className="w-4 h-4" />
+                          Approve
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {selectedLeave.status !== 'pending' && (
                   <div className="flex items-center gap-3 mt-6">

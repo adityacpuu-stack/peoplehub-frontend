@@ -60,7 +60,7 @@ export interface AuditStatistics {
 }
 
 export const auditLogService = {
-  // GET /audit-logs → { success, data, pagination }
+  // GET /audit-logs → { success, data, meta: { page, limit, total, totalPages } }
   list: async (query: AuditLogListQuery = {}): Promise<AuditLogListResponse> => {
     const params = new URLSearchParams();
     Object.entries(query).forEach(([key, value]) => {
@@ -69,8 +69,8 @@ export const auditLogService = {
       }
     });
     const response = await api.get(`/audit-logs?${params.toString()}`);
-    // Backend returns { success, data, pagination }
-    return { data: response.data.data, pagination: response.data.pagination };
+    // Wave 5+ envelope: pagination lives under `meta`, not at root.
+    return { data: response.data.data, pagination: response.data.meta || response.data.pagination };
   },
 
   // GET /audit-logs/:id → { success, data }

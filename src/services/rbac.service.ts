@@ -36,26 +36,46 @@ export interface PaginatedResponse<T> {
   };
 }
 
+export interface PaginatedPermissionsResponse extends PaginatedResponse<Permission> {
+  grouped?: Record<string, Permission[]>;
+}
+
+export interface RoleOption {
+  id: number;
+  name: string;
+  level: number;
+}
+
 export const rbacService = {
+  // Lightweight dropdown options ({id, name, level}, no pagination).
+  // Use this for role-selection dropdowns instead of getRoles().
+  getRolesOptions: async (): Promise<RoleOption[]> => {
+    const response = await api.get('/rbac/roles/options');
+    return response.data.data;
+  },
+
   // Roles
   getRoles: async (): Promise<PaginatedResponse<Role>> => {
     const response = await api.get('/rbac/roles');
-    return response.data;
+    return {
+      data: response.data.data,
+      pagination: response.data.meta.pagination,
+    };
   },
 
   getRoleById: async (id: number): Promise<RoleDetail> => {
     const response = await api.get(`/rbac/roles/${id}`);
-    return response.data;
+    return response.data.data;
   },
 
   createRole: async (data: { name: string; description?: string; level?: number }): Promise<Role> => {
     const response = await api.post('/rbac/roles', data);
-    return response.data;
+    return response.data.data;
   },
 
   updateRole: async (id: number, data: { name?: string; description?: string; level?: number }): Promise<Role> => {
     const response = await api.put(`/rbac/roles/${id}`, data);
-    return response.data;
+    return response.data.data;
   },
 
   deleteRole: async (id: number): Promise<{ success: boolean }> => {
@@ -64,14 +84,18 @@ export const rbacService = {
   },
 
   // Permissions
-  getPermissions: async (): Promise<PaginatedResponse<Permission>> => {
+  getPermissions: async (): Promise<PaginatedPermissionsResponse> => {
     const response = await api.get('/rbac/permissions');
-    return response.data;
+    return {
+      data: response.data.data,
+      pagination: response.data.meta.pagination,
+      grouped: response.data.meta.grouped,
+    };
   },
 
   getPermissionGroups: async (): Promise<string[]> => {
     const response = await api.get('/rbac/permissions/groups');
-    return response.data;
+    return response.data.data;
   },
 
   // Role-Permission assignments
@@ -82,7 +106,7 @@ export const rbacService = {
   // User-Role assignments
   getUserRoles: async (userId: number): Promise<Role[]> => {
     const response = await api.get(`/rbac/users/${userId}/roles`);
-    return response.data;
+    return response.data.data;
   },
 
   assignRolesToUser: async (userId: number, roleIds: number[]): Promise<void> => {
@@ -92,12 +116,12 @@ export const rbacService = {
   // User-Permission assignments
   getUserPermissions: async (userId: number): Promise<Permission[]> => {
     const response = await api.get(`/rbac/users/${userId}/permissions`);
-    return response.data;
+    return response.data.data;
   },
 
   // Check permission
   checkPermission: async (userId: number, permissionName: string): Promise<boolean> => {
     const response = await api.get(`/rbac/check/${userId}/${permissionName}`);
-    return response.data.hasPermission;
+    return response.data.data.has_permission;
   },
 };

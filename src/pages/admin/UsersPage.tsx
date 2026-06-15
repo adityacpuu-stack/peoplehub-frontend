@@ -112,8 +112,9 @@ export function UsersPage() {
 
   const fetchRoles = async () => {
     try {
-      const response = await rbacService.getRoles();
-      setRoles(response.data || []);
+      // Lightweight /options endpoint — returns just {id, name, level} for dropdowns.
+      const options = await rbacService.getRolesOptions();
+      setRoles(options);
     } catch (error) {
       console.error('Failed to fetch roles:', error);
     }
@@ -253,7 +254,7 @@ export function UsersPage() {
     try {
       setIsSendingCredentials(true);
       const result = await userService.sendCredentials(credentialModal.user.id, credentialUsername || undefined, credentialLicenseSkuId || undefined);
-      toast.success(result.message || `Credentials sent to ${result.sentTo}`);
+      toast.success(`Credentials sent to ${result.sentTo}`);
       setCredentialModal({ open: false, user: null });
       setCredentialUsername('');
       fetchUsers();

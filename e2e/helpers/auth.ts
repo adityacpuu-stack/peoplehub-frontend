@@ -27,7 +27,8 @@ export async function loginViaApi(page: Page, creds: Credentials): Promise<strin
   });
   expect(response.ok()).toBeTruthy();
   const body = await response.json();
-  const token = body.token as string;
+  // BE response envelope: {success, data: {token, refreshToken, user}, message}
+  const token = (body?.data?.token || body?.token) as string;
   expect(token).toBeTruthy();
 
   // Seed token into localStorage so frontend bootstraps as authenticated

@@ -30,6 +30,15 @@ export const leaveService = {
     return response.data.data;
   },
 
+  // Lightweight dropdown options ({id, name, code}, no pagination).
+  // Prefer this over getTypes() when populating a select.
+  getTypeOptions: async (): Promise<Array<{ id: number; name: string; code?: string }>> => {
+    const response = await api.get<ApiResponse<Array<{ id: number; name: string; code?: string }>>>(
+      '/leave-types/options'
+    );
+    return response.data.data;
+  },
+
   // Create leave type
   createType: async (data: Partial<LeaveType> & { name: string; code: string }): Promise<LeaveType> => {
     const response = await api.post<ApiResponse<LeaveType>>('/leave-types', data);

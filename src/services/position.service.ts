@@ -48,7 +48,26 @@ interface BackendPaginatedResponse<T> {
   };
 }
 
+export interface PositionOption {
+  id: number;
+  name: string;
+  code?: string;
+  level?: number | null;
+  department_id?: number | null;
+  company_id: number;
+}
+
 export const positionService = {
+  // Lightweight dropdown options ({id, name, ...}, no pagination).
+  // Prefer this over getAll() when populating a select.
+  getOptions: async (params?: { department_id?: number; company_id?: number }): Promise<PositionOption[]> => {
+    const response = await api.get<{ success: boolean; data: PositionOption[] }>(
+      '/positions/options',
+      { params }
+    );
+    return response.data.data;
+  },
+
   // List positions
   getAll: async (params?: PositionListParams): Promise<PaginatedResponse<Position>> => {
     const response = await api.get<BackendPaginatedResponse<Position>>('/positions', { params });
