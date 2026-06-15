@@ -1,9 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import toast from 'react-hot-toast';
 import { useAuthStore } from '@/stores/auth.store';
 import { profileService } from '@/services/profile.service';
 import type { UpdateProfileDTO } from '@/services/profile.service';
 import type { Employee } from '@/types';
-import toast from 'react-hot-toast';
+import { profileSchema, type ProfileFormInput, type ProfileFormValues } from '@/schemas/profile.schema';
 
 // Helper functions
 const formatDate = (dateStr: string | undefined | null) => {
@@ -129,39 +132,75 @@ function Section({ title, icon, children, badge }: { title: string; icon: React.
   );
 }
 
+// Shared input classes (preserve original styling)
+const inputClass =
+  'w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500/20 focus:border-slate-500';
+const textareaClass = `${inputClass} resize-none`;
+const selectClass = `${inputClass} bg-white`;
+const errorClass = 'text-red-500 text-xs mt-1';
+
+const emptyFormValues: ProfileFormInput = {
+  phone: '',
+  mobile_number: '',
+  address: '',
+  city: '',
+  province: '',
+  postal_code: '',
+  current_address: '',
+  current_city: '',
+  current_province: '',
+  current_postal_code: '',
+  emergency_contact_name: '',
+  emergency_contact_phone: '',
+  emergency_contact_relationship: '',
+  emergency_contact_address: '',
+  last_education: '',
+  education_major: '',
+  education_institution: '',
+  graduation_year: undefined,
+  spouse_name: '',
+  children_count: undefined,
+  number_of_dependents: undefined,
+};
+
+const employeeToFormValues = (data: Employee): ProfileFormInput => ({
+  phone: data.phone || '',
+  mobile_number: data.mobile_number || '',
+  address: data.address || '',
+  city: data.city || '',
+  province: data.province || '',
+  postal_code: data.postal_code || '',
+  current_address: data.current_address || '',
+  current_city: data.current_city || '',
+  current_province: data.current_province || '',
+  current_postal_code: data.current_postal_code || '',
+  emergency_contact_name: data.emergency_contact_name || '',
+  emergency_contact_phone: data.emergency_contact_phone || '',
+  emergency_contact_relationship: data.emergency_contact_relationship || '',
+  emergency_contact_address: data.emergency_contact_address || '',
+  last_education: (data.last_education as ProfileFormInput['last_education']) || '',
+  education_major: data.education_major || '',
+  education_institution: data.education_institution || '',
+  graduation_year: data.graduation_year ?? undefined,
+  spouse_name: data.spouse_name || '',
+  children_count: data.children_count ?? undefined,
+  number_of_dependents: data.number_of_dependents ?? undefined,
+});
+
 export function ProfilePage() {
   const { user } = useAuthStore();
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [editForm, setEditForm] = useState<UpdateProfileDTO>({
-    phone: '',
-    mobile_number: '',
-    // Alamat KTP
-    address: '',
-    city: '',
-    province: '',
-    postal_code: '',
-    // Alamat Domisili
-    current_address: '',
-    current_city: '',
-    current_province: '',
-    current_postal_code: '',
-    // Emergency Contact
-    emergency_contact_name: '',
-    emergency_contact_phone: '',
-    emergency_contact_relationship: '',
-    emergency_contact_address: '',
-    // Education
-    last_education: '',
-    education_major: '',
-    education_institution: '',
-    graduation_year: undefined,
-    // Family
-    spouse_name: '',
-    children_count: undefined,
-    number_of_dependents: undefined,
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<ProfileFormInput, unknown, ProfileFormValues>({
+    resolver: zodResolver(profileSchema),
+    defaultValues: emptyFormValues,
   });
 
   useEffect(() => {
@@ -169,37 +208,10 @@ export function ProfilePage() {
       try {
         const data = await profileService.getMyProfile();
         setEmployee(data);
-        setEditForm({
-          phone: data.phone || '',
-          mobile_number: data.mobile_number || '',
-          // Alamat KTP
-          address: data.address || '',
-          city: data.city || '',
-          province: data.province || '',
-          postal_code: data.postal_code || '',
-          // Alamat Domisili
-          current_address: data.current_address || '',
-          current_city: data.current_city || '',
-          current_province: data.current_province || '',
-          current_postal_code: data.current_postal_code || '',
-          // Emergency Contact
-          emergency_contact_name: data.emergency_contact_name || '',
-          emergency_contact_phone: data.emergency_contact_phone || '',
-          emergency_contact_relationship: data.emergency_contact_relationship || '',
-          emergency_contact_address: data.emergency_contact_address || '',
-          // Education
-          last_education: data.last_education || '',
-          education_major: data.education_major || '',
-          education_institution: data.education_institution || '',
-          graduation_year: data.graduation_year || undefined,
-          // Family
-          spouse_name: data.spouse_name || '',
-          children_count: data.children_count || undefined,
-          number_of_dependents: data.number_of_dependents || undefined,
-        });
+        reset(employeeToFormValues(data));
       } catch (error) {
+        // Axios interceptor handles 4xx/5xx toast; catch is for logging only
         console.error('Failed to fetch profile:', error);
-        toast.error('Failed to load profile data');
       } finally {
         setLoading(false);
       }
@@ -210,64 +222,38 @@ export function ProfilePage() {
     } else {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, reset]);
 
-  const handleSave = async () => {
-    setSaving(true);
+  const onSubmit = handleSubmit(async (values) => {
+    // Safety guard: edit→save click-through can fire submit when user
+    // only meant to click "Edit Profile" (button at same coords as Save
+    // after re-render). Skip when not actively editing.
+    if (!isEditing) return;
+
+    // Strip empty strings → undefined so backend Zod whitelist treats them as unset
+    const payload: UpdateProfileDTO = Object.fromEntries(
+      Object.entries(values).map(([k, v]) => [k, v === '' ? undefined : v]),
+    ) as UpdateProfileDTO;
+
     try {
-      const updated = await profileService.updateMyProfile(editForm);
+      const updated = await profileService.updateMyProfile(payload);
       setEmployee(updated);
+      reset(employeeToFormValues(updated));
       setIsEditing(false);
       toast.success('Profile updated successfully');
     } catch (error) {
+      // Axios interceptor handles 4xx/5xx toasts — catch is for state cleanup only
       console.error('Failed to update profile:', error);
-      toast.error('Failed to save profile');
-    } finally {
-      setSaving(false);
     }
-  };
+  });
 
   const handleCancel = () => {
     if (employee) {
-      setEditForm({
-        phone: employee.phone || '',
-        mobile_number: employee.mobile_number || '',
-        // Alamat KTP
-        address: employee.address || '',
-        city: employee.city || '',
-        province: employee.province || '',
-        postal_code: employee.postal_code || '',
-        // Alamat Domisili
-        current_address: employee.current_address || '',
-        current_city: employee.current_city || '',
-        current_province: employee.current_province || '',
-        current_postal_code: employee.current_postal_code || '',
-        // Emergency Contact
-        emergency_contact_name: employee.emergency_contact_name || '',
-        emergency_contact_phone: employee.emergency_contact_phone || '',
-        emergency_contact_relationship: employee.emergency_contact_relationship || '',
-        emergency_contact_address: employee.emergency_contact_address || '',
-        // Education
-        last_education: employee.last_education || '',
-        education_major: employee.education_major || '',
-        education_institution: employee.education_institution || '',
-        graduation_year: employee.graduation_year || undefined,
-        // Family
-        spouse_name: employee.spouse_name || '',
-        children_count: employee.children_count || undefined,
-        number_of_dependents: employee.number_of_dependents || undefined,
-      });
+      reset(employeeToFormValues(employee));
+    } else {
+      reset(emptyFormValues);
     }
     setIsEditing(false);
-  };
-
-  const handleInputChange = (field: keyof UpdateProfileDTO, value: string | number | undefined) => {
-    setEditForm(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handleNumberChange = (field: keyof UpdateProfileDTO, value: string) => {
-    const numValue = value === '' ? undefined : parseInt(value, 10);
-    setEditForm(prev => ({ ...prev, [field]: numValue }));
   };
 
   const displayName = employee?.name || user?.employee?.name || user?.email || 'User';
@@ -281,7 +267,18 @@ export function ProfilePage() {
   }
 
   return (
-    <div className="space-y-6">
+    <form
+      onSubmit={onSubmit}
+      onKeyDown={(e) => {
+        // Block Enter-key auto-submit from input fields (textarea/select unaffected).
+        // Without this, typing Enter in any text input immediately saves the profile.
+        if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'INPUT') {
+          e.preventDefault();
+        }
+      }}
+      className="space-y-6"
+      noValidate
+    >
       {/* Header Banner */}
       <div className="relative overflow-hidden bg-gradient-to-br from-slate-700 via-slate-800 to-gray-900 rounded-2xl shadow-lg">
         <div className="absolute inset-0 bg-grid-white/5 [mask-image:linear-gradient(0deg,transparent,rgba(255,255,255,0.5))]"></div>
@@ -328,12 +325,12 @@ export function ProfilePage() {
             <div className="flex items-center gap-3">
               {isEditing ? (
                 <>
-                  <button onClick={handleCancel} disabled={saving} className="inline-flex items-center gap-2 px-4 py-2.5 bg-white/10 text-white rounded-xl hover:bg-white/20 transition-all duration-200 font-medium">
+                  <button type="button" onClick={handleCancel} disabled={isSubmitting} className="inline-flex items-center gap-2 px-4 py-2.5 bg-white/10 text-white rounded-xl hover:bg-white/20 transition-all duration-200 font-medium">
                     <span>Cancel</span>
                   </button>
-                  <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-slate-700 rounded-xl hover:bg-slate-50 transition-all duration-200 font-semibold shadow-lg disabled:opacity-50">
-                    {saving ? <div className="w-5 h-5 border-2 border-slate-300 border-t-slate-700 rounded-full animate-spin"></div> : null}
-                    <span>{saving ? 'Saving...' : 'Save'}</span>
+                  <button type="submit" disabled={isSubmitting} className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-slate-700 rounded-xl hover:bg-slate-50 transition-all duration-200 font-semibold shadow-lg disabled:opacity-50">
+                    {isSubmitting ? <div className="w-5 h-5 border-2 border-slate-300 border-t-slate-700 rounded-full animate-spin"></div> : null}
+                    <span>{isSubmitting ? 'Saving...' : 'Save'}</span>
                   </button>
                 </>
               ) : (
@@ -342,7 +339,19 @@ export function ProfilePage() {
                     <span className="w-2 h-2 rounded-full bg-current"></span>
                     {getStatusLabel(employee?.employment_status)}
                   </span>
-                  <button onClick={() => setIsEditing(true)} className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-slate-700 rounded-xl hover:bg-slate-50 transition-all duration-200 font-semibold shadow-lg">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      // Prevent the synthetic click from bubbling to the form (which
+                      // can submit if the Save button re-renders at the same coords
+                      // before mouseup). Defer the state flip so this click event
+                      // fully resolves before the Save button mounts.
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setTimeout(() => setIsEditing(true), 0);
+                    }}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-slate-700 rounded-xl hover:bg-slate-50 transition-all duration-200 font-semibold shadow-lg"
+                  >
                     <span>Edit Profile</span>
                   </button>
                 </>
@@ -386,9 +395,30 @@ export function ProfilePage() {
 
             {/* Phone */}
             <div>
-              <label className="block text-xs text-gray-500 uppercase tracking-wide mb-1">Phone</label>
+              <label className="block text-xs text-gray-500 uppercase tracking-wide mb-1">
+                Phone <span className="text-gray-400 normal-case font-normal">(opsional)</span>
+              </label>
               {isEditing ? (
-                <input type="tel" value={editForm.phone} onChange={(e) => handleInputChange('phone', e.target.value)} placeholder="+1-xxx-xxx-xxxx" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500/20 focus:border-slate-500" />
+                <>
+                  {/*
+                    Use type="text" + inputMode="tel" instead of type="tel".
+                    Safari on macOS US locale ignores our placeholder for
+                    type="tel" and shows "+1-xxx-xxx-xxxx" instead. With
+                    type="text" the Indonesian placeholder is honored, and
+                    inputMode="tel" still pops the numeric keypad on mobile.
+                    autoComplete="tel-national" keeps iOS Contacts autofill
+                    flowing, the BE phoneSchema normalizes spaces/dashes anyway.
+                  */}
+                  <input
+                    type="text"
+                    inputMode="tel"
+                    autoComplete="tel-national"
+                    {...register('phone')}
+                    placeholder="08123456789 atau +6281234567890"
+                    className={inputClass}
+                  />
+                  {errors.phone && <p className={errorClass}>{errors.phone.message}</p>}
+                </>
               ) : (
                 <p className="font-medium text-gray-900">{employee?.phone || '-'}</p>
               )}
@@ -396,9 +426,21 @@ export function ProfilePage() {
 
             {/* Mobile */}
             <div>
-              <label className="block text-xs text-gray-500 uppercase tracking-wide mb-1">Mobile</label>
+              <label className="block text-xs text-gray-500 uppercase tracking-wide mb-1">
+                Mobile <span className="text-gray-400 normal-case font-normal">(opsional)</span>
+              </label>
               {isEditing ? (
-                <input type="tel" value={editForm.mobile_number} onChange={(e) => handleInputChange('mobile_number', e.target.value)} placeholder="+1-xxx-xxx-xxxx" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500/20 focus:border-slate-500" />
+                <>
+                  <input
+                    type="text"
+                    inputMode="tel"
+                    autoComplete="tel-national"
+                    {...register('mobile_number')}
+                    placeholder="08123456789 atau +6281234567890"
+                    className={inputClass}
+                  />
+                  {errors.mobile_number && <p className={errorClass}>{errors.mobile_number.message}</p>}
+                </>
               ) : (
                 <p className="font-medium text-gray-900">{employee?.mobile_number || '-'}</p>
               )}
@@ -413,7 +455,10 @@ export function ProfilePage() {
             <div className="col-span-2">
               <label className="block text-xs text-gray-500 uppercase tracking-wide mb-1">Full Address</label>
               {isEditing ? (
-                <textarea value={editForm.address} onChange={(e) => handleInputChange('address', e.target.value)} rows={2} placeholder="Full address as per ID card" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500/20 focus:border-slate-500 resize-none" />
+                <>
+                  <textarea {...register('address')} rows={2} placeholder="Full address as per ID card" className={textareaClass} />
+                  {errors.address && <p className={errorClass}>{errors.address.message}</p>}
+                </>
               ) : (
                 <p className="font-medium text-gray-900">{employee?.address || '-'}</p>
               )}
@@ -423,7 +468,10 @@ export function ProfilePage() {
             <div>
               <label className="block text-xs text-gray-500 uppercase tracking-wide mb-1">City</label>
               {isEditing ? (
-                <input type="text" value={editForm.city} onChange={(e) => handleInputChange('city', e.target.value)} placeholder="New York" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500/20 focus:border-slate-500" />
+                <>
+                  <input type="text" {...register('city')} placeholder="New York" className={inputClass} />
+                  {errors.city && <p className={errorClass}>{errors.city.message}</p>}
+                </>
               ) : (
                 <p className="font-medium text-gray-900">{employee?.city || '-'}</p>
               )}
@@ -433,7 +481,10 @@ export function ProfilePage() {
             <div>
               <label className="block text-xs text-gray-500 uppercase tracking-wide mb-1">Province/State</label>
               {isEditing ? (
-                <input type="text" value={editForm.province} onChange={(e) => handleInputChange('province', e.target.value)} placeholder="New York" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500/20 focus:border-slate-500" />
+                <>
+                  <input type="text" {...register('province')} placeholder="New York" className={inputClass} />
+                  {errors.province && <p className={errorClass}>{errors.province.message}</p>}
+                </>
               ) : (
                 <p className="font-medium text-gray-900">{employee?.province || '-'}</p>
               )}
@@ -443,7 +494,10 @@ export function ProfilePage() {
             <div>
               <label className="block text-xs text-gray-500 uppercase tracking-wide mb-1">Postal Code</label>
               {isEditing ? (
-                <input type="text" value={editForm.postal_code} onChange={(e) => handleInputChange('postal_code', e.target.value)} placeholder="10001" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500/20 focus:border-slate-500" />
+                <>
+                  <input type="text" {...register('postal_code')} placeholder="10001" className={inputClass} />
+                  {errors.postal_code && <p className={errorClass}>{errors.postal_code.message}</p>}
+                </>
               ) : (
                 <p className="font-medium text-gray-900">{employee?.postal_code || '-'}</p>
               )}
@@ -458,7 +512,10 @@ export function ProfilePage() {
             <div className="col-span-2">
               <label className="block text-xs text-gray-500 uppercase tracking-wide mb-1">Full Address</label>
               {isEditing ? (
-                <textarea value={editForm.current_address} onChange={(e) => handleInputChange('current_address', e.target.value)} rows={2} placeholder="Current residential address" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500/20 focus:border-slate-500 resize-none" />
+                <>
+                  <textarea {...register('current_address')} rows={2} placeholder="Current residential address" className={textareaClass} />
+                  {errors.current_address && <p className={errorClass}>{errors.current_address.message}</p>}
+                </>
               ) : (
                 <p className="font-medium text-gray-900">{employee?.current_address || '-'}</p>
               )}
@@ -468,7 +525,10 @@ export function ProfilePage() {
             <div>
               <label className="block text-xs text-gray-500 uppercase tracking-wide mb-1">City</label>
               {isEditing ? (
-                <input type="text" value={editForm.current_city} onChange={(e) => handleInputChange('current_city', e.target.value)} placeholder="Los Angeles" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500/20 focus:border-slate-500" />
+                <>
+                  <input type="text" {...register('current_city')} placeholder="Los Angeles" className={inputClass} />
+                  {errors.current_city && <p className={errorClass}>{errors.current_city.message}</p>}
+                </>
               ) : (
                 <p className="font-medium text-gray-900">{employee?.current_city || '-'}</p>
               )}
@@ -478,7 +538,10 @@ export function ProfilePage() {
             <div>
               <label className="block text-xs text-gray-500 uppercase tracking-wide mb-1">Province/State</label>
               {isEditing ? (
-                <input type="text" value={editForm.current_province} onChange={(e) => handleInputChange('current_province', e.target.value)} placeholder="California" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500/20 focus:border-slate-500" />
+                <>
+                  <input type="text" {...register('current_province')} placeholder="California" className={inputClass} />
+                  {errors.current_province && <p className={errorClass}>{errors.current_province.message}</p>}
+                </>
               ) : (
                 <p className="font-medium text-gray-900">{employee?.current_province || '-'}</p>
               )}
@@ -488,7 +551,10 @@ export function ProfilePage() {
             <div>
               <label className="block text-xs text-gray-500 uppercase tracking-wide mb-1">Postal Code</label>
               {isEditing ? (
-                <input type="text" value={editForm.current_postal_code} onChange={(e) => handleInputChange('current_postal_code', e.target.value)} placeholder="90001" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500/20 focus:border-slate-500" />
+                <>
+                  <input type="text" {...register('current_postal_code')} placeholder="90001" className={inputClass} />
+                  {errors.current_postal_code && <p className={errorClass}>{errors.current_postal_code.message}</p>}
+                </>
               ) : (
                 <p className="font-medium text-gray-900">{employee?.current_postal_code || '-'}</p>
               )}
@@ -513,7 +579,10 @@ export function ProfilePage() {
             <div>
               <label className="block text-xs text-gray-500 uppercase tracking-wide mb-1">Name</label>
               {isEditing ? (
-                <input type="text" value={editForm.emergency_contact_name} onChange={(e) => handleInputChange('emergency_contact_name', e.target.value)} placeholder="Full name" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500/20 focus:border-slate-500" />
+                <>
+                  <input type="text" {...register('emergency_contact_name')} placeholder="Full name" className={inputClass} />
+                  {errors.emergency_contact_name && <p className={errorClass}>{errors.emergency_contact_name.message}</p>}
+                </>
               ) : (
                 <p className="font-medium text-gray-900">{employee?.emergency_contact_name || '-'}</p>
               )}
@@ -523,7 +592,10 @@ export function ProfilePage() {
             <div>
               <label className="block text-xs text-gray-500 uppercase tracking-wide mb-1">Relationship</label>
               {isEditing ? (
-                <input type="text" value={editForm.emergency_contact_relationship} onChange={(e) => handleInputChange('emergency_contact_relationship', e.target.value)} placeholder="e.g. Spouse, Parent" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500/20 focus:border-slate-500" />
+                <>
+                  <input type="text" {...register('emergency_contact_relationship')} placeholder="e.g. Spouse, Parent" className={inputClass} />
+                  {errors.emergency_contact_relationship && <p className={errorClass}>{errors.emergency_contact_relationship.message}</p>}
+                </>
               ) : (
                 <p className="font-medium text-gray-900">{employee?.emergency_contact_relationship || '-'}</p>
               )}
@@ -531,9 +603,21 @@ export function ProfilePage() {
 
             {/* Phone */}
             <div>
-              <label className="block text-xs text-gray-500 uppercase tracking-wide mb-1">Phone</label>
+              <label className="block text-xs text-gray-500 uppercase tracking-wide mb-1">
+                Phone <span className="text-gray-400 normal-case font-normal">(opsional)</span>
+              </label>
               {isEditing ? (
-                <input type="tel" value={editForm.emergency_contact_phone} onChange={(e) => handleInputChange('emergency_contact_phone', e.target.value)} placeholder="+1-xxx-xxx-xxxx" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500/20 focus:border-slate-500" />
+                <>
+                  <input
+                    type="text"
+                    inputMode="tel"
+                    autoComplete="tel-national"
+                    {...register('emergency_contact_phone')}
+                    placeholder="08123456789 atau 0211234567 (landline)"
+                    className={inputClass}
+                  />
+                  {errors.emergency_contact_phone && <p className={errorClass}>{errors.emergency_contact_phone.message}</p>}
+                </>
               ) : (
                 <p className="font-medium text-gray-900">{employee?.emergency_contact_phone || '-'}</p>
               )}
@@ -543,7 +627,10 @@ export function ProfilePage() {
             <div className="col-span-2">
               <label className="block text-xs text-gray-500 uppercase tracking-wide mb-1">Address</label>
               {isEditing ? (
-                <textarea value={editForm.emergency_contact_address} onChange={(e) => handleInputChange('emergency_contact_address', e.target.value)} rows={2} placeholder="Emergency contact address" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500/20 focus:border-slate-500 resize-none" />
+                <>
+                  <textarea {...register('emergency_contact_address')} rows={2} placeholder="Emergency contact address" className={textareaClass} />
+                  {errors.emergency_contact_address && <p className={errorClass}>{errors.emergency_contact_address.message}</p>}
+                </>
               ) : (
                 <p className="font-medium text-gray-900">{employee?.emergency_contact_address || '-'}</p>
               )}
@@ -632,19 +719,22 @@ export function ProfilePage() {
             <div>
               <label className="block text-xs text-gray-500 uppercase tracking-wide mb-1">Education Level</label>
               {isEditing ? (
-                <select value={editForm.last_education || ''} onChange={(e) => handleInputChange('last_education', e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500/20 focus:border-slate-500 bg-white">
-                  <option value="">Select Level</option>
-                  <option value="sd">Elementary School</option>
-                  <option value="smp">Junior High School</option>
-                  <option value="sma">Senior High School</option>
-                  <option value="d1">Diploma 1</option>
-                  <option value="d2">Diploma 2</option>
-                  <option value="d3">Diploma 3</option>
-                  <option value="d4">Diploma 4</option>
-                  <option value="s1">Bachelor's Degree</option>
-                  <option value="s2">Master's Degree</option>
-                  <option value="s3">Doctoral Degree</option>
-                </select>
+                <>
+                  <select {...register('last_education')} className={selectClass}>
+                    <option value="">Select Level</option>
+                    <option value="sd">Elementary School</option>
+                    <option value="smp">Junior High School</option>
+                    <option value="sma">Senior High School</option>
+                    <option value="d1">Diploma 1</option>
+                    <option value="d2">Diploma 2</option>
+                    <option value="d3">Diploma 3</option>
+                    <option value="d4">Diploma 4</option>
+                    <option value="s1">Bachelor's Degree</option>
+                    <option value="s2">Master's Degree</option>
+                    <option value="s3">Doctoral Degree</option>
+                  </select>
+                  {errors.last_education && <p className={errorClass}>{errors.last_education.message}</p>}
+                </>
               ) : (
                 <p className="font-medium text-gray-900">{getEducationLabel(employee?.last_education)}</p>
               )}
@@ -654,7 +744,10 @@ export function ProfilePage() {
             <div>
               <label className="block text-xs text-gray-500 uppercase tracking-wide mb-1">Major</label>
               {isEditing ? (
-                <input type="text" value={editForm.education_major || ''} onChange={(e) => handleInputChange('education_major', e.target.value)} placeholder="Computer Science" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500/20 focus:border-slate-500" />
+                <>
+                  <input type="text" {...register('education_major')} placeholder="Computer Science" className={inputClass} />
+                  {errors.education_major && <p className={errorClass}>{errors.education_major.message}</p>}
+                </>
               ) : (
                 <p className="font-medium text-gray-900">{employee?.education_major || '-'}</p>
               )}
@@ -664,7 +757,10 @@ export function ProfilePage() {
             <div>
               <label className="block text-xs text-gray-500 uppercase tracking-wide mb-1">Institution</label>
               {isEditing ? (
-                <input type="text" value={editForm.education_institution || ''} onChange={(e) => handleInputChange('education_institution', e.target.value)} placeholder="Harvard University" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500/20 focus:border-slate-500" />
+                <>
+                  <input type="text" {...register('education_institution')} placeholder="Harvard University" className={inputClass} />
+                  {errors.education_institution && <p className={errorClass}>{errors.education_institution.message}</p>}
+                </>
               ) : (
                 <p className="font-medium text-gray-900">{employee?.education_institution || '-'}</p>
               )}
@@ -674,7 +770,17 @@ export function ProfilePage() {
             <div>
               <label className="block text-xs text-gray-500 uppercase tracking-wide mb-1">Graduation Year</label>
               {isEditing ? (
-                <input type="number" value={editForm.graduation_year || ''} onChange={(e) => handleNumberChange('graduation_year', e.target.value)} placeholder="2020" min="1950" max="2030" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500/20 focus:border-slate-500" />
+                <>
+                  <input
+                    type="number"
+                    {...register('graduation_year')}
+                    placeholder="2020"
+                    min={1950}
+                    max={2030}
+                    className={inputClass}
+                  />
+                  {errors.graduation_year && <p className={errorClass}>{errors.graduation_year.message}</p>}
+                </>
               ) : (
                 <p className="font-medium text-gray-900">{employee?.graduation_year?.toString() || '-'}</p>
               )}
@@ -689,7 +795,10 @@ export function ProfilePage() {
             <div>
               <label className="block text-xs text-gray-500 uppercase tracking-wide mb-1">Spouse Name</label>
               {isEditing ? (
-                <input type="text" value={editForm.spouse_name || ''} onChange={(e) => handleInputChange('spouse_name', e.target.value)} placeholder="Spouse full name" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500/20 focus:border-slate-500" />
+                <>
+                  <input type="text" {...register('spouse_name')} placeholder="Spouse full name" className={inputClass} />
+                  {errors.spouse_name && <p className={errorClass}>{errors.spouse_name.message}</p>}
+                </>
               ) : (
                 <p className="font-medium text-gray-900">{employee?.spouse_name || '-'}</p>
               )}
@@ -699,7 +808,17 @@ export function ProfilePage() {
             <div>
               <label className="block text-xs text-gray-500 uppercase tracking-wide mb-1">Number of Children</label>
               {isEditing ? (
-                <input type="number" value={editForm.children_count ?? ''} onChange={(e) => handleNumberChange('children_count', e.target.value)} placeholder="0" min="0" max="20" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500/20 focus:border-slate-500" />
+                <>
+                  <input
+                    type="number"
+                    {...register('children_count')}
+                    placeholder="0"
+                    min={0}
+                    max={20}
+                    className={inputClass}
+                  />
+                  {errors.children_count && <p className={errorClass}>{errors.children_count.message}</p>}
+                </>
               ) : (
                 <p className="font-medium text-gray-900">{employee?.children_count?.toString() || '0'}</p>
               )}
@@ -709,7 +828,17 @@ export function ProfilePage() {
             <div>
               <label className="block text-xs text-gray-500 uppercase tracking-wide mb-1">Number of Dependents</label>
               {isEditing ? (
-                <input type="number" value={editForm.number_of_dependents ?? ''} onChange={(e) => handleNumberChange('number_of_dependents', e.target.value)} placeholder="0" min="0" max="20" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500/20 focus:border-slate-500" />
+                <>
+                  <input
+                    type="number"
+                    {...register('number_of_dependents')}
+                    placeholder="0"
+                    min={0}
+                    max={20}
+                    className={inputClass}
+                  />
+                  {errors.number_of_dependents && <p className={errorClass}>{errors.number_of_dependents.message}</p>}
+                </>
               ) : (
                 <p className="font-medium text-gray-900">{employee?.number_of_dependents?.toString() || '0'}</p>
               )}
@@ -747,6 +876,6 @@ export function ProfilePage() {
           Last updated: {formatDate(employee.updated_at)}
         </div>
       )}
-    </div>
+    </form>
   );
 }
