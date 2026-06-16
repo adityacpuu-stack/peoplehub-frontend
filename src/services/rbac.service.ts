@@ -50,8 +50,18 @@ export const rbacService = {
   // Lightweight dropdown options ({id, name, level}, no pagination).
   // Use this for role-selection dropdowns instead of getRoles().
   getRolesOptions: async (): Promise<RoleOption[]> => {
-    const response = await api.get('/rbac/roles/options');
-    return response.data.data;
+    // NOTE: the BE has NO `/rbac/roles/options` route. Calling it makes Express
+    // match `/rbac/roles/:id` with id="options" → parseInt → NaN → a raw Prisma
+    // "Argument id is missing" 400 (surfaced when editing a user). Use the
+    // working list endpoint instead and project to {id, name, level} — there
+    // are only ~9 roles so a full fetch is fine.
+    const response = await api.get('/rbac/roles?limit=100');
+    const list = (response.data?.data ?? response.data ?? []) as Array<{
+      id: number;
+      name: string;
+      level?: number;
+    }>;
+    return list.map((r) => ({ id: r.id, name: r.name, level: r.level ?? 0 }));
   },
 
   // Roles
