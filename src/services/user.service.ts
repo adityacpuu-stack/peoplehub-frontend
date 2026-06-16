@@ -189,6 +189,9 @@ export const userService = {
 
   getStats: async (): Promise<UserStats> => {
     const response = await api.get('/users/stats');
-    return response.data.data;
+    // BE returns the raw stats object directly (res.json(stats)), NOT wrapped
+    // in { data }. The old `response.data.data` was undefined → all stat
+    // cards rendered 0. Tolerate both an enveloped and a raw response.
+    return response.data?.data ?? response.data;
   },
 };
