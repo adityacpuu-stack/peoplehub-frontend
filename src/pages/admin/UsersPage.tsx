@@ -114,7 +114,8 @@ export function UsersPage() {
     try {
       // Lightweight /options endpoint — returns just {id, name, level} for dropdowns.
       const options = await rbacService.getRolesOptions();
-      setRoles(options);
+      // Never set undefined — `roles.map` in the modal would crash the render.
+      setRoles(Array.isArray(options) ? options : []);
     } catch (error) {
       console.error('Failed to fetch roles:', error);
     }
@@ -165,9 +166,19 @@ export function UsersPage() {
   };
 
   const handleOpenEditModal = async (user: User) => {
-    setFormData({ email: user.email, password: '', employee_id: user.employee?.id || null, role_ids: user.roles.map((r) => r.id), is_active: user.is_active });
-    await fetchRoles();
+    // Open the modal FIRST so a slow/failing role fetch never blocks it.
+    // Guard user.roles — if the list payload ever omits roles, `.map` would
+    // throw here and the modal would silently never open.
+    setFormData({
+      email: user.email,
+      password: '',
+      employee_id: user.employee?.id || null,
+      role_ids: (user.roles ?? []).map((r) => r.id),
+      is_active: user.is_active,
+    });
     setFormModal({ open: true, user });
+    // Roles populate the checkbox list; load async after the modal is up.
+    fetchRoles().catch((err) => console.error('Failed to load roles:', err));
   };
 
   const handleSubmit = async () => {
@@ -555,7 +566,10 @@ export function UsersPage() {
               <div>
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Roles</label>
                 <div className="space-y-1.5 max-h-40 overflow-y-auto border border-gray-200 rounded-xl p-3 bg-gray-50">
-                  {roles.map((role) => (
+                  {(roles ?? []).length === 0 && (
+                    <p className="text-xs text-gray-400">Memuat roles…</p>
+                  )}
+                  {(roles ?? []).map((role) => (
                     <label key={role.id} className="flex items-center gap-2.5 cursor-pointer">
                       <input
                         type="checkbox"
