@@ -111,7 +111,12 @@ export const workLocationService = {
     const response = await api.get<BackendPaginatedResponse<WorkLocation>>('/work-locations', { params });
     return {
       data: response.data.data,
-      total: response.data.meta?.pagination?.total ?? response.data.data.length,
+      // BE returns pagination at top level ({ data, pagination }), not under
+      // `meta` — without this the total fell back to data.length (page size).
+      total:
+        response.data.meta?.pagination?.total ??
+        (response.data as { pagination?: { total?: number } }).pagination?.total ??
+        response.data.data.length,
     };
   },
 
@@ -124,17 +129,17 @@ export const workLocationService = {
 
   getById: async (id: number): Promise<WorkLocation> => {
     const response = await api.get<BackendSingleResponse<WorkLocation>>(`/work-locations/${id}`);
-    return response.data.data;
+    return (response.data?.data ?? response.data) as WorkLocation;
   },
 
   create: async (data: CreateWorkLocationRequest): Promise<WorkLocation> => {
     const response = await api.post<BackendSingleResponse<WorkLocation>>('/work-locations', data);
-    return response.data.data;
+    return (response.data?.data ?? response.data) as WorkLocation;
   },
 
   update: async (id: number, data: Partial<CreateWorkLocationRequest>): Promise<WorkLocation> => {
     const response = await api.put<BackendSingleResponse<WorkLocation>>(`/work-locations/${id}`, data);
-    return response.data.data;
+    return (response.data?.data ?? response.data) as WorkLocation;
   },
 
   delete: async (id: number): Promise<void> => {

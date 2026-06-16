@@ -66,17 +66,17 @@ export const rbacService = {
 
   getRoleById: async (id: number): Promise<RoleDetail> => {
     const response = await api.get(`/rbac/roles/${id}`);
-    return response.data.data;
+    return response.data?.data ?? response.data;
   },
 
   createRole: async (data: { name: string; description?: string; level?: number }): Promise<Role> => {
     const response = await api.post('/rbac/roles', data);
-    return response.data.data;
+    return response.data?.data ?? response.data;
   },
 
   updateRole: async (id: number, data: { name?: string; description?: string; level?: number }): Promise<Role> => {
     const response = await api.put(`/rbac/roles/${id}`, data);
-    return response.data.data;
+    return response.data?.data ?? response.data;
   },
 
   deleteRole: async (id: number): Promise<{ success: boolean }> => {
@@ -97,7 +97,7 @@ export const rbacService = {
 
   getPermissionGroups: async (): Promise<string[]> => {
     const response = await api.get('/rbac/permissions/groups');
-    return response.data.data;
+    return response.data?.data ?? response.data;
   },
 
   // Role-Permission assignments
@@ -108,7 +108,7 @@ export const rbacService = {
   // User-Role assignments
   getUserRoles: async (userId: number): Promise<Role[]> => {
     const response = await api.get(`/rbac/users/${userId}/roles`);
-    return response.data.data;
+    return response.data?.data ?? response.data;
   },
 
   assignRolesToUser: async (userId: number, roleIds: number[]): Promise<void> => {
@@ -118,12 +118,12 @@ export const rbacService = {
   // User-Permission assignments
   getUserPermissions: async (userId: number): Promise<Permission[]> => {
     const response = await api.get(`/rbac/users/${userId}/permissions`);
-    return response.data.data;
+    return response.data?.data ?? response.data;
   },
 
   // Check permission
   checkPermission: async (userId: number, permissionName: string): Promise<boolean> => {
     const response = await api.get(`/rbac/check/${userId}/${permissionName}`);
-    return response.data.data.has_permission;
+    return (response.data?.data ?? response.data)?.has_permission ?? false;
   },
 };

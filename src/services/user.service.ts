@@ -149,17 +149,17 @@ export const userService = {
 
   getById: async (id: number): Promise<UserDetail> => {
     const response = await api.get(`/users/${id}`);
-    return response.data.data;
+    return response.data?.data ?? response.data;
   },
 
   create: async (data: CreateUserDTO): Promise<User> => {
     const response = await api.post('/users', data);
-    return response.data.data;
+    return response.data?.data ?? response.data;
   },
 
   update: async (id: number, data: UpdateUserDTO): Promise<User> => {
     const response = await api.put(`/users/${id}`, data);
-    return response.data.data;
+    return response.data?.data ?? response.data;
   },
 
   delete: async (id: number): Promise<{ success: boolean }> => {
@@ -169,22 +169,22 @@ export const userService = {
 
   sendCredentials: async (id: number, username?: string, licenseSkuId?: string): Promise<SendCredentialsResult> => {
     const response = await api.post(`/users/${id}/send-credentials`, { username, licenseSkuId });
-    return response.data.data;
+    return response.data?.data ?? response.data;
   },
 
   getM365Licenses: async (): Promise<{ available: boolean; licenses: M365License[] }> => {
     const response = await api.get('/users/m365-licenses');
-    return response.data.data;
+    return response.data?.data ?? response.data;
   },
 
   getM365UserStatus: async (email: string): Promise<M365UserStatus> => {
     const response = await api.get('/users/m365-user-status', { params: { email } });
-    return response.data.data;
+    return response.data?.data ?? response.data;
   },
 
   toggleStatus: async (id: number): Promise<User> => {
     const response = await api.patch(`/users/${id}/toggle-status`);
-    return response.data.data;
+    return response.data?.data ?? response.data;
   },
 
   getStats: async (): Promise<UserStats> => {
