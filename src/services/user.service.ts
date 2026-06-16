@@ -137,9 +137,13 @@ export const userService = {
     if (query.company_id) params.append('company_id', String(query.company_id));
 
     const response = await api.get(`/users?${params.toString()}`);
+    // BE user list returns pagination at the top level ({ data, pagination }),
+    // NOT under a `meta` envelope. The earlier `response.data.meta.pagination`
+    // threw a TypeError ("Gagal memuat data users") because meta is undefined.
+    // Tolerate both shapes so a future meta-standardization won't re-break it.
     return {
       data: response.data.data,
-      pagination: response.data.meta.pagination,
+      pagination: response.data.meta?.pagination ?? response.data.pagination,
     };
   },
 

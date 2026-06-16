@@ -57,9 +57,10 @@ export const rbacService = {
   // Roles
   getRoles: async (): Promise<PaginatedResponse<Role>> => {
     const response = await api.get('/rbac/roles');
+    // BE returns pagination at top level, not under `meta` — tolerate both.
     return {
       data: response.data.data,
-      pagination: response.data.meta.pagination,
+      pagination: response.data.meta?.pagination ?? response.data.pagination,
     };
   },
 
@@ -86,10 +87,11 @@ export const rbacService = {
   // Permissions
   getPermissions: async (): Promise<PaginatedPermissionsResponse> => {
     const response = await api.get('/rbac/permissions');
+    // BE returns { data, grouped, pagination } at top level, not under `meta`.
     return {
       data: response.data.data,
-      pagination: response.data.meta.pagination,
-      grouped: response.data.meta.grouped,
+      pagination: response.data.meta?.pagination ?? response.data.pagination,
+      grouped: response.data.meta?.grouped ?? response.data.grouped,
     };
   },
 
