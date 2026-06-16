@@ -103,8 +103,13 @@ export const workLocationService = {
   // Lightweight dropdown options ({id, name, code, company_id}, no pagination).
   // Prefer this over getAll() when you only need to populate a select.
   getOptions: async (params?: WorkLocationOptionsParams): Promise<WorkLocationOption[]> => {
-    const response = await api.get<BackendSingleResponse<WorkLocationOption[]>>('/work-locations/options', { params });
-    return response.data.data;
+    // No /work-locations/options route on the BE → would hit /:id with
+    // id="options". Use the working list endpoint and project to options.
+    const response = await api.get<BackendPaginatedResponse<WorkLocation>>('/work-locations', {
+      params: { ...params, limit: 500 },
+    });
+    const list = (response.data?.data ?? []) as WorkLocation[];
+    return list.map((w) => ({ id: w.id, name: w.name, code: w.code, company_id: w.company_id }));
   },
 
   getAll: async (params?: WorkLocationListParams): Promise<{ data: WorkLocation[]; total: number }> => {

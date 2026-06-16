@@ -42,11 +42,14 @@ export const departmentService = {
   // Lightweight dropdown options ({id, name, code}, no pagination).
   // Prefer this over getAll() / getAllDepartments() when populating a select.
   getOptions: async (params?: { company_id?: number }): Promise<DepartmentOption[]> => {
+    // No /departments/options route on the BE → would hit /:id with
+    // id="options". Use the working list endpoint and project to options.
     const response = await api.get<{ success: boolean; data: DepartmentOption[] }>(
-      '/departments/options',
-      { params }
+      '/departments',
+      { params: { ...params, limit: 200 } }
     );
-    return response.data.data;
+    const list = (response.data?.data ?? []) as DepartmentOption[];
+    return list.map((d) => ({ id: d.id, name: d.name, code: d.code }));
   },
 
   // List departments

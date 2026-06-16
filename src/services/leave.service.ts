@@ -33,10 +33,12 @@ export const leaveService = {
   // Lightweight dropdown options ({id, name, code}, no pagination).
   // Prefer this over getTypes() when populating a select.
   getTypeOptions: async (): Promise<Array<{ id: number; name: string; code?: string }>> => {
-    const response = await api.get<ApiResponse<Array<{ id: number; name: string; code?: string }>>>(
-      '/leave-types/options'
-    );
-    return response.data.data;
+    // BE has NO /leave-types/options route → it falls through to
+    // /leave-types/:id with id="options" → NaN → 500 Prisma error + empty
+    // dropdown. Reuse the working /leaves/types list and project to options.
+    const response = await api.get<ApiResponse<LeaveType[]>>('/leaves/types');
+    const list = (response.data?.data ?? response.data ?? []) as LeaveType[];
+    return list.map((t) => ({ id: t.id, name: t.name, code: t.code }));
   },
 
   // Create leave type
