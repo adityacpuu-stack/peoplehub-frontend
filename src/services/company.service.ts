@@ -143,8 +143,13 @@ export const companyService = {
   // Lightweight dropdown options ({id, name, code}, no pagination).
   // Prefer this over getAll() when you only need to populate a select.
   async getOptions(): Promise<CompanyOption[]> {
-    const response = await api.get('/companies/options');
-    return response.data.data;
+    // BE has NO /companies/options route → it falls through to /companies/:id
+    // with id="options" → NaN → getById throws ForbiddenError("Access denied to
+    // this company") for non-Super-Admins (NaN not in accessibleCompanyIds).
+    // Use the working list endpoint and project to {id, name, code}.
+    const response = await api.get('/companies', { params: { limit: 200 } });
+    const list = (response.data?.data ?? []) as Array<{ id: number; name: string; code: string }>;
+    return list.map((c) => ({ id: c.id, name: c.name, code: c.code }));
   },
 
   async getAll(params: CompanyQueryParams = {}): Promise<PaginatedResponse<Company>> {
