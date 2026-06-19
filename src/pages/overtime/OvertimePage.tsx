@@ -377,8 +377,11 @@ export function OvertimePage() {
     }
   };
 
-  const getTypeBadge = (type: Overtime['overtime_type']) => {
-    const multiplier = overtimeService.getMultiplier(type);
+  const getTypeBadge = (type: Overtime['overtime_type'], rateMultiplier?: number) => {
+    // Show the ACTUAL stored multiplier — not the type-based default — so the
+    // badge matches what was entered (e.g. an entry saved at 1x must not read
+    // "1.5x"). Falls back to the type default only when no multiplier is set.
+    const multiplier = Number(rateMultiplier ?? overtimeService.getMultiplier(type));
     switch (type) {
       case 'regular':
         return <span className="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs font-medium rounded">Weekday ({multiplier}x)</span>;
@@ -671,7 +674,7 @@ export function OvertimePage() {
                       <span className="text-sm text-gray-500"> hrs</span>
                     </td>
                     <td className="px-6 py-4 text-center">
-                      {getTypeBadge(request.overtime_type)}
+                      {getTypeBadge(request.overtime_type, request.rate_multiplier)}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <p className="font-semibold text-gray-900">{formatCurrency(request.total_amount || 0)}</p>
@@ -821,7 +824,7 @@ export function OvertimePage() {
                     </div>
                     <div>
                       <p className="text-xs text-gray-500 mb-1">Type</p>
-                      {getTypeBadge(selectedRequest.overtime_type)}
+                      {getTypeBadge(selectedRequest.overtime_type, selectedRequest.rate_multiplier)}
                     </div>
                   </div>
                 </div>
