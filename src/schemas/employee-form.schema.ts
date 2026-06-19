@@ -119,15 +119,20 @@ const toIntOrUndefined = (val: unknown): number | undefined => {
 };
 
 // Use type<...>().pipe() so that z.input infers a usable input type
-// (string | number | undefined) instead of `unknown`.
+// (string | number | null | undefined) instead of `unknown`.
+// NOTE: z.null() in the union is REQUIRED — existing employee records carry
+// `null` for unset allowances/salary/FK fields, and the form maps them through
+// verbatim. Without z.null() the union rejects null with "Invalid input" before
+// the transform (which coerces null → undefined) ever runs, forcing users to
+// fill optional allowance fields on edit.
 const optionalCurrency = z
-  .union([z.string(), z.number()])
+  .union([z.string(), z.number(), z.null()])
   .optional()
   .transform(toFloatOrUndefined)
   .pipe(z.number().min(0, 'Must be 0 or greater').max(1e12, 'Amount too large').optional());
 
 const optionalId = z
-  .union([z.string(), z.number()])
+  .union([z.string(), z.number(), z.null()])
   .optional()
   .transform(toIntOrUndefined)
   .pipe(z.number().int().positive('Must be a positive number').optional());
