@@ -101,7 +101,7 @@ export function CompanyFeaturesPage() {
       toast.success(`${featureNames[feature]} ${newValue ? 'diaktifkan' : 'dinonaktifkan'} untuk ${company.name}`);
     } catch (error: any) {
       console.error('Failed to update feature toggle:', error);
-      toast.error(error.response?.data?.error || 'Gagal mengubah pengaturan fitur');
+      toast.error(error.response?.data?.error?.message || error.response?.data?.error || 'Gagal mengubah pengaturan fitur');
     } finally {
       setUpdatingIds((prev) => {
         const next = new Set(prev);

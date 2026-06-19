@@ -66,7 +66,7 @@ export function CompanyAssignmentsPage() {
       setShowModal(false);
       fetchData();
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Gagal assign');
+      toast.error(error.response?.data?.error?.message || error.response?.data?.error || 'Gagal assign');
     } finally {
       setIsAssigning(false);
     }
@@ -79,7 +79,7 @@ export function CompanyAssignmentsPage() {
       toast.success('Assignment dihapus');
       fetchData();
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Gagal menghapus');
+      toast.error(error.response?.data?.error?.message || error.response?.data?.error || 'Gagal menghapus');
     }
   };
 
@@ -90,7 +90,7 @@ export function CompanyAssignmentsPage() {
       toast.success(`Status diubah ke ${newStatus}`);
       fetchData();
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Gagal mengubah status');
+      toast.error(error.response?.data?.error?.message || error.response?.data?.error || 'Gagal mengubah status');
     }
   };
 

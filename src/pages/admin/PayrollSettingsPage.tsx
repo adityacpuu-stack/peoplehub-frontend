@@ -110,7 +110,7 @@ export function PayrollSettingsPage() {
       toast.success(`Berhasil! TER: ${result.ter_rates.created} baru, Brackets: ${result.tax_brackets.created} baru, PTKP: ${result.ptkp.created} baru`);
       fetchData();
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Gagal menginisialisasi data');
+      toast.error(error.response?.data?.error?.message || error.response?.data?.error || 'Gagal menginisialisasi data');
     } finally {
       setIsSeeding(false);
     }

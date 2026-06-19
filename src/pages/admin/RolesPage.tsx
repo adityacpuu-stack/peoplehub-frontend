@@ -56,7 +56,7 @@ function RoleFormModal({ role, onClose, onSaved }: RoleFormModalProps) {
       onSaved();
       onClose();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Gagal menyimpan role');
+      toast.error(err.response?.data?.error?.message || err.response?.data?.error || 'Gagal menyimpan role');
     } finally {
       setSaving(false);
     }
@@ -143,7 +143,7 @@ function DeleteModal({ role, onClose, onDeleted }: { role: Role; onClose: () => 
       onDeleted();
       onClose();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Gagal menghapus role');
+      toast.error(err.response?.data?.error?.message || err.response?.data?.error || 'Gagal menghapus role');
     } finally {
       setDeleting(false);
     }

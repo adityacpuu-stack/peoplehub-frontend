@@ -83,7 +83,7 @@ function CompanyFeaturesTab() {
       };
       toast.success(`${featureNames[feature]} ${newValue ? 'diaktifkan' : 'dinonaktifkan'} untuk ${company.name}`);
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Gagal mengubah pengaturan fitur');
+      toast.error(error.response?.data?.error?.message || error.response?.data?.error || 'Gagal mengubah pengaturan fitur');
     } finally {
       setUpdatingIds((prev) => {
         const next = new Set(prev);
