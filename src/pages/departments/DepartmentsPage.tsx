@@ -18,6 +18,7 @@ export function DepartmentsPage() {
     name: '',
     code: '',
     description: '',
+    company_id: undefined as number | undefined,
     head_id: undefined as number | undefined,
     parent_id: undefined as number | undefined,
     status: 'active' as 'active' | 'inactive',
@@ -72,6 +73,7 @@ export function DepartmentsPage() {
         name: department.name,
         code: department.code || '',
         description: department.description || '',
+        company_id: department.company_id ?? undefined,
         head_id: department.head_id,
         parent_id: department.parent_id,
         status: department.status,
@@ -82,6 +84,7 @@ export function DepartmentsPage() {
         name: '',
         code: '',
         description: '',
+        company_id: selectedCompanyId ?? undefined,
         head_id: undefined,
         parent_id: undefined,
         status: 'active' as 'active' | 'inactive',
@@ -92,6 +95,10 @@ export function DepartmentsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.company_id) {
+      toast.error('Pilih company dulu untuk department ini');
+      return;
+    }
     try {
       if (editingDepartment) {
         await departmentService.update(editingDepartment.id, formData);
@@ -418,6 +425,25 @@ export function DepartmentsPage() {
               </div>
 
               <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Company <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={formData.company_id ?? ''}
+                    onChange={(e) => setFormData({ ...formData, company_id: e.target.value ? Number(e.target.value) : undefined })}
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-white"
+                    required
+                  >
+                    <option value="">-- Select Company --</option>
+                    {companies.map((company) => (
+                      <option key={company.id} value={company.id}>
+                        {company.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Department Name <span className="text-red-500">*</span>
