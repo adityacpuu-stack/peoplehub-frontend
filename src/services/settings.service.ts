@@ -73,8 +73,8 @@ export interface PayrollSettings {
   overtime_base: string | null;
   // Payroll Schedule
   payroll_cutoff_date: number | null;
-  payroll_payment_date: number | null;
-  payroll_period_type: string | null;
+  payment_date: number | null;
+  prorate_method: string | null;
 }
 
 // User Notification Preferences (personal settings)

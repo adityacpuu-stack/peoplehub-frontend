@@ -749,8 +749,8 @@ export function SettingsPage({ defaultTab }: SettingsPageProps = {}) {
                         type="number"
                         min="1"
                         max="31"
-                        value={payrollSettings.payroll_payment_date || 25}
-                        onChange={(e) => setPayrollSettings({ ...payrollSettings, payroll_payment_date: Number(e.target.value) })}
+                        value={payrollSettings.payment_date ?? ''}
+                        onChange={(e) => setPayrollSettings({ ...payrollSettings, payment_date: Number(e.target.value) })}
                         disabled={isViewOnlyMode}
                         className={`w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${isViewOnlyMode ? 'bg-gray-50 cursor-not-allowed' : ''}`}
                       />
