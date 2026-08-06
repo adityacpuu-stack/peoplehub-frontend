@@ -112,7 +112,7 @@ export function CEOPayrollReportPage() {
           comparison = (Number(a.gross_salary) || 0) - (Number(b.gross_salary) || 0);
           break;
         case 'net':
-          comparison = (Number(a.net_salary) || 0) - (Number(b.net_salary) || 0);
+          comparison = (Number(a.take_home_pay ?? a.net_salary) || 0) - (Number(b.take_home_pay ?? b.net_salary) || 0);
           break;
         case 'status':
           comparison = (a.status || '').localeCompare(b.status || '');
@@ -157,7 +157,7 @@ export function CEOPayrollReportPage() {
 
   // Calculate summary stats
   const totalGross = payrolls.reduce((sum, p) => sum + (Number(p.gross_salary) || 0), 0);
-  const totalNet = payrolls.reduce((sum, p) => sum + (Number(p.net_salary) || 0), 0);
+  const totalNet = payrolls.reduce((sum, p) => sum + (Number(p.take_home_pay ?? p.net_salary) || 0), 0);
   const totalEmployees = payrolls.length;
   const paidCount = payrolls.filter((p) => p.status === 'paid').length;
   const pendingCount = payrolls.filter((p) => ['draft', 'processing', 'validated', 'submitted', 'approved'].includes(p.status || '')).length;
@@ -471,7 +471,7 @@ export function CEOPayrollReportPage() {
                       </td>
                       <td className="px-3 py-4 text-right">
                         <span className="font-bold text-gray-900 text-sm">
-                          {formatCurrency(Number(payroll.net_salary) || 0)}
+                          {formatCurrency(Number(payroll.take_home_pay ?? payroll.net_salary) || 0)}
                         </span>
                       </td>
                       <td className="px-3 py-4 text-center">
@@ -653,7 +653,7 @@ export function CEOPayrollReportPage() {
                 <div className="flex justify-between items-center">
                   <span className="font-semibold text-emerald-700">Take Home Pay</span>
                   <span className="text-2xl font-bold text-emerald-600">
-                    {formatCurrency(Number(selectedPayroll.net_salary) || 0)}
+                    {formatCurrency(Number(selectedPayroll.take_home_pay ?? selectedPayroll.net_salary) || 0)}
                   </span>
                 </div>
               </div>

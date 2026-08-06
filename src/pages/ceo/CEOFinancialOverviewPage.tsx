@@ -155,7 +155,7 @@ export function CEOFinancialOverviewPage() {
 
   // Calculate totals from payrolls
   const totalGross = payrolls.reduce((sum, p) => sum + (Number(p.gross_salary) || 0), 0);
-  const totalNet = payrolls.reduce((sum, p) => sum + (Number(p.net_salary) || 0), 0);
+  const totalNet = payrolls.reduce((sum, p) => sum + (Number(p.take_home_pay ?? p.net_salary) || 0), 0);
   const totalTax = payrolls.reduce((sum, p) => sum + (Number(p.pph21) || 0), 0);
   const totalBpjsEmployee = payrolls.reduce((sum, p) => sum + (Number(p.bpjs_employee_total) || 0), 0);
   const totalBpjsCompany = payrolls.reduce((sum, p) => sum + (Number(p.bpjs_company_total) || 0), 0);
@@ -177,7 +177,7 @@ export function CEOFinancialOverviewPage() {
       });
     }
     const dept = departmentMap.get(deptName)!;
-    dept.totalPayroll += Number(payroll.net_salary) || 0;
+    dept.totalPayroll += Number(payroll.take_home_pay ?? payroll.net_salary) || 0;
     dept.totalTax += Number(payroll.pph21) || 0;
     dept.totalBpjs += (Number(payroll.bpjs_employee_total) || 0) + (Number(payroll.bpjs_company_total) || 0);
     dept.employeeCount++;

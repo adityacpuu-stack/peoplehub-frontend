@@ -443,6 +443,8 @@ export interface Payroll {
   total_deductions: number;
   gross_salary: number;
   net_salary: number;
+  take_home_pay?: number; // actual take-home (net of PPh21 + BPJS); net_salary is pre-deduction for new_gross
+  thp?: number;
   status: 'draft' | 'pending' | 'approved' | 'paid';
   employee?: Employee;
   created_at: string;

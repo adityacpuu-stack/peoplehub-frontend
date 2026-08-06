@@ -593,7 +593,7 @@ export const payrollService = {
         summary.total_employees++;
         // Convert to numbers (Prisma Decimal comes as string)
         summary.total_gross += Number(p.gross_salary) || 0;
-        summary.total_net += Number(p.net_salary) || 0;
+        summary.total_net += Number(p.take_home_pay ?? p.net_salary) || 0;
         summary.total_tax += Number(p.pph21) || 0;
         summary.total_bpjs_employee += Number(p.bpjs_employee_total) || 0;
         summary.total_bpjs_company += Number(p.bpjs_company_total) || 0;

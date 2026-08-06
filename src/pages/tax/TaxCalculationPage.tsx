@@ -101,7 +101,7 @@ export function TaxCalculationPage() {
   const totalPPh21 = payrolls.reduce((sum, p) => sum + (Number(p.pph21) || 0), 0);
   const totalBPJSEmployee = payrolls.reduce((sum, p) => sum + (Number(p.bpjs_employee_total) || 0), 0);
   const totalBPJSCompany = payrolls.reduce((sum, p) => sum + (Number(p.bpjs_company_total) || 0), 0);
-  const totalNet = payrolls.reduce((sum, p) => sum + (Number(p.net_salary) || 0), 0);
+  const totalNet = payrolls.reduce((sum, p) => sum + (Number(p.take_home_pay ?? p.net_salary) || 0), 0);
   const employeeCount = payrolls.length;
 
   // Period options
@@ -315,7 +315,7 @@ export function TaxCalculationPage() {
                       <span className="text-sm text-green-600">{formatCurrency(Number(payroll.bpjs_company_total) || 0)}</span>
                     </td>
                     <td className="px-3 py-4 text-right">
-                      <span className="font-bold text-gray-900">{formatCurrency(Number(payroll.net_salary) || 0)}</span>
+                      <span className="font-bold text-gray-900">{formatCurrency(Number(payroll.take_home_pay ?? payroll.net_salary) || 0)}</span>
                     </td>
                     <td className="px-3 py-4 text-center">
                       <button
@@ -429,7 +429,7 @@ export function TaxCalculationPage() {
               <div className="bg-gradient-to-r from-cyan-50 to-teal-50 rounded-xl p-4 border border-cyan-200">
                 <div className="flex justify-between items-center">
                   <span className="font-semibold text-cyan-700">Take Home Pay</span>
-                  <span className="text-2xl font-bold text-cyan-600">{formatCurrency(Number(selectedPayroll.net_salary) || 0)}</span>
+                  <span className="text-2xl font-bold text-cyan-600">{formatCurrency(Number(selectedPayroll.take_home_pay ?? selectedPayroll.net_salary) || 0)}</span>
                 </div>
               </div>
             </div>
