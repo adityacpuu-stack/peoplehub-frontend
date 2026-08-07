@@ -367,6 +367,7 @@ export function RequestsPage() {
     status: 'pending',
     search: '',
   });
+  const [approvalScope, setApprovalScope] = useState<'mine' | 'all'>('mine');
   const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null);
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -402,6 +403,14 @@ export function RequestsPage() {
     }
     return true;
   });
+
+  // Approvals-tab scope: 'mine' = only what THIS user can act on (their real
+  // queue); 'all' = everything in scope (monitor). Buttons stay gated by can_approve.
+  const mineCount = filteredRequests.filter(r => r.status === 'pending' && r.can_approve).length;
+  const othersCount = filteredRequests.filter(r => r.status === 'pending' && !r.can_approve).length;
+  const visibleRequests = approvalScope === 'mine'
+    ? filteredRequests.filter(r => r.can_approve)
+    : filteredRequests;
 
   const stats = {
     pending: requests.filter(r => r.status === 'pending').length,
@@ -701,41 +710,51 @@ export function RequestsPage() {
                 <p className="text-gray-500">Loading data...</p>
               </div>
             </div>
-          ) : filteredRequests.length === 0 ? (
+          ) : visibleRequests.length === 0 ? (
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-12 text-center">
               <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                 </svg>
               </div>
-              <h3 className="text-lg font-semibold text-gray-900">No requests</h3>
+              <h3 className="text-lg font-semibold text-gray-900">
+                {approvalScope === 'mine' && othersCount > 0 ? 'Gak ada yang perlu approval kamu 🎉' : 'No requests'}
+              </h3>
               <p className="mt-1 text-gray-500">
-                {filter.status === 'pending'
+                {approvalScope === 'mine' && othersCount > 0
+                  ? `${othersCount} request lagi nunggu approver lain (bukan kamu).`
+                  : filter.status === 'pending'
                   ? 'No pending leave requests to approve.'
                   : 'No requests match the current filter.'}
               </p>
+              {approvalScope === 'mine' && othersCount > 0 && (
+                <button
+                  onClick={() => setApprovalScope('all')}
+                  className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors"
+                >
+                  Lihat semua (monitor)
+                </button>
+              )}
             </div>
           ) : (
             <div className="space-y-4">
-              {(() => {
-                const mine = filteredRequests.filter(r => r.status === 'pending' && r.can_approve).length;
-                const others = filteredRequests.filter(r => r.status === 'pending' && !r.can_approve).length;
-                return (mine + others) > 0 ? (
-                  <div className="flex flex-wrap items-center gap-4 text-sm bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3">
-                    <span className="inline-flex items-center gap-1.5 font-semibold text-green-700">
-                      <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                      {mine} perlu approval kamu
-                    </span>
-                    {others > 0 && (
-                      <span className="inline-flex items-center gap-1.5 text-amber-700">
-                        <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-                        {others} menunggu approver lain (monitor)
-                      </span>
-                    )}
-                  </div>
-                ) : null;
-              })()}
-              {filteredRequests.map(request => (
+              {(mineCount + othersCount) > 0 && (
+                <div className="inline-flex bg-gray-100 rounded-lg p-1 text-sm">
+                  <button
+                    onClick={() => setApprovalScope('mine')}
+                    className={`px-3 py-1.5 rounded-md font-medium transition-colors ${approvalScope === 'mine' ? 'bg-white text-green-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                    Perlu approval kamu ({mineCount})
+                  </button>
+                  <button
+                    onClick={() => setApprovalScope('all')}
+                    className={`px-3 py-1.5 rounded-md font-medium transition-colors ${approvalScope === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                    Semua / monitor ({mineCount + othersCount})
+                  </button>
+                </div>
+              )}
+              {visibleRequests.map(request => (
                 <div
                   key={request.id}
                   className="bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden"
