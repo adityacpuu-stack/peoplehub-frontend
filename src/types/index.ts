@@ -413,6 +413,7 @@ export interface LeaveRequest {
   };
   leaveType?: LeaveType;
   approver?: { id: number; name: string };
+  can_approve?: boolean; // backend-computed: whether the current user may approve THIS request
   created_at: string;
   updated_at?: string;
 }

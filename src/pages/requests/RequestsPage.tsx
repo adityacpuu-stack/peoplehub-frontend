@@ -717,6 +717,24 @@ export function RequestsPage() {
             </div>
           ) : (
             <div className="space-y-4">
+              {(() => {
+                const mine = filteredRequests.filter(r => r.status === 'pending' && r.can_approve).length;
+                const others = filteredRequests.filter(r => r.status === 'pending' && !r.can_approve).length;
+                return (mine + others) > 0 ? (
+                  <div className="flex flex-wrap items-center gap-4 text-sm bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3">
+                    <span className="inline-flex items-center gap-1.5 font-semibold text-green-700">
+                      <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                      {mine} perlu approval kamu
+                    </span>
+                    {others > 0 && (
+                      <span className="inline-flex items-center gap-1.5 text-amber-700">
+                        <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                        {others} menunggu approver lain (monitor)
+                      </span>
+                    )}
+                  </div>
+                ) : null;
+              })()}
               {filteredRequests.map(request => (
                 <div
                   key={request.id}
@@ -738,6 +756,11 @@ export function RequestsPage() {
                               {request.leaveType?.name || 'Leave'}
                             </span>
                             {getStatusBadge(request.status)}
+                            {request.status === 'pending' && request.can_approve && (
+                              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+                                Perlu approval kamu
+                              </span>
+                            )}
                           </div>
                           <p className="text-sm text-gray-500">
                             {request.employee?.employee_id} • {request.employee?.department?.name || 'No Department'} • {request.employee?.position?.name || 'No Position'}
@@ -748,33 +771,45 @@ export function RequestsPage() {
                         </div>
                       </div>
 
-                      {/* Actions */}
+                      {/* Actions — only the designated approver (per backend can_approve)
+                          sees the buttons; everyone else sees who the request is waiting on. */}
                       {request.status === 'pending' && (
                         <div className="flex items-center gap-2 lg:flex-shrink-0">
-                          <button
-                            onClick={() => {
-                              setSelectedRequest(request);
-                              setShowApproveModal(true);
-                            }}
-                            className="inline-flex items-center gap-1.5 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors"
-                          >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                            Approve
-                          </button>
-                          <button
-                            onClick={() => {
-                              setSelectedRequest(request);
-                              setShowRejectModal(true);
-                            }}
-                            className="inline-flex items-center gap-1.5 px-4 py-2 bg-white hover:bg-red-50 text-red-600 border border-red-200 rounded-lg text-sm font-medium transition-colors"
-                          >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                            Reject
-                          </button>
+                          {request.can_approve ? (
+                            <>
+                              <button
+                                onClick={() => {
+                                  setSelectedRequest(request);
+                                  setShowApproveModal(true);
+                                }}
+                                className="inline-flex items-center gap-1.5 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors"
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                                Approve
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSelectedRequest(request);
+                                  setShowRejectModal(true);
+                                }}
+                                className="inline-flex items-center gap-1.5 px-4 py-2 bg-white hover:bg-red-50 text-red-600 border border-red-200 rounded-lg text-sm font-medium transition-colors"
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                                Reject
+                              </button>
+                            </>
+                          ) : (
+                            <div className="inline-flex items-center gap-1.5 px-3 py-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-sm font-medium">
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              Menunggu approval: {request.approver?.name || 'approver lain'}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
