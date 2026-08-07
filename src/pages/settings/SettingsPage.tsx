@@ -574,6 +574,45 @@ export function SettingsPage({ defaultTab }: SettingsPageProps = {}) {
                 )}
 
                 <div>
+                  <h4 className="font-medium text-gray-900 mb-3">Metode Absensi</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Cara Absen</label>
+                      <select
+                        value={attendanceSettings.attendance_method || 'app'}
+                        onChange={(e) => setAttendanceSettings({ ...attendanceSettings, attendance_method: e.target.value as 'app' | 'device' | 'both' })}
+                        disabled={isViewOnlyMode}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-white disabled:bg-gray-50"
+                      >
+                        <option value="app">App (GPS + selfie)</option>
+                        <option value="device">Mesin fisik (fingerprint/face)</option>
+                        <option value="both">App + Mesin</option>
+                      </select>
+                      <p className="text-xs text-gray-400 mt-1">
+                        {attendanceSettings.attendance_method === 'device'
+                          ? 'Karyawan absen lewat mesin; data masuk via import.'
+                          : attendanceSettings.attendance_method === 'both'
+                          ? 'App & mesin dua-duanya boleh.'
+                          : 'Karyawan absen sendiri lewat app.'}
+                      </p>
+                    </div>
+                    {(attendanceSettings.attendance_method === 'device' || attendanceSettings.attendance_method === 'both') && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Merek Mesin (opsional)</label>
+                        <input
+                          type="text"
+                          value={attendanceSettings.device_brand || ''}
+                          onChange={(e) => setAttendanceSettings({ ...attendanceSettings, device_brand: e.target.value })}
+                          disabled={isViewOnlyMode}
+                          placeholder="mis. ZKTeco / Fingerspot / Hikvision"
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 disabled:bg-gray-50"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div>
                   <h4 className="font-medium text-gray-900 mb-3">Jam Kerja</h4>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>

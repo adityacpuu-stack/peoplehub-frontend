@@ -33,6 +33,8 @@ export interface AttendanceSettings {
   require_check_out: boolean | null;
   allow_remote_check_in: boolean | null;
   max_remote_distance_km: number | null;
+  attendance_method?: 'app' | 'device' | 'both' | null; // per-company capture method
+  device_brand?: string | null;
   late_threshold_minutes: number | null;
   late_affects_salary: boolean | null;
   late_deduction_per_minute: number | null;
