@@ -873,7 +873,7 @@ export function Sidebar() {
       )}
 
       {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 240px)' }}>
+      <nav className="flex-1 px-3 py-4 overflow-y-auto scrollbar-hide" style={{ maxHeight: 'calc(100vh - 240px)' }}>
 
         {/* ==================== SUPER ADMIN MENU ==================== */}
         {isSuperAdmin ? (
