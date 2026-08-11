@@ -28,6 +28,7 @@ import { leaveService } from '../../services/leave.service';
 import { companyService } from '../../services/company.service';
 import { employeeService } from '../../services/employee.service';
 import { useAuthStore } from '@/stores/auth.store';
+import { toNum } from '@/lib/utils';
 import type { LeaveRequest, LeaveType } from '@/types';
 
 /**
@@ -68,6 +69,65 @@ interface Employee {
     name: string;
   };
 }
+
+/**
+ * Backdating is capped instead of banned: HR really does file sick leave a few
+ * days after the fact, but an unbounded past start date quietly books a period
+ * that has already been worked (and, for a closed month, already paid).
+ */
+const MAX_BACKDATE_DAYS = 30;
+
+/** YYYY-MM-DD in the browser's own timezone — toISOString() alone shifts to UTC
+ *  and hands a date input yesterday's date for anyone east of Greenwich. */
+const toDateInputValue = (date: Date): string => {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().split('T')[0];
+};
+
+/**
+ * The two per-type rules the backend enforces (leave.service.ts answers a
+ * violation with a 400). Both are counted in WORKING days, same as the charged
+ * total — never in the calendar span the date pickers suggest.
+ */
+// The schema default for min_days_per_request. Every row carries it, so showing
+// it would put "Minimum 0.5 working days" under every leave type — noise that
+// tells the user nothing. Only a deliberately raised minimum is worth surfacing.
+const DEFAULT_MIN_DAYS = 0.5;
+
+const leaveTypeLimitText = (type: LeaveType | null | undefined): string | null => {
+  if (!type) return null;
+
+  // min is a Prisma Decimal and arrives as a STRING ("0.5"), max is an Int and
+  // arrives as a number. A typeof === 'number' test therefore silently dropped
+  // the minimum entirely — the exact rejection-after-submit this hint exists to
+  // prevent. Guard null explicitly: toNum(null) would be 0, a real-looking value.
+  const rawMin = type.min_days_per_request;
+  const minNum = rawMin == null ? null : toNum(rawMin, NaN);
+  const min = minNum !== null && Number.isFinite(minNum) && minNum > DEFAULT_MIN_DAYS ? minNum : null;
+  const max = typeof type.max_days_per_request === 'number' ? type.max_days_per_request : null;
+  const unit = (n: number) => `${n} working day${n === 1 ? '' : 's'}`;
+
+  if (min !== null && max !== null) return `Must be between ${unit(min)} and ${unit(max)} per request.`;
+  if (min !== null) return `Minimum ${unit(min)} per request.`;
+  if (max !== null) return `Maximum ${unit(max)} per request.`;
+  return null;
+};
+
+/**
+ * Working days the backend charged for an existing request. Holidays are
+ * company-scoped and live only on the server (calculateLeaveDaysWithHolidays),
+ * so a stored request's duration is read from total_days, never recomputed.
+ */
+const chargedDays = (leave: LeaveRequest): number => toNum(leave.total_days);
+
+const chargedDaysLabel = (leave: LeaveRequest): string => {
+  // total_days is nullable, and Number(null) is 0 — which would print a
+  // confident "0 days" for a row that simply has no stored total. Check for
+  // absence before coercing.
+  if (leave.total_days == null) return '-';
+  const n = toNum(leave.total_days, NaN);
+  return Number.isFinite(n) ? String(n) : '-';
+};
 
 export function LeaveRequestsPage() {
   const { user } = useAuthStore();
@@ -113,6 +173,20 @@ export function LeaveRequestsPage() {
 
   const watchedStart = watch('start_date');
   const watchedEnd = watch('end_date');
+  const watchedLeaveType = watch('leave_type_id');
+
+  // Selected type drives the limit hint + the "document required" notice.
+  const selectedLeaveType = useMemo(
+    () => leaveTypes.find(t => String(t.id) === String(watchedLeaveType)) ?? null,
+    [leaveTypes, watchedLeaveType],
+  );
+  const limitText = leaveTypeLimitText(selectedLeaveType);
+
+  const minStartDate = useMemo(() => {
+    const earliest = new Date();
+    earliest.setDate(earliest.getDate() - MAX_BACKDATE_DAYS);
+    return toDateInputValue(earliest);
+  }, []);
 
   // Fetch leaves from API
   const fetchLeaves = useCallback(async () => {
@@ -142,18 +216,21 @@ export function LeaveRequestsPage() {
       setTotalItems(response.pagination?.total || response.data.length);
     } catch (error) {
       console.error('Failed to fetch leaves:', error);
-      toast.error('Failed to load leave requests');
+      // Shared id: the axios interceptor toasts under 'api-error' too, so the
+      // page-level message replaces it instead of stacking a second toast.
+      toast.error('Failed to load leave requests', { id: 'api-error' });
     } finally {
       setLoading(false);
     }
   }, [page, filterCompany, filterStatus, filterLeaveType]);
 
-  // Fetch leave types (lightweight options for filter / form dropdown).
+  // Fetch leave types. getTypeOptions() projects down to {id, name, code} and
+  // would drop min_days_per_request / max_days_per_request — the two rules the
+  // backend rejects a request on — so the form could not show them before submit.
   const fetchLeaveTypes = useCallback(async () => {
     try {
-      const types = await leaveService.getTypeOptions();
-      // Cast: dropdown only consumes {id, name} so the full LeaveType shape is overkill.
-      setLeaveTypes(types as unknown as LeaveType[]);
+      const types = await leaveService.getTypes();
+      setLeaveTypes(types);
     } catch (error) {
       console.error('Failed to fetch leave types:', error);
     }
@@ -234,14 +311,12 @@ export function LeaveRequestsPage() {
     const pending = leaves.filter(l => l.status === 'pending').length;
     const approved = leaves.filter(l => l.status === 'approved').length;
     const rejected = leaves.filter(l => l.status === 'rejected').length;
+    // total_days is what the backend actually charged (working days, holidays
+    // excluded). Re-deriving it from the date span inflates the figure by every
+    // weekend inside the period.
     const totalDays = leaves
       .filter(l => l.status === 'approved')
-      .reduce((acc, l) => {
-        const start = new Date(l.start_date);
-        const end = new Date(l.end_date);
-        const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-        return acc + days;
-      }, 0);
+      .reduce((acc, l) => acc + chargedDays(l), 0);
 
     return { totalItems, pending, approved, rejected, totalDays };
   }, [leaves, totalItems]);
@@ -276,7 +351,10 @@ export function LeaveRequestsPage() {
     }
   };
 
-  const calculateDays = (startDate: string, endDate: string) => {
+  // Plain span between the two dates. This is NOT the charged figure: the
+  // backend bills working days, so a Fri→Mon request spans 4 here and costs 2.
+  // Only ever used for the pre-submit preview, which labels itself as calendar days.
+  const calculateCalendarDays = (startDate: string, endDate: string) => {
     const start = new Date(startDate);
     const end = new Date(endDate);
     return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
@@ -317,14 +395,28 @@ export function LeaveRequestsPage() {
   };
 
   const onSubmit = async (data: LeaveRequestFormData) => {
+    const payload = {
+      leave_type_id: Number(data.leave_type_id),
+      start_date: data.start_date,
+      end_date: data.end_date,
+      reason: data.reason && data.reason.trim() !== '' ? data.reason : undefined,
+    };
+
+    // POST /leaves ignores any employee_id and files against the caller's own
+    // record, so an HR user who picked someone from the dropdown would book the
+    // leave on themselves. Filing for anyone else has to go via /leaves/employee.
+    const parsedEmployeeId = data.employee_id ? Number(data.employee_id) : NaN;
+    const targetEmployeeId = Number.isFinite(parsedEmployeeId) && parsedEmployeeId > 0
+      ? parsedEmployeeId
+      : null;
+    const isOnBehalf = targetEmployeeId !== null && targetEmployeeId !== currentEmployeeId;
+
     try {
-      // NOTE: attachment is UI-only — backend doesn't accept attachment field yet.
-      await leaveService.create({
-        leave_type_id: Number(data.leave_type_id),
-        start_date: data.start_date,
-        end_date: data.end_date,
-        reason: data.reason && data.reason.trim() !== '' ? data.reason : undefined,
-      });
+      if (isOnBehalf) {
+        await leaveService.createForEmployee({ ...payload, employee_id: targetEmployeeId });
+      } else {
+        await leaveService.create(payload);
+      }
       toast.success('Leave request created successfully');
       handleCloseModal();
       fetchLeaves();
@@ -351,7 +443,7 @@ export function LeaveRequestsPage() {
   const handleReject = async (id: number) => {
     const reason = prompt('Enter rejection reason:');
     if (!reason) {
-      toast.error('Rejection reason is required');
+      toast.error('Rejection reason is required', { id: 'api-error' });
       return;
     }
 
@@ -383,7 +475,7 @@ export function LeaveRequestsPage() {
 
   const handleExport = () => {
     if (filteredLeaves.length === 0) {
-      toast.error('No data to export');
+      toast.error('No data to export', { id: 'api-error' });
       return;
     }
 
@@ -394,7 +486,7 @@ export function LeaveRequestsPage() {
       'Leave Type',
       'Start Date',
       'End Date',
-      'Days',
+      'Working Days',
       'Status',
       'Reason',
       'Created At',
@@ -407,7 +499,7 @@ export function LeaveRequestsPage() {
       leave.leaveType?.name || '-',
       formatDate(leave.start_date),
       formatDate(leave.end_date),
-      calculateDays(leave.start_date, leave.end_date),
+      chargedDaysLabel(leave),
       leave.status,
       leave.reason || '-',
       leave.created_at ? formatDate(leave.created_at) : '-',
@@ -530,7 +622,7 @@ export function LeaveRequestsPage() {
             </div>
           </div>
           <p className="text-3xl font-bold text-gray-900 mb-1">{stats.totalDays}</p>
-          <p className="text-sm text-gray-500">Total Days (Approved)</p>
+          <p className="text-sm text-gray-500">Working Days (Approved)</p>
         </div>
       </div>
 
@@ -620,7 +712,7 @@ export function LeaveRequestsPage() {
                     Period
                   </th>
                   <th className="px-6 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                    Days
+                    Working Days
                   </th>
                   <th className="px-6 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
                     Status
@@ -659,8 +751,11 @@ export function LeaveRequestsPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <span className="inline-flex items-center justify-center w-8 h-8 bg-violet-100 text-violet-700 font-semibold rounded-lg">
-                        {calculateDays(leave.start_date, leave.end_date)}
+                      <span
+                        className="inline-flex items-center justify-center w-8 h-8 bg-violet-100 text-violet-700 font-semibold rounded-lg"
+                        title="Working days charged — weekends and public holidays excluded"
+                      >
+                        {chargedDaysLabel(leave)}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-center">
@@ -804,6 +899,10 @@ export function LeaveRequestsPage() {
                         </option>
                       ))}
                     </select>
+                    <p className="mt-1 text-xs text-gray-400">
+                      Leave blank to file for yourself. Picking someone files the request
+                      on their record (HR Staff or higher).
+                    </p>
                     {errors.employee_id && (
                       <p className="mt-1 text-sm text-red-600">{errors.employee_id.message}</p>
                     )}
@@ -825,6 +924,23 @@ export function LeaveRequestsPage() {
                     {errors.leave_type_id && (
                       <p className="mt-1 text-sm text-red-600">{errors.leave_type_id.message}</p>
                     )}
+                    {/* The backend rejects a request that breaks either rule with a 400,
+                        so state them here rather than after the fact. */}
+                    {limitText && (
+                      <p className="mt-2 text-sm text-violet-700 bg-violet-50 border border-violet-200 rounded-lg px-3 py-2 flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        <span>{limitText}</span>
+                      </p>
+                    )}
+                    {selectedLeaveType?.requires_document && (
+                      <p className="mt-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-start gap-2">
+                        <FileText className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        <span>
+                          This leave type requires a supporting document (e.g. medical
+                          certificate). Send it to HR separately — it cannot be uploaded here.
+                        </span>
+                      </p>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
@@ -840,10 +956,14 @@ export function LeaveRequestsPage() {
                             type="date"
                             {...field}
                             value={field.value || ''}
+                            min={minStartDate}
                             className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500"
                           />
                         )}
                       />
+                      <p className="mt-1 text-xs text-gray-400">
+                        Backdated up to {MAX_BACKDATE_DAYS} days
+                      </p>
                       {errors.start_date && (
                         <p className="mt-1 text-sm text-red-600">{errors.start_date.message}</p>
                       )}
@@ -860,6 +980,7 @@ export function LeaveRequestsPage() {
                             type="date"
                             {...field}
                             value={field.value || ''}
+                            min={watchedStart || minStartDate}
                             className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500"
                           />
                         )}
@@ -870,37 +991,38 @@ export function LeaveRequestsPage() {
                     </div>
                   </div>
 
+                  {/* Calendar span only — the balance is charged in working days, which
+                      depends on the company holiday calendar the server owns. Labelled
+                      so nobody reads this number as the amount being deducted. */}
                   {watchedStart && watchedEnd && watchedEnd >= watchedStart && (
                     <div className="bg-violet-50 rounded-lg p-4 border border-violet-200">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-violet-700">Total Days</span>
+                        <span className="text-sm text-violet-700">Period Selected</span>
                         <span className="text-lg font-bold text-violet-700">
-                          {calculateDays(watchedStart, watchedEnd)} days
+                          {calculateCalendarDays(watchedStart, watchedEnd)} calendar days
                         </span>
                       </div>
+                      <p className="mt-2 text-xs text-violet-600">
+                        Weekends and company public holidays are not counted. The working
+                        days actually charged are calculated on submit and shown on the
+                        request once created.
+                      </p>
                     </div>
                   )}
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Attachment
-                    </label>
-                    <Controller
-                      name="attachment"
-                      control={control}
-                      render={({ field }) => (
-                        <input
-                          type="file"
-                          onChange={(e) => field.onChange(e.target.files?.[0])}
-                          onBlur={field.onBlur}
-                          ref={field.ref}
-                          className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-sm file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100"
-                        />
-                      )}
-                    />
-                    {errors.attachment && (
-                      <p className="mt-1 text-sm text-red-600">{errors.attachment.message}</p>
-                    )}
+                  {/* The file picker here was never sent anywhere: /leaves accepts no
+                      attachment field, so a medical certificate chosen in this modal was
+                      dropped on submit. Replaced with the actual process until the
+                      backend has an upload endpoint. */}
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                    <p className="text-sm text-amber-800 flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                      <span>
+                        <span className="font-semibold">Documents cannot be attached here.</span>{' '}
+                        Send any supporting document (medical certificate, official letter)
+                        to HR separately — this form submits dates and reason only.
+                      </span>
+                    </p>
                   </div>
 
                   <div>
@@ -1007,7 +1129,10 @@ export function LeaveRequestsPage() {
                     <div className="bg-gray-50 rounded-lg p-4">
                       <p className="text-sm text-gray-500">Duration</p>
                       <p className="font-semibold text-gray-900">
-                        {calculateDays(selectedLeave.start_date, selectedLeave.end_date)} days
+                        {chargedDaysLabel(selectedLeave)} working days
+                      </p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        Weekends &amp; public holidays excluded
                       </p>
                     </div>
                   </div>

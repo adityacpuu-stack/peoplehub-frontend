@@ -372,11 +372,34 @@ export interface LeaveType {
   code?: string;
   description?: string;
   default_days: number;
+  // The only two per-type rules the backend actually enforces on a request
+  // (leave.service.ts validates both and rejects with a 400). They were absent
+  // here, so no screen could show a limit before the user hit it. Counted in
+  // WORKING days — weekends and public holidays are excluded.
+  // Note the asymmetry: max is an Int and arrives as a number, min is a Decimal
+  // and arrives as a STRING. See {@link Decimalish}.
+  max_days_per_request?: number | null;
+  min_days_per_request?: Decimalish | null;
   is_paid: boolean;
   is_active: boolean;
   color?: string;
+  gender_specific?: string | null;
+  requires_document?: boolean;
   available_during_probation?: boolean;
 }
+
+/**
+ * A Prisma `Decimal` column. These do NOT arrive as numbers: Prisma serializes
+ * Decimal via decimal.js `toJSON()`, so the wire carries `"2"`, not `2`
+ * (verified against /leaves/me and /leaves/me/balances).
+ *
+ * Declaring them `number` was silently wrong wherever the value was ADDED:
+ * `sum + r.total_days` concatenates, so a manager's "total days" summary read
+ * "023" instead of 5. Subtraction, division and `>` coerce and happened to be
+ * right, which is why it went unnoticed. Always run these through `toNum()`
+ * from `@/lib/utils` before arithmetic.
+ */
+export type Decimalish = number | string;
 
 export interface LeaveRequest {
   id: number;
@@ -386,7 +409,8 @@ export interface LeaveRequest {
   end_date: string;
   start_half_day?: boolean;
   end_half_day?: boolean;
-  total_days: number;
+  /** {@link Decimalish} — Prisma Decimal, arrives as a JSON string. */
+  total_days: Decimalish;
   reason?: string;
   status: 'pending' | 'approved' | 'rejected' | 'cancelled';
   is_emergency?: boolean;
@@ -423,10 +447,11 @@ export interface LeaveBalance {
   employee_id: number;
   leave_type_id: number;
   year: number;
-  allocated_days: number;
-  used_days: number;
-  pending_days: number;
-  remaining_days: number;
+  /** All four are Prisma Decimal — see {@link Decimalish}. */
+  allocated_days: Decimalish;
+  used_days: Decimalish;
+  pending_days: Decimalish;
+  remaining_days: Decimalish;
   leaveType?: LeaveType;
 }
 

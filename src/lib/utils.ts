@@ -77,3 +77,22 @@ export function getStatusColor(status: string): string {
   };
   return colors[status.toLowerCase()] ?? 'bg-gray-100 text-gray-800';
 }
+
+/**
+ * Coerce a Prisma Decimal field to a number.
+ *
+ * Decimal columns (total_days, remaining_days, pending_days, min_days_per_request, …)
+ * are serialized by decimal.js toJSON(), so they arrive as JSON STRINGS. Adding
+ * them directly concatenates: `0 + "2" + "3"` is `"023"`, which is how a
+ * manager's "total days" summary came to show a run of digits instead of a sum.
+ * Subtraction and comparison coerce on their own, which is why only the additions
+ * were visibly wrong.
+ *
+ * Returns `fallback` for null/undefined/non-numeric input, so a genuinely absent
+ * value never becomes a confident 0 unless you ask for one.
+ */
+export function toNum(value: unknown, fallback = 0): number {
+  if (value === null || value === undefined || value === '') return fallback;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}

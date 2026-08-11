@@ -1,3 +1,4 @@
+import { toNum } from '@/lib/utils';
 import { useState, useEffect } from 'react';
 import {
   ClipboardList,
@@ -70,7 +71,7 @@ export function CEOApprovalsPage() {
         department: leave.employee?.department?.name || '-',
         company: '-',
         status: leave.status as 'pending' | 'approved' | 'rejected',
-        priority: leave.total_days > 5 ? 'high' : 'normal',
+        priority: toNum(leave.total_days) > 5 ? 'high' : 'normal',
         submittedDate: leave.created_at,
         details: `${leave.total_days} days (${new Date(leave.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${new Date(leave.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })})`,
         originalData: leave,

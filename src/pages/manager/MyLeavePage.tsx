@@ -23,7 +23,7 @@ import {
   UserCheck,
   Phone,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn , toNum } from '@/lib/utils';
 import { leaveService } from '@/services/leave.service';
 import { employeeService } from '@/services/employee.service';
 import type { LeaveRequest, LeaveBalance, LeaveType, Employee } from '@/types';
@@ -139,8 +139,18 @@ export function MyLeavePage() {
     }
   };
 
+  // The backend approves against remaining_days - pending_days (a pending request
+  // already holds its days), so anything we advertise as "available" has to subtract
+  // pending too — otherwise we promise days the server will refuse.
+  const getAvailableDays = (balance: LeaveBalance) => Math.max(0, toNum(balance.remaining_days) - toNum(balance.pending_days));
+
   const filteredRequests = leaveRequests.filter((request) => {
-    const matchesSearch = request.reason?.toLowerCase().includes(searchQuery.toLowerCase());
+    // reason is optional on the API. Matching straight through it meant an empty
+    // search box evaluated `undefined?.includes(...)` -> undefined -> falsy, so every
+    // reason-less request disappeared from the list — including the one just filed,
+    // which is the only place its Cancel button lives.
+    const query = searchQuery.trim().toLowerCase();
+    const matchesSearch = query === '' || (request.reason ?? '').toLowerCase().includes(query);
     const matchesStatus = filterStatus === 'all' || request.status === filterStatus;
     const matchesYear = new Date(request.start_date).getFullYear().toString() === filterYear;
     return matchesSearch && matchesStatus && matchesYear;
@@ -152,6 +162,16 @@ export function MyLeavePage() {
     approved: leaveRequests.filter((r) => r.status === 'approved').length,
     rejected: leaveRequests.filter((r) => r.status === 'rejected').length,
   };
+
+  // The header badge used to read leaveBalances[0], whichever type the API happened to
+  // sort first, with no label — so a single bereavement balance could silently replace
+  // the annual figure everyone reads it as. Pin it to annual leave and name the type.
+  const headerBalance =
+    leaveBalances.find((b) => {
+      const code = b.leaveType?.code?.toLowerCase() || '';
+      const name = b.leaveType?.name?.toLowerCase() || '';
+      return code === 'annual' || name.includes('annual') || name.includes('tahunan');
+    }) || leaveBalances[0];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -267,10 +287,10 @@ export function MyLeavePage() {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              {leaveBalances.length > 0 && (
+              {headerBalance && (
                 <span className="inline-flex items-center gap-2 px-3 py-1.5 bg-white/20 backdrop-blur-xl rounded-lg text-sm text-white font-medium border border-white/10">
                   <CalendarDays className="h-4 w-4" />
-                  {leaveBalances[0]?.remaining_days || 0} Days Left
+                  {getLeaveTypeConfig(headerBalance.leaveType).label}: {getAvailableDays(headerBalance)} days left
                 </span>
               )}
               <button
@@ -300,14 +320,14 @@ export function MyLeavePage() {
                   </div>
                   <div className="text-right text-xs text-gray-500">
                     <p>Used: {balance.used_days}</p>
-                    {balance.pending_days > 0 && <p className="text-amber-600">Pending: {balance.pending_days}</p>}
+                    {toNum(balance.pending_days) > 0 && <p className="text-amber-600">Pending: {balance.pending_days}</p>}
                   </div>
                 </div>
                 <div className="mt-3 h-2 bg-gray-100 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full transition-all"
                     style={{
-                      width: `${balance.allocated_days > 0 ? (balance.remaining_days / balance.allocated_days) * 100 : 0}%`,
+                      width: `${toNum(balance.allocated_days) > 0 ? (toNum(balance.remaining_days) / toNum(balance.allocated_days)) * 100 : 0}%`,
                     }}
                   />
                 </div>
@@ -508,6 +528,28 @@ export function MyLeavePage() {
                       </option>
                     ))}
                   </select>
+                  {/* The backend rejects a request outside min/max_days_per_request, but until
+                      now the form never mentioned either limit — the user only found out on
+                      submit. Both are counted the way the server counts: WORKING days, with
+                      weekends and public holidays already taken out. */}
+                  {(() => {
+                    const selectedType = leaveTypes.find((t) => t.id === formData.leave_type_id);
+                    if (!selectedType) return null;
+                    const limits: string[] = [];
+                    if (selectedType.min_days_per_request != null) {
+                      limits.push(`Min ${selectedType.min_days_per_request}`);
+                    }
+                    if (selectedType.max_days_per_request != null) {
+                      limits.push(`Max ${selectedType.max_days_per_request}`);
+                    }
+                    if (limits.length === 0) return null;
+                    return (
+                      <p className="text-xs text-gray-500 mt-1.5">
+                        {limits.join(' · ')} working days per request — weekends &amp; public holidays are not
+                        counted.
+                      </p>
+                    );
+                  })()}
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -582,12 +624,20 @@ export function MyLeavePage() {
                       const balance = leaveBalances.find((b) => b.leave_type_id === formData.leave_type_id);
                       if (balance) {
                         return (
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm text-cyan-700">Available Balance:</span>
-                            <span className="text-base font-bold text-cyan-700">
-                              {balance.remaining_days} days
-                            </span>
-                          </div>
+                          <>
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm text-cyan-700">Available Balance:</span>
+                              <span className="text-base font-bold text-cyan-700">
+                                {getAvailableDays(balance)} days
+                              </span>
+                            </div>
+                            {toNum(balance.pending_days) > 0 && (
+                              <p className="text-xs text-cyan-600 mt-1">
+                                {balance.remaining_days} remaining, {balance.pending_days} already held by a pending
+                                request.
+                              </p>
+                            )}
+                          </>
                         );
                       }
                       return <p className="text-sm text-cyan-700">No balance allocated for this leave type</p>;

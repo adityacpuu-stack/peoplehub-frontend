@@ -24,9 +24,15 @@ export const leaveService = {
   // LEAVE TYPE ROUTES
   // ==========================================
 
-  // List leave types
+  // List leave types.
+  // The limit is explicit on purpose: the backend defaults to 10
+  // (leave.controller.ts), so without it any policy past the tenth simply does
+  // not exist as far as the UI is concerned — it vanishes from this page's list,
+  // from every request dropdown, and from the CSV export, with no error.
   getTypes: async (): Promise<LeaveType[]> => {
-    const response = await api.get<ApiResponse<LeaveType[]>>('/leaves/types');
+    const response = await api.get<ApiResponse<LeaveType[]>>('/leaves/types', {
+      params: { limit: 200 },
+    });
     return response.data.data;
   },
 
@@ -36,7 +42,9 @@ export const leaveService = {
     // BE has NO /leave-types/options route → it falls through to
     // /leave-types/:id with id="options" → NaN → 500 Prisma error + empty
     // dropdown. Reuse the working /leaves/types list and project to options.
-    const response = await api.get<ApiResponse<LeaveType[]>>('/leaves/types');
+    const response = await api.get<ApiResponse<LeaveType[]>>('/leaves/types', {
+      params: { limit: 200 },
+    });
     const list = (response.data?.data ?? response.data ?? []) as LeaveType[];
     return list.map((t) => ({ id: t.id, name: t.name, code: t.code }));
   },
@@ -74,9 +82,22 @@ export const leaveService = {
     return response.data.data;
   },
 
-  // Create leave request
+  // Create leave request FOR YOURSELF.
+  // The backend deliberately ignores any employee_id in this payload and uses
+  // the caller's own employee record, so this can never be used to file on
+  // someone else's behalf — use createForEmployee for that.
   create: async (data: CreateLeaveRequest): Promise<LeaveRequest> => {
     const response = await api.post<ApiResponse<LeaveRequest>>('/leaves', data);
+    return response.data.data;
+  },
+
+  // Create a leave request ON BEHALF OF an employee (HR Staff or higher).
+  // Matters most for maternity and sick leave, where the employee frequently
+  // cannot file for themselves.
+  createForEmployee: async (
+    data: CreateLeaveRequest & { employee_id: number }
+  ): Promise<LeaveRequest> => {
+    const response = await api.post<ApiResponse<LeaveRequest>>('/leaves/employee', data);
     return response.data.data;
   },
 
