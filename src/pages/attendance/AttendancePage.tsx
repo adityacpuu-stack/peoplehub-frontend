@@ -237,7 +237,7 @@ export function AttendancePage() {
       resetForm();
       fetchData();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to create attendance');
+      toast.error(error.response?.data?.message || 'Failed to create attendance', { id: 'api-error' });
     } finally {
       setIsProcessing(false);
     }
@@ -261,7 +261,7 @@ export function AttendancePage() {
       resetForm();
       fetchData();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to update attendance');
+      toast.error(error.response?.data?.message || 'Failed to update attendance', { id: 'api-error' });
     } finally {
       setIsProcessing(false);
     }
@@ -279,7 +279,7 @@ export function AttendancePage() {
       setSelectedAttendance(null);
       fetchData();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to delete attendance');
+      toast.error(error.response?.data?.message || 'Failed to delete attendance', { id: 'api-error' });
     } finally {
       setIsProcessing(false);
     }

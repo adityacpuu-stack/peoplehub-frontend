@@ -161,7 +161,7 @@ export function HolidayCalendarPage() {
       if (error.response?.status === 401) {
         toast.error('Please login to view holidays');
       } else if (error.response?.status) {
-        toast.error(`Failed to load holidays: ${error.response.status}`);
+        toast.error(`Failed to load holidays: ${error.response.status}`, { id: 'api-error' });
       }
       // Don't show toast if it's just network error - service already returns empty array
       setHolidays([]);

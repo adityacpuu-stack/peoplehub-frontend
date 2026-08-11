@@ -22,40 +22,127 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor - handle errors
+// ==========================================
+// ERROR BODY NORMALIZATION
+// ==========================================
+// Backend contract (backend/src/middlewares/error.middleware.ts errorHandler):
+//   { success: false, error: { message: string, code?: string, errors?: any[] } }
+// Legacy shapes may still arrive from an un-migrated route: { message } and
+// { error: "..." }. We read all three, then backfill the canonical message onto
+// data.message so the ~40 page-level `data?.message || 'Gagal ...'` reads resolve
+// without editing every page.
+
+type ApiErrorBody = {
+  message?: unknown;
+  error?: string | { message?: string; code?: string; errors?: unknown[] };
+};
+
+/** Plain JSON body only. Blob/ArrayBuffer bodies (responseType:'blob' exports)
+ *  are objects too, and writing onto them would poison the page fallback. */
+const isPlainErrorBody = (d: unknown): d is ApiErrorBody =>
+  typeof d === 'object' &&
+  d !== null &&
+  !(d instanceof Blob) &&
+  !(d instanceof ArrayBuffer) &&
+  !ArrayBuffer.isView(d) &&
+  !Array.isArray(d);
+
+/** SERVER-AUTHORED message only. Returns undefined when the server said nothing —
+ *  never a synthesized axios string like "Request failed with status code 400". */
+const readServerMessage = (d: unknown): string | undefined => {
+  if (!isPlainErrorBody(d)) return undefined;
+  if (typeof d.error === 'string') return d.error || undefined;
+  if (d.error && typeof d.error === 'object' && typeof d.error.message === 'string') {
+    return d.error.message || undefined;
+  }
+  if (typeof d.message === 'string') return d.message || undefined;
+  return undefined;
+};
+
+const readServerCode = (d: unknown): string | undefined => {
+  if (!isPlainErrorBody(d)) return undefined;
+  if (d.error && typeof d.error === 'object' && typeof d.error.code === 'string') {
+    return d.error.code;
+  }
+  return undefined;
+};
+
+// 401s whose real reason must reach the user instead of "Session expired".
+// These codes are emitted by backend/src/middlewares/auth.middleware.ts.
+const ACCOUNT_STATE_CODES = new Set([
+  'ACCOUNT_DISABLED',
+  'ACCOUNT_LOCKED',
+  'EMPLOYEE_INACTIVE',
+  'USER_NOT_FOUND',
+]);
+
+// Response interceptor - normalize + handle errors
 api.interceptors.response.use(
   (response) => response,
-  (error: AxiosError<{ error?: { message?: string } }>) => {
-    const message = error.response?.data?.error?.message || error.message || 'An error occurred';
+  async (error: AxiosError<unknown>) => {
+    // responseType:'blob' (payroll + employee Excel export) makes axios deliver
+    // the JSON error body as a Blob. Re-parse it so the shapes below are visible.
+    const raw = error.response?.data;
+    if (error.response && (raw instanceof Blob || raw instanceof ArrayBuffer)) {
+      try {
+        const text = raw instanceof Blob ? await raw.text() : new TextDecoder().decode(raw);
+        const parsed: unknown = JSON.parse(text);
+        if (parsed && typeof parsed === 'object') error.response.data = parsed;
+      } catch {
+        /* genuinely binary or unparseable — leave as-is */
+      }
+    }
+
+    const data = error.response?.data;
+    const serverMessage = readServerMessage(data);
+    const serverCode = readServerCode(data);
+
+    // Backfill ONLY a real server message. Never write error.message here: it
+    // would override every page's `|| 'Gagal ...'` fallback with axios internals.
+    if (serverMessage && isPlainErrorBody(data) && !data.message) {
+      data.message = serverMessage;
+    }
+
+    const message = serverMessage || error.message || 'An error occurred';
     const requestUrl = error.config?.url || '';
 
-    // Skip toast for auth endpoints (login, register, etc) - let the page handle it
-    const isAuthEndpoint = requestUrl.includes('/auth/login') ||
-                          requestUrl.includes('/auth/register') ||
-                          requestUrl.includes('/auth/forgot-password');
+    // Skip toast for auth endpoints - let the page own the message.
+    const isAuthEndpoint =
+      requestUrl.includes('/auth/login') ||
+      requestUrl.includes('/auth/register') ||
+      requestUrl.includes('/auth/forgot-password') ||
+      requestUrl.includes('/auth/reset-password');
 
+    // A shared toast id means the interceptor can never stack duplicates.
     // Handle 401 - Unauthorized (but not for login attempts)
     if (error.response?.status === 401 && !isAuthEndpoint) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';
-      toast.error('Session expired. Please login again.');
+      toast.error(
+        serverCode && ACCOUNT_STATE_CODES.has(serverCode) && serverMessage
+          ? serverMessage
+          : 'Session expired. Please login again.',
+        { id: 'api-error' }
+      );
     }
     // Handle 403 - Forbidden
     else if (error.response?.status === 403 && !isAuthEndpoint) {
-      toast.error('You do not have permission to perform this action.');
+      toast.error(serverMessage || 'You do not have permission to perform this action.', {
+        id: 'api-error',
+      });
     }
     // Handle 404 - Not Found
     else if (error.response?.status === 404 && !isAuthEndpoint) {
-      toast.error('Resource not found.');
+      toast.error(serverMessage || 'Resource not found.', { id: 'api-error' });
     }
     // Handle 500 - Server Error
     else if (error.response?.status === 500 && !isAuthEndpoint) {
-      toast.error('Server error. Please try again later.');
+      toast.error(serverMessage || 'Server error. Please try again later.', { id: 'api-error' });
     }
     // Handle other errors (skip for auth endpoints)
     else if (!isAuthEndpoint) {
-      toast.error(message);
+      toast.error(message, { id: 'api-error' });
     }
 
     return Promise.reject(error);

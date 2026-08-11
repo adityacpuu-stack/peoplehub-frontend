@@ -86,7 +86,7 @@ export function MyLeavePage() {
       }
     } catch (error: any) {
       console.error('Failed to fetch data:', error);
-      toast.error(error.response?.data?.error?.message || 'Gagal memuat data cuti');
+      toast.error(error.response?.data?.error?.message || 'Gagal memuat data cuti', { id: 'api-error' });
     } finally {
       setIsLoading(false);
     }
@@ -189,7 +189,7 @@ export function MyLeavePage() {
       fetchData();
     } catch (error: any) {
       console.error('Failed to submit leave request:', error);
-      toast.error(error.response?.data?.error?.message || 'Gagal mengajukan cuti');
+      toast.error(error.response?.data?.error?.message || 'Gagal mengajukan cuti', { id: 'api-error' });
     } finally {
       setIsSubmitting(false);
     }
@@ -204,7 +204,7 @@ export function MyLeavePage() {
       fetchData();
     } catch (error: any) {
       console.error('Failed to cancel leave request:', error);
-      toast.error(error.response?.data?.error?.message || 'Gagal membatalkan cuti');
+      toast.error(error.response?.data?.error?.message || 'Gagal membatalkan cuti', { id: 'api-error' });
     } finally {
       setIsCancelling(false);
     }

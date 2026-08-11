@@ -66,7 +66,7 @@ export function LeaveApprovalPage() {
       setLeaveRequests(data);
     } catch (error: any) {
       console.error('Failed to fetch leave requests:', error);
-      toast.error(error.response?.data?.error?.message || 'Gagal memuat data pengajuan cuti');
+      toast.error(error.response?.data?.error?.message || 'Gagal memuat data pengajuan cuti', { id: 'api-error' });
     } finally {
       setIsLoading(false);
     }
@@ -167,7 +167,7 @@ export function LeaveApprovalPage() {
       setShowDetailModal(false);
     } catch (error: any) {
       console.error('Failed to approve leave:', error);
-      toast.error(error.response?.data?.error?.message || 'Gagal menyetujui cuti');
+      toast.error(error.response?.data?.error?.message || 'Gagal menyetujui cuti', { id: 'api-error' });
     } finally {
       setIsProcessing(false);
       setActiveDropdown(null);
@@ -191,7 +191,7 @@ export function LeaveApprovalPage() {
       setRejectReason('');
     } catch (error: any) {
       console.error('Failed to reject leave:', error);
-      toast.error(error.response?.data?.error?.message || 'Gagal menolak cuti');
+      toast.error(error.response?.data?.error?.message || 'Gagal menolak cuti', { id: 'api-error' });
     } finally {
       setIsProcessing(false);
       setActiveDropdown(null);

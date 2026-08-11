@@ -53,7 +53,7 @@ export function EmployeeTemplatesPage() {
       setStatistics(stats);
     } catch (error: any) {
       console.error('Failed to fetch templates:', error);
-      toast.error(error.response?.data?.error?.message || 'Gagal memuat templates');
+      toast.error(error.response?.data?.error?.message || 'Gagal memuat templates', { id: 'api-error' });
     } finally {
       setIsLoading(false);
     }

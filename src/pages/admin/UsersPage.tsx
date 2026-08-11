@@ -95,7 +95,7 @@ export function UsersPage() {
       setTotalPages(response.pagination.totalPages);
       setTotal(response.pagination.total);
     } catch (error: any) {
-      toast.error(error.response?.data?.error?.message || error.response?.data?.message ||'Gagal memuat data users');
+      toast.error(error.response?.data?.error?.message || error.response?.data?.message ||'Gagal memuat data users', { id: 'api-error' });
     } finally {
       setIsLoading(false);
     }
@@ -201,7 +201,7 @@ export function UsersPage() {
       fetchUsers();
       fetchStats();
     } catch (error: any) {
-      toast.error(error.response?.data?.error?.message || error.response?.data?.message ||'Gagal menyimpan user');
+      toast.error(error.response?.data?.error?.message || error.response?.data?.message ||'Gagal menyimpan user', { id: 'api-error' });
     } finally {
       setIsSubmitting(false);
     }
@@ -216,7 +216,7 @@ export function UsersPage() {
       fetchUsers();
       fetchStats();
     } catch (error: any) {
-      toast.error(error.response?.data?.error?.message || error.response?.data?.message ||'Gagal menghapus user');
+      toast.error(error.response?.data?.error?.message || error.response?.data?.message ||'Gagal menghapus user', { id: 'api-error' });
     }
   };
 
@@ -227,7 +227,7 @@ export function UsersPage() {
       fetchUsers();
       fetchStats();
     } catch (error: any) {
-      toast.error(error.response?.data?.error?.message || error.response?.data?.message ||'Gagal mengubah status');
+      toast.error(error.response?.data?.error?.message || error.response?.data?.message ||'Gagal mengubah status', { id: 'api-error' });
     }
   };
 
@@ -270,7 +270,7 @@ export function UsersPage() {
       setCredentialUsername('');
       fetchUsers();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Gagal mengirim credentials');
+      toast.error(error.response?.data?.message || 'Gagal mengirim credentials', { id: 'api-error' });
     } finally {
       setIsSendingCredentials(false);
     }

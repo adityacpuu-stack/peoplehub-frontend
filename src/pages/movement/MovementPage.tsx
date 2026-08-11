@@ -277,7 +277,7 @@ export function MovementPage() {
       resetForm();
       fetchMovements();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to save movement');
+      toast.error(error.response?.data?.message || 'Failed to save movement', { id: 'api-error' });
     } finally {
       setIsProcessing(false);
     }
@@ -291,7 +291,7 @@ export function MovementPage() {
       fetchMovements();
       setShowDetailModal(false);
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to approve movement');
+      toast.error(error.response?.data?.message || 'Failed to approve movement', { id: 'api-error' });
     } finally {
       setIsProcessing(false);
     }
@@ -311,7 +311,7 @@ export function MovementPage() {
       setRejectReason('');
       fetchMovements();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to reject movement');
+      toast.error(error.response?.data?.message || 'Failed to reject movement', { id: 'api-error' });
     } finally {
       setIsProcessing(false);
     }
@@ -325,7 +325,7 @@ export function MovementPage() {
       fetchMovements();
       setShowDetailModal(false);
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to apply movement');
+      toast.error(error.response?.data?.message || 'Failed to apply movement', { id: 'api-error' });
     } finally {
       setIsProcessing(false);
     }
@@ -338,7 +338,7 @@ export function MovementPage() {
       toast.success('Movement deleted successfully');
       fetchMovements();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to delete movement');
+      toast.error(error.response?.data?.message || 'Failed to delete movement', { id: 'api-error' });
     }
   };
 

@@ -149,7 +149,7 @@ export function CompaniesPage() {
       handleCloseFormModal();
       fetchCompanies();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Gagal menyimpan perusahaan');
+      toast.error(error.response?.data?.message || 'Gagal menyimpan perusahaan', { id: 'api-error' });
     } finally {
       setIsSaving(false);
     }
@@ -165,7 +165,7 @@ export function CompaniesPage() {
       if (selectedCompany?.id === deleteModal.company.id) setSelectedCompany(null);
       fetchCompanies();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Gagal menghapus perusahaan');
+      toast.error(error.response?.data?.message || 'Gagal menghapus perusahaan', { id: 'api-error' });
     } finally {
       setIsDeleting(false);
     }

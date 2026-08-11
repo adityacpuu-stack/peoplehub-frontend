@@ -385,7 +385,7 @@ export function AllowancesPage() {
       fetchAllowances();
     } catch (error: any) {
       console.error('Failed to save allowance:', error);
-      toast.error(error.response?.data?.message || 'Failed to save allowance');
+      toast.error(error.response?.data?.message || 'Failed to save allowance', { id: 'api-error' });
     } finally {
       setSubmitting(false);
     }
@@ -400,7 +400,7 @@ export function AllowancesPage() {
       fetchAllowances();
     } catch (error: any) {
       console.error('Failed to delete allowance:', error);
-      toast.error(error.response?.data?.message || 'Failed to delete allowance');
+      toast.error(error.response?.data?.message || 'Failed to delete allowance', { id: 'api-error' });
     }
   };
 

@@ -243,7 +243,7 @@ export function OvertimePage() {
       fetchOvertimes();
       setShowDetailModal(false);
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to approve');
+      toast.error(error.response?.data?.message || 'Failed to approve', { id: 'api-error' });
     } finally {
       setActionLoading(null);
     }
@@ -260,7 +260,7 @@ export function OvertimePage() {
       fetchOvertimes();
       setShowDetailModal(false);
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to reject');
+      toast.error(error.response?.data?.message || 'Failed to reject', { id: 'api-error' });
     } finally {
       setActionLoading(null);
     }
@@ -336,7 +336,7 @@ export function OvertimePage() {
       setEmployees([]);
       fetchOvertimes();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to create overtime');
+      toast.error(error.response?.data?.message || 'Failed to create overtime', { id: 'api-error' });
     } finally {
       setFormLoading(false);
     }
