@@ -37,7 +37,7 @@ export function ForgotPasswordPage() {
       toast.success('Password reset link sent!');
     } catch (error: unknown) {
       const err = error as { response?: { data?: { message?: string } } };
-      toast.error(err.response?.data?.message || 'Failed to send reset link. Please try again.');
+      toast.error(err.response?.data?.message || 'Failed to send reset link. Please try again.', { id: 'api-error' });
     } finally {
       setIsLoading(false);
     }

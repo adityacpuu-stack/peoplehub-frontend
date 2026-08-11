@@ -430,7 +430,7 @@ export function RequestsPage() {
       setApproveComment('');
       fetchRequests();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to approve request');
+      toast.error(error.response?.data?.message || 'Failed to approve request', { id: 'api-error' });
     } finally {
       setIsProcessing(false);
     }
@@ -450,7 +450,7 @@ export function RequestsPage() {
       setRejectReason('');
       fetchRequests();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to reject request');
+      toast.error(error.response?.data?.message || 'Failed to reject request', { id: 'api-error' });
     } finally {
       setIsProcessing(false);
     }

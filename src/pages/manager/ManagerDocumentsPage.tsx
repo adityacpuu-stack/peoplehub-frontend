@@ -66,7 +66,7 @@ export function ManagerDocumentsPage() {
       setDocuments(data);
     } catch (error: any) {
       console.error('Failed to fetch documents:', error);
-      toast.error(error.response?.data?.error?.message || 'Gagal memuat dokumen');
+      toast.error(error.response?.data?.error?.message || 'Gagal memuat dokumen', { id: 'api-error' });
     } finally {
       setIsLoading(false);
     }
@@ -220,7 +220,7 @@ export function ManagerDocumentsPage() {
       fetchDocuments();
     } catch (error: any) {
       console.error('Failed to upload document:', error);
-      toast.error(error.response?.data?.error?.message || 'Gagal mengupload dokumen');
+      toast.error(error.response?.data?.error?.message || 'Gagal mengupload dokumen', { id: 'api-error' });
     } finally {
       setIsUploading(false);
     }
@@ -266,7 +266,7 @@ export function ManagerDocumentsPage() {
       fetchDocuments();
     } catch (error: any) {
       console.error('Failed to delete document:', error);
-      toast.error(error.response?.data?.error?.message || 'Gagal menghapus dokumen');
+      toast.error(error.response?.data?.error?.message || 'Gagal menghapus dokumen', { id: 'api-error' });
     }
   };
 

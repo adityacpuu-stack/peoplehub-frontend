@@ -44,7 +44,7 @@ export function TeamTemplatesPage() {
       setTemplates(templatesResponse.data);
     } catch (error: any) {
       console.error('Failed to fetch templates:', error);
-      toast.error(error.response?.data?.error?.message || 'Gagal memuat template');
+      toast.error(error.response?.data?.error?.message || 'Gagal memuat template', { id: 'api-error' });
     } finally {
       setIsLoading(false);
     }

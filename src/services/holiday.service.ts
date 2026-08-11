@@ -124,7 +124,10 @@ class HolidayService {
         success: false,
         created: 0,
         skipped: 0,
-        errors: [error.response?.data?.message || error.message || 'Failed to sync holidays'],
+        // No `|| error.message` here: this string is rendered into the sync error
+        // LIST in the UI, so an axios internal ("Request failed with status code
+        // 400") would be shown to the user as if it were a real reason.
+        errors: [error.response?.data?.message || 'Failed to sync holidays'],
       };
     }
   }

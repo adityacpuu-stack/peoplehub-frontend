@@ -73,7 +73,7 @@ export function ResetPasswordPage() {
       toast.success('Password reset successfully!');
     } catch (error: unknown) {
       const err = error as { response?: { data?: { message?: string } } };
-      toast.error(err.response?.data?.message || 'Failed to reset password. The link may have expired.');
+      toast.error(err.response?.data?.message || 'Failed to reset password. The link may have expired.', { id: 'api-error' });
     } finally {
       setIsLoading(false);
     }

@@ -1,3 +1,4 @@
+import { toNum } from '@/lib/utils';
 import { useState, useEffect } from 'react';
 import {
   Search,
@@ -66,7 +67,7 @@ export function LeaveApprovalPage() {
       setLeaveRequests(data);
     } catch (error: any) {
       console.error('Failed to fetch leave requests:', error);
-      toast.error(error.response?.data?.error?.message || 'Gagal memuat data pengajuan cuti');
+      toast.error(error.response?.data?.error?.message || 'Gagal memuat data pengajuan cuti', { id: 'api-error' });
     } finally {
       setIsLoading(false);
     }
@@ -93,10 +94,10 @@ export function LeaveApprovalPage() {
     rejected: leaveRequests.filter((r) => r.status === 'rejected').length,
     pendingDays: leaveRequests
       .filter((r) => r.status === 'pending')
-      .reduce((sum, r) => sum + (r.total_days || 0), 0),
+      .reduce((sum, r) => sum + toNum(r.total_days), 0),
     approvedDays: leaveRequests
       .filter((r) => r.status === 'approved')
-      .reduce((sum, r) => sum + (r.total_days || 0), 0),
+      .reduce((sum, r) => sum + toNum(r.total_days), 0),
   };
 
   const getStatusBadge = (status: LeaveRequest['status']) => {
@@ -167,7 +168,7 @@ export function LeaveApprovalPage() {
       setShowDetailModal(false);
     } catch (error: any) {
       console.error('Failed to approve leave:', error);
-      toast.error(error.response?.data?.error?.message || 'Gagal menyetujui cuti');
+      toast.error(error.response?.data?.error?.message || 'Gagal menyetujui cuti', { id: 'api-error' });
     } finally {
       setIsProcessing(false);
       setActiveDropdown(null);
@@ -191,7 +192,7 @@ export function LeaveApprovalPage() {
       setRejectReason('');
     } catch (error: any) {
       console.error('Failed to reject leave:', error);
-      toast.error(error.response?.data?.error?.message || 'Gagal menolak cuti');
+      toast.error(error.response?.data?.error?.message || 'Gagal menolak cuti', { id: 'api-error' });
     } finally {
       setIsProcessing(false);
       setActiveDropdown(null);
@@ -445,7 +446,7 @@ export function LeaveApprovalPage() {
                 <div>
                   <p className="text-[11px] uppercase tracking-wider text-gray-400 font-medium mb-1">Duration</p>
                   <p className="text-sm font-semibold text-gray-900">
-                    {request.total_days} day{request.total_days > 1 ? 's' : ''}
+                    {toNum(request.total_days)} day{toNum(request.total_days) > 1 ? 's' : ''}
                     {(request.start_half_day || request.end_half_day) && (
                       <span className="text-xs text-gray-500 font-normal ml-1">(half day)</span>
                     )}
@@ -614,7 +615,7 @@ export function LeaveApprovalPage() {
                             r.leaveType?.name?.toLowerCase().includes('tahunan')) &&
                           r.status === 'approved'
                       )
-                      .reduce((sum, r) => sum + (r.total_days || 0), 0)}
+                      .reduce((sum, r) => sum + toNum(r.total_days), 0)}
                     <span className="text-sm font-normal text-green-600 ml-1">days</span>
                   </p>
                   <p className="text-xs font-medium text-green-600 mt-1">Annual Leave</p>
@@ -635,7 +636,7 @@ export function LeaveApprovalPage() {
                             r.leaveType?.name?.toLowerCase().includes('sakit')) &&
                           r.status === 'approved'
                       )
-                      .reduce((sum, r) => sum + (r.total_days || 0), 0)}
+                      .reduce((sum, r) => sum + toNum(r.total_days), 0)}
                     <span className="text-sm font-normal text-red-600 ml-1">days</span>
                   </p>
                   <p className="text-xs font-medium text-red-600 mt-1">Sick Leave</p>
@@ -656,7 +657,7 @@ export function LeaveApprovalPage() {
                             r.leaveType?.name?.toLowerCase().includes('belajar')) &&
                           r.status === 'approved'
                       )
-                      .reduce((sum, r) => sum + (r.total_days || 0), 0)}
+                      .reduce((sum, r) => sum + toNum(r.total_days), 0)}
                     <span className="text-sm font-normal text-purple-600 ml-1">days</span>
                   </p>
                   <p className="text-xs font-medium text-purple-600 mt-1">Study Leave</p>
@@ -684,7 +685,7 @@ export function LeaveApprovalPage() {
                           r.status === 'approved'
                         );
                       })
-                      .reduce((sum, r) => sum + (r.total_days || 0), 0)}
+                      .reduce((sum, r) => sum + toNum(r.total_days), 0)}
                     <span className="text-sm font-normal text-rose-600 ml-1">days</span>
                   </p>
                   <p className="text-xs font-medium text-rose-600 mt-1">Other Leave</p>
@@ -759,7 +760,7 @@ export function LeaveApprovalPage() {
                     <div className="p-3 bg-gray-50 rounded-lg">
                       <p className="text-xs text-gray-500">Duration</p>
                       <p className="font-medium text-gray-900">
-                        {selectedRequest.total_days} day{selectedRequest.total_days > 1 ? 's' : ''}
+                        {toNum(selectedRequest.total_days)} day{toNum(selectedRequest.total_days) > 1 ? 's' : ''}
                       </p>
                     </div>
                     <div className="p-3 bg-gray-50 rounded-lg">

@@ -407,7 +407,7 @@ export function LeaveEntitlementsPage() {
       handleCloseAllocateModal();
       fetchEntitlements();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to allocate leave');
+      toast.error(error.response?.data?.message || 'Failed to allocate leave', { id: 'api-error' });
     } finally {
       setAllocating(false);
     }

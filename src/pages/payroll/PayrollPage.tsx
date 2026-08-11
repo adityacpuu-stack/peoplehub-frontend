@@ -189,7 +189,7 @@ export function PayrollPage() {
       }
       setShowGenerateModal(false);
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Gagal generate payroll');
+      toast.error(error.response?.data?.message || 'Gagal generate payroll', { id: 'api-error' });
     } finally {
       setIsGenerating(false);
     }
@@ -203,7 +203,7 @@ export function PayrollPage() {
       toast.success('Payroll berhasil divalidasi');
       fetchPayrollData();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Gagal memvalidasi payroll');
+      toast.error(error.response?.data?.message || 'Gagal memvalidasi payroll', { id: 'api-error' });
     } finally {
       setIsProcessing(false);
     }
@@ -217,7 +217,7 @@ export function PayrollPage() {
       toast.success('Payroll berhasil disubmit');
       fetchPayrollData();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Gagal submit payroll');
+      toast.error(error.response?.data?.message || 'Gagal submit payroll', { id: 'api-error' });
     } finally {
       setIsProcessing(false);
     }
@@ -231,7 +231,7 @@ export function PayrollPage() {
       toast.success('Payroll berhasil diapprove');
       fetchPayrollData();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Gagal approve payroll');
+      toast.error(error.response?.data?.message || 'Gagal approve payroll', { id: 'api-error' });
     } finally {
       setIsProcessing(false);
     }
@@ -245,7 +245,7 @@ export function PayrollPage() {
       toast.success('Payroll berhasil dibayar');
       fetchPayrollData();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Gagal membayar payroll');
+      toast.error(error.response?.data?.message || 'Gagal membayar payroll', { id: 'api-error' });
     } finally {
       setIsProcessing(false);
     }
@@ -372,7 +372,7 @@ export function PayrollPage() {
       );
     } catch (error: any) {
       console.error('Export error:', error);
-      toast.error(error.response?.data?.message || 'Gagal mengekspor data');
+      toast.error(error.response?.data?.message || 'Gagal mengekspor data', { id: 'api-error' });
     } finally {
       setIsExporting(false);
     }

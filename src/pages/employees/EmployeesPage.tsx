@@ -181,7 +181,7 @@ export function EmployeesPage() {
       toast.success('Employee data exported successfully');
     } catch (error: any) {
       console.error('Export failed:', error);
-      toast.error(error?.response?.data?.message || 'Failed to export employee data');
+      toast.error(error?.response?.data?.message || 'Failed to export employee data', { id: 'api-error' });
     } finally {
       setIsExporting(false);
     }

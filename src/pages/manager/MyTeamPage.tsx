@@ -50,7 +50,7 @@ export function MyTeamPage() {
       setTeamData(data);
     } catch (error: any) {
       console.error('Failed to fetch team data:', error);
-      toast.error(error.response?.data?.error?.message || 'Gagal memuat data tim');
+      toast.error(error.response?.data?.error?.message || 'Gagal memuat data tim', { id: 'api-error' });
     } finally {
       setIsLoading(false);
     }

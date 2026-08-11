@@ -29,6 +29,13 @@ interface Company {
   name: string;
 }
 
+// Field names MUST match the API. GET /leaves/types returns the Prisma column
+// names (LEAVE_TYPE_SELECT in backend/src/modules/leave/leave.types.ts) and
+// POST/PUT /leave-types only accepts those names (CreateLeaveTypeDTO). This
+// interface previously declared max_days / carry_forward / carry_forward_days /
+// prorate_enabled, none of which exist on either side — so those values read
+// back as undefined (the edit form showed its defaults instead of what was
+// stored) and were silently dropped on save.
 interface LeavePolicy {
   id: number;
   name: string;
@@ -36,12 +43,12 @@ interface LeavePolicy {
   company_id?: number;
   company?: Company;
   default_days: number;
-  max_days?: number;
-  carry_forward?: boolean;
-  carry_forward_days?: number;
-  prorate_enabled?: boolean;
+  // Nullable on the wire: null is how the API says "no per-request cap".
+  max_days_per_request?: number | null;
+  can_carry_forward?: boolean;
+  max_carry_forward_days?: number;
+  prorate_on_join?: boolean;
   gender_specific?: string;
-  min_tenure_months?: number;
   requires_document?: boolean;
   description?: string;
   is_paid?: boolean;
@@ -62,17 +69,19 @@ export function LeavePolicyPage() {
   const [totalPages, setTotalPages] = useState(1);
   const limit = 12;
 
+  // max_days is held as a string, not a number: the API distinguishes "no cap"
+  // (null) from a real limit, and only an empty string can carry "no cap"
+  // through a number input without colliding with a genuine 0.
   const [formData, setFormData] = useState({
     name: '',
     code: '',
     description: '',
     default_days: 12,
-    max_days: 12,
+    max_days: '',
     carry_forward: false,
     carry_forward_days: 0,
     prorate_enabled: true,
     gender_specific: '',
-    min_tenure_months: 0,
     requires_document: false,
     company_id: '',
     is_active: true,
@@ -87,7 +96,7 @@ export function LeavePolicyPage() {
       setTotalPages(Math.ceil(types.length / limit));
     } catch (error) {
       console.error('Failed to fetch leave policies:', error);
-      toast.error('Failed to load leave policies');
+      toast.error('Failed to load leave policies', { id: 'api-error' });
     } finally {
       setLoading(false);
     }
@@ -141,7 +150,7 @@ export function LeavePolicyPage() {
   // Stats
   const stats = useMemo(() => {
     const active = policies.filter(p => p.is_active !== false).length;
-    const withCarryForward = policies.filter(p => p.carry_forward).length;
+    const withCarryForward = policies.filter(p => p.can_carry_forward).length;
     const requiresDoc = policies.filter(p => p.requires_document).length;
     return {
       total: policies.length,
@@ -158,13 +167,14 @@ export function LeavePolicyPage() {
         name: policy.name || '',
         code: policy.code || '',
         description: policy.description || '',
-        default_days: policy.default_days || 12,
-        max_days: policy.max_days || 12,
-        carry_forward: policy.carry_forward || false,
-        carry_forward_days: policy.carry_forward_days || 0,
-        prorate_enabled: policy.prorate_enabled !== false,
+        // ?? not ||: 0 allocated days is a real policy ("Cuti Tanpa Gaji"), and
+        // || turned it into 12 in the form, so the next save granted 12 days.
+        default_days: policy.default_days ?? 12,
+        max_days: policy.max_days_per_request != null ? String(policy.max_days_per_request) : '',
+        carry_forward: policy.can_carry_forward || false,
+        carry_forward_days: policy.max_carry_forward_days ?? 0,
+        prorate_enabled: policy.prorate_on_join !== false,
         gender_specific: policy.gender_specific || '',
-        min_tenure_months: policy.min_tenure_months || 0,
         requires_document: policy.requires_document || false,
         company_id: policy.company_id?.toString() || '',
         is_active: policy.is_active !== false,
@@ -176,12 +186,11 @@ export function LeavePolicyPage() {
         code: '',
         description: '',
         default_days: 12,
-        max_days: 12,
+        max_days: '',
         carry_forward: false,
         carry_forward_days: 0,
         prorate_enabled: true,
         gender_specific: '',
-        min_tenure_months: 0,
         requires_document: false,
         company_id: '',
         is_active: true,
@@ -199,7 +208,16 @@ export function LeavePolicyPage() {
     e.preventDefault();
 
     if (!formData.name || !formData.code) {
-      toast.error('Please fill in all required fields');
+      toast.error('Please fill in all required fields', { id: 'api-error' });
+      return;
+    }
+
+    // Empty means "no cap"; anything else has to be a usable limit, since the
+    // backend rejects every request longer than this value.
+    const maxDaysInput = formData.max_days.trim();
+    const maxDaysValue = maxDaysInput === '' ? null : Number(maxDaysInput);
+    if (maxDaysValue !== null && (!Number.isFinite(maxDaysValue) || maxDaysValue < 1)) {
+      toast.error('Max days must be at least 1, or empty for no limit', { id: 'api-error' });
       return;
     }
 
@@ -211,12 +229,16 @@ export function LeavePolicyPage() {
         code: formData.code,
         description: formData.description || undefined,
         default_days: Number(formData.default_days) || 0,
-        max_days: formData.max_days ? Number(formData.max_days) : undefined,
-        carry_forward: !!formData.carry_forward,
-        carry_forward_days: Number(formData.carry_forward_days) || 0,
-        prorate_enabled: !!formData.prorate_enabled,
+        // formData keys are the UI-local short names; the API names are on the right.
+        // null, not undefined: undefined is dropped from the PUT body and reads as
+        // "leave unchanged", which made an existing cap impossible to clear.
+        max_days_per_request: maxDaysValue,
+        can_carry_forward: !!formData.carry_forward,
+        max_carry_forward_days: Number(formData.carry_forward_days) || 0,
+        prorate_on_join: !!formData.prorate_enabled,
         gender_specific: formData.gender_specific || undefined,
-        min_tenure_months: Number(formData.min_tenure_months) || 0,
+        // No minimum-tenure field here on purpose: LeaveType has no tenure column,
+        // so the form no longer offers a control for a value nothing would store.
         requires_document: !!formData.requires_document,
         company_id: formData.company_id !== '' ? Number(formData.company_id) : undefined,
         is_active: formData.is_active,
@@ -236,7 +258,7 @@ export function LeavePolicyPage() {
       const err = error as { response?: { data?: { message?: string } } };
       // Axios interceptor already toasts generic 4xx/5xx; only toast field-level here
       if (!err.response) {
-        toast.error('Failed to save policy');
+        toast.error('Failed to save policy', { id: 'api-error' });
       }
     } finally {
       setSubmitting(false);
@@ -258,7 +280,7 @@ export function LeavePolicyPage() {
 
   const handleExport = () => {
     if (filteredPolicies.length === 0) {
-      toast.error('No data to export');
+      toast.error('No data to export', { id: 'api-error' });
       return;
     }
 
@@ -271,7 +293,6 @@ export function LeavePolicyPage() {
       'Carry Forward Days',
       'Prorate',
       'Gender Specific',
-      'Min Tenure (Months)',
       'Requires Document',
       'Company',
       'Status',
@@ -280,13 +301,14 @@ export function LeavePolicyPage() {
     const rows = filteredPolicies.map(policy => [
       policy.name,
       policy.code || '-',
-      policy.default_days || '-',
-      policy.max_days || '-',
-      policy.carry_forward ? 'Yes' : 'No',
-      policy.carry_forward_days || 0,
-      policy.prorate_enabled ? 'Yes' : 'No',
+      // ?? so an allocation of 0 exports as 0 rather than as a missing value,
+      // and so an absent cap exports with the same wording the cards use.
+      policy.default_days ?? '-',
+      policy.max_days_per_request ?? 'No limit',
+      policy.can_carry_forward ? 'Yes' : 'No',
+      policy.max_carry_forward_days ?? 0,
+      policy.prorate_on_join ? 'Yes' : 'No',
       policy.gender_specific || 'All',
-      policy.min_tenure_months || 0,
       policy.requires_document ? 'Yes' : 'No',
       policy.company?.name || 'All Companies',
       policy.is_active !== false ? 'Active' : 'Inactive',
@@ -536,7 +558,7 @@ export function LeavePolicyPage() {
                     }`}>
                       {policy.is_active !== false ? 'Active' : 'Inactive'}
                     </span>
-                    {policy.carry_forward && (
+                    {policy.can_carry_forward && (
                       <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-medium rounded">
                         Carry Forward
                       </span>
@@ -570,25 +592,21 @@ export function LeavePolicyPage() {
                       <div>
                         <p className="text-gray-500">Default Days</p>
                         <p className="font-semibold text-gray-900">
-                          {policy.default_days || 12} days
+                          {/* A 0-day allocation is a real policy — || printed it as 12. */}
+                          {policy.default_days ?? 12} days
                         </p>
                       </div>
                       <div>
                         <p className="text-gray-500">Max Days</p>
                         <p className="font-semibold text-gray-900">
-                          {policy.max_days || 12} days
+                          {/* No cap is a real, meaningful state — don't fake a "12". */}
+                          {policy.max_days_per_request != null
+                            ? `${policy.max_days_per_request} days`
+                            : 'No limit'}
                         </p>
                       </div>
                     </div>
                   </div>
-
-                  {policy.min_tenure_months && policy.min_tenure_months > 0 && (
-                    <div className="mt-3 pt-3 border-t border-gray-100">
-                      <p className="text-xs text-gray-500">
-                        Min. tenure: {policy.min_tenure_months} months
-                      </p>
-                    </div>
-                  )}
                 </div>
               ))}
             </div>
@@ -726,11 +744,15 @@ export function LeavePolicyPage() {
                       <label className="block text-sm font-medium text-gray-700 mb-2">Max Days</label>
                       <input
                         type="number"
-                        min="0"
+                        min="1"
                         value={formData.max_days}
-                        onChange={(e) => setFormData(prev => ({ ...prev, max_days: Number(e.target.value) }))}
+                        onChange={(e) => setFormData(prev => ({ ...prev, max_days: e.target.value }))}
                         className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                        placeholder="No limit"
                       />
+                      <p className="mt-1 text-xs text-gray-500">
+                        Working days per request. Leave empty for no limit.
+                      </p>
                     </div>
                   </div>
 
@@ -746,16 +768,6 @@ export function LeavePolicyPage() {
                         <option value="male">Male Only</option>
                         <option value="female">Female Only</option>
                       </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Min Tenure (Months)</label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={formData.min_tenure_months}
-                        onChange={(e) => setFormData(prev => ({ ...prev, min_tenure_months: Number(e.target.value) }))}
-                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                      />
                     </div>
                   </div>
 

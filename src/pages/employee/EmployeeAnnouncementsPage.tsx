@@ -61,7 +61,7 @@ export function EmployeeAnnouncementsPage() {
       setStatistics(stats);
     } catch (error: any) {
       console.error('Failed to fetch announcements:', error);
-      toast.error(error.response?.data?.error?.message || 'Gagal memuat pengumuman');
+      toast.error(error.response?.data?.error?.message || 'Gagal memuat pengumuman', { id: 'api-error' });
     } finally {
       setIsLoading(false);
     }

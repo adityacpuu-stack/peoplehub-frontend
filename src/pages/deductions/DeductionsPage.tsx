@@ -360,7 +360,7 @@ export function DeductionsPage() {
       fetchDeductions();
     } catch (error: any) {
       console.error('Failed to save deduction:', error);
-      toast.error(error.response?.data?.error?.message || error.response?.data?.message || 'Gagal menyimpan potongan');
+      toast.error(error.response?.data?.error?.message || error.response?.data?.message || 'Gagal menyimpan potongan', { id: 'api-error' });
     } finally {
       setSubmitting(false);
     }
@@ -375,7 +375,7 @@ export function DeductionsPage() {
       fetchDeductions();
     } catch (error: any) {
       console.error('Failed to delete deduction:', error);
-      toast.error(error.response?.data?.error?.message || error.response?.data?.message || 'Gagal menghapus potongan');
+      toast.error(error.response?.data?.error?.message || error.response?.data?.message || 'Gagal menghapus potongan', { id: 'api-error' });
     }
   };
 
@@ -386,7 +386,7 @@ export function DeductionsPage() {
       fetchDeductions();
     } catch (error: any) {
       console.error('Failed to approve:', error);
-      toast.error(error.response?.data?.error?.message || error.response?.data?.message || 'Gagal menyetujui');
+      toast.error(error.response?.data?.error?.message || error.response?.data?.message || 'Gagal menyetujui', { id: 'api-error' });
     }
   };
 
@@ -400,7 +400,7 @@ export function DeductionsPage() {
       fetchDeductions();
     } catch (error: any) {
       console.error('Failed to reject:', error);
-      toast.error(error.response?.data?.error?.message || error.response?.data?.message || 'Gagal menolak');
+      toast.error(error.response?.data?.error?.message || error.response?.data?.message || 'Gagal menolak', { id: 'api-error' });
     }
   };
 
