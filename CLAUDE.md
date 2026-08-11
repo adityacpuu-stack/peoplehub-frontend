@@ -245,8 +245,19 @@ Pattern wajib: kalau butuh auth header di service, biarkan axios interceptor inj
 
 ## Monitoring — Sentry
 
-- `VITE_SENTRY_DSN` env var **already set** in Vercel (commit area `f0edc38`).
-- `main.tsx` initializes Sentry on boot; error tracking is **active** in production.
+- ⚠️ `VITE_SENTRY_DSN` is **NOT set** in Vercel (verified 2026-08-11 — `vercel env ls` on
+  `pfi-group/peoplehub-frontend` lists only `VITE_API_URL`). Frontend error tracking is
+  therefore **disabled in production**.
+- Vite inlines `import.meta.env.VITE_*` at **build time**, so the missing var folds the
+  `if (sentryDsn)` guard in `main.tsx` to `false` and the whole `Sentry.init()` block is
+  dead-code-eliminated. Setting the variable is not enough — a **fresh deploy is required**,
+  and a runtime-only variable can never work.
+- `Sentry.setUser()` (`App.tsx:164`) sends employee email + name. Confirm that's acceptable
+  before enabling; drop those fields and keep only `id` if not.
+- `replaysSessionSampleRate` defaults to 0.1 = 10% of *all* sessions recorded, not just
+  errored ones. Set `VITE_SENTRY_REPLAY_SAMPLE_RATE="0"` to record only on error
+  (`replaysOnErrorSampleRate` is separate, at 1.0). Use the string `"0"` — an **empty**
+  string yields `parseFloat('') === NaN` because these fallbacks use `??`, not `||`.
 - Sample rate 0.1 (tracesSampleRate + replaysSessionSampleRate), PII off — matches backend Sentry config (`562a7b6`).
 - Local dev: leave `VITE_SENTRY_DSN` empty in `.env` to skip init (avoid noise).
 
