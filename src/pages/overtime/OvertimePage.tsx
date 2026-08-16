@@ -21,6 +21,17 @@ import { employeeService } from '../../services/employee.service';
 import { payrollSettingService } from '../../services/payroll-setting.service';
 import { SearchableSelect } from '../../components/ui/SearchableSelect';
 
+/**
+ * Bounds for the Total Hours field, which takes a monthly accumulated figure
+ * rather than a single session. Declared once because the same numbers drive the
+ * input's own min/max (the browser's native validation, which is what the user
+ * actually sees rejected), the submit-time check, and the toast text — as three
+ * separate literals, raising the cap in one place left the others enforcing the old
+ * one.
+ */
+const MIN_OVERTIME_HOURS = 0.01;
+const MAX_OVERTIME_HOURS = 300;
+
 // Helper to calculate period dates based on cut-off
 const calculatePeriodDates = (period: string, cutoffDate: number = 20): { start: string; end: string } => {
   const [year, month] = period.split('-').map(Number);
@@ -305,8 +316,8 @@ export function OvertimePage() {
     }
 
     const hours = parseFloat(formData.hours);
-    if (hours < 0.01 || hours > 200) {
-      toast.error('Hours must be between 0.01 and 200');
+    if (hours < MIN_OVERTIME_HOURS || hours > MAX_OVERTIME_HOURS) {
+      toast.error(`Hours must be between ${MIN_OVERTIME_HOURS} and ${MAX_OVERTIME_HOURS}`);
       return;
     }
 
@@ -1029,8 +1040,8 @@ export function OvertimePage() {
                       <input
                         type="number"
                         step="0.01"
-                        min="0.01"
-                        max="200"
+                        min={MIN_OVERTIME_HOURS}
+                        max={MAX_OVERTIME_HOURS}
                         value={formData.hours}
                         onChange={(e) => setFormData(prev => ({ ...prev, hours: e.target.value }))}
                         className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
