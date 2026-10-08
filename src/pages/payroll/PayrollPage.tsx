@@ -1,23 +1,32 @@
-import { useState, useEffect, useMemo } from 'react';
+import { payrollNumber } from '@/components/payroll/localization';
+import { payrollCalculationCurrency, payrollCurrency, payrollEnumLabel } from '@/components/payroll/localization';
+import { t, useLocale, intlLocale } from '@/i18n';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
+import { isAxiosError } from 'axios';
+import { PayrollPreparation, PayrollPolicyDetail, PayrollPaymentHold, PayrollSavedBPJS } from '@/components/payroll/PayrollPreparation';
 import { companyService, type Company } from '@/services/company.service';
 import {
   payrollService,
   type Payroll,
   type PayrollSummary,
-  type GeneratePayrollRequest,
   PAYROLL_STATUS,
 } from '@/services/payroll.service';
+
+import { OperationalWorkspace, OperationalDialog } from '@/components/ui/OperationalWorkspace';
+import { collectPages } from '@/services/master-data';
+import { useAuthStore } from '@/stores/auth.store';
+import { canAction } from '@/lib/actions';
+import './payroll-workspace.css';
+import './payroll-refresh.css';
 
 const PAYROLL_COMPANY_KEY = 'payroll_selected_company';
 
 export function PayrollPage() {
+  useLocale();
   const [records, setRecords] = useState<Payroll[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
-  const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(() => {
-    const saved = localStorage.getItem(PAYROLL_COMPANY_KEY);
-    return saved ? Number(saved) : null;
-  });
+  const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'processing' | 'validation' | 'approved' | 'paid'>('processing');
   const [selectedPeriod, setSelectedPeriod] = useState(() => {
@@ -27,76 +36,86 @@ export function PayrollPage() {
   const [search, setSearch] = useState('');
   const [selectedRecord, setSelectedRecord] = useState<Payroll | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
-  const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [showPreparation, setShowPreparation] = useState(false);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
 
   // Period options (current month and 5 months back)
-  const periodOptions = useMemo(() => {
+  const periodOptions = (() => {
     const options = [];
     const now = new Date();
     for (let i = 0; i < 6; i++) {
       const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      const label = date.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+      const label = date.toLocaleDateString(intlLocale(), { month: 'long', year: 'numeric' });
       options.push({ value, label });
     }
     return options;
-  }, []);
+  })();
 
-  useEffect(() => {
-    fetchCompanies();
-  }, []);
+  const { user } = useAuthStore();
+  // Match the existing backend role levels; this is not a new approval policy.
+  const canPrepare = user?.roles.some(role => ['Super Admin', 'Group CEO', 'CEO', 'HR Manager', 'Finance Manager', 'Tax Manager', 'HR Staff'].includes(role)) ?? false;
+  const canApprove = user?.roles.some(role => ['Super Admin', 'Group CEO', 'CEO', 'HR Manager'].includes(role)) ?? false;
+  // Role eligibility above is the ceiling; each payroll step also needs its own action.
+  const canGenerate = canPrepare && canAction(user, 'payroll.generate');
+  const canUpdateRun = canPrepare && canAction(user, 'payroll.update');
+  const canSubmitRun = canPrepare && canAction(user, 'payroll.submit');
+  const canApproveRun = canApprove && canAction(user, 'payroll.approve');
+  const canPayRun = canApprove && canAction(user, 'payroll.pay');
+  const canExportPayroll = canAction(user, 'payroll.export');
+  const [companyLoading, setCompanyLoading] = useState(true);
+  const [companyError, setCompanyError] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [detailLoading, setDetailLoading] = useState<number | null>(null);
+  const [page, setPage] = useState(1);
+  const companyRequest = useRef(0);
+  const dataRequest = useRef(0);
+  const detailRequest = useRef(0);
 
-  useEffect(() => {
-    if (selectedCompanyId) {
-      localStorage.setItem(PAYROLL_COMPANY_KEY, String(selectedCompanyId));
-      fetchPayrollData();
-    }
-  }, [selectedPeriod, selectedCompanyId]);
-
-  const fetchCompanies = async () => {
+  const fetchCompanies = useCallback(async () => {
+    const request = ++companyRequest.current;
+    setCompanyLoading(true); setCompanyError(false);
     try {
-      const response = await companyService.getAll({ limit: 100 });
-      setCompanies(response.data);
-      if (response.data.length > 0) {
-        // Check if saved company exists in list, otherwise use first
-        const savedId = localStorage.getItem(PAYROLL_COMPANY_KEY);
-        const savedCompany = savedId ? response.data.find(c => c.id === Number(savedId)) : null;
-        if (savedCompany) {
-          setSelectedCompanyId(savedCompany.id);
-        } else {
-          setSelectedCompanyId(response.data[0].id);
-        }
-      }
+      const rows = await collectPages((page, limit) => companyService.getAll({ page, limit }));
+      if (request !== companyRequest.current) return;
+      setCompanies(rows);
+      const savedId = Number(localStorage.getItem(PAYROLL_COMPANY_KEY));
+      setSelectedCompanyId(current => rows.some(c => c.id === current) ? current
+        : rows.find(c => c.id === savedId)?.id ?? rows[0]?.id ?? null);
     } catch {
-      toast.error('Gagal memuat data company');
+      if (request === companyRequest.current) { setCompanyError(true); setCompanies([]); setSelectedCompanyId(null); }
+    } finally {
+      if (request === companyRequest.current) setCompanyLoading(false);
     }
-  };
+  }, []);
 
-  const fetchPayrollData = async () => {
+  const fetchPayrollData = useCallback(async () => {
+    const request = ++dataRequest.current;
+    setRecords([]); setSelectedIds([]); setPage(1); setLoadError(false);
+    if (!selectedCompanyId) { setIsLoading(false); return; }
     setIsLoading(true);
     try {
-      const response = await payrollService.getAll({
-        company_id: selectedCompanyId!,
-        period: selectedPeriod,
-        limit: 500, // Get all for this period
-      });
-      // Filter out freelance/internship (separate page)
-      // Include active and resigned employees (resigned employees with payroll in this period are valid)
-      const permanentRecords = response.data.filter(
-        record =>
-          !['freelance', 'internship'].includes(record.employee.employment_type || '') &&
-          ['active', 'resigned'].includes(record.employee.employment_status || '')
-      );
-      setRecords(permanentRecords);
+      const rows = await collectPages((page, limit) => payrollService.getAll({ company_id: selectedCompanyId, period: selectedPeriod, page, limit }));
+      if (request !== dataRequest.current) return;
+      setRecords(rows.filter(record =>
+        !['freelance', 'internship'].includes(record.employee.employment_type || '') &&
+        ['active', 'resigned'].includes(record.employee.employment_status || '')));
     } catch {
-      toast.error('Gagal memuat data payroll');
+      if (request === dataRequest.current) setLoadError(true);
     } finally {
-      setIsLoading(false);
+      if (request === dataRequest.current) setIsLoading(false);
     }
-  };
+  }, [selectedCompanyId, selectedPeriod]);
+
+  useEffect(() => { const request = companyRequest; void fetchCompanies(); return () => { request.current++; }; }, [fetchCompanies]);
+  useEffect(() => {
+    const data = dataRequest, detail = detailRequest;
+    if (selectedCompanyId) localStorage.setItem(PAYROLL_COMPANY_KEY, String(selectedCompanyId));
+    setShowDetailModal(false); setSelectedRecord(null); setDetailLoading(null);
+    void fetchPayrollData();
+    return () => { data.current++; detail.current++; };
+  }, [fetchPayrollData, selectedCompanyId]);
 
   const selectedCompany = companies.find(c => c.id === selectedCompanyId);
 
@@ -146,52 +165,32 @@ export function PayrollPage() {
     };
   }, [records, selectedIds]);
 
-  const formatCurrency = (amount: number) => payrollService.formatCurrency(amount);
+  const selectedCalculation = selectedRecord?.metadata?.calculation?.version === 2 ? selectedRecord.metadata.calculation : null;
+  const formatCurrency = (amount: number) => selectedCalculation || records.some(record => record.metadata?.calculation?.version === 2)
+    ? payrollCalculationCurrency(amount) : payrollCurrency(amount);
+  const detailGrossUp = selectedCalculation
+    ? selectedCalculation.policy?.tax_allowance_mode === 'gross_up'
+    : !!selectedRecord?.pph21_paid_by_company;
+  const formatDetailCurrency = selectedCalculation ? payrollCalculationCurrency : payrollCurrency;
 
   const formatPeriod = (period: string) => {
     const [year, month] = period.split('-');
     const date = new Date(parseInt(year), parseInt(month) - 1);
-    return date.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+    return date.toLocaleDateString(intlLocale(), { month: 'long', year: 'numeric' });
   };
 
   const handleViewDetail = async (record: Payroll) => {
-    // Fetch full detail from API (includes all BPJS breakdown and gross up fields)
+    if (detailLoading === record.id) return;
+    const request = ++detailRequest.current;
+    setDetailLoading(record.id);
     try {
       const detail = await payrollService.getById(record.id);
-      setSelectedRecord(detail);
-      setShowDetailModal(true);
-    } catch (error) {
-      // Fallback to list data if fetch fails
-      setSelectedRecord(record);
-      setShowDetailModal(true);
-      toast.error('Gagal memuat detail lengkap');
-    }
-  };
-
-  // Generate payroll for company
-  const handleGeneratePayroll = async () => {
-    if (!selectedCompanyId) return;
-
-    setIsGenerating(true);
-    try {
-      const request: GeneratePayrollRequest = {
-        company_id: selectedCompanyId,
-        period: selectedPeriod,
-      };
-      const result = await payrollService.generate(request);
-
-      if (result.generated > 0) {
-        toast.success(`${result.generated} payroll berhasil digenerate`);
-        fetchPayrollData();
-      }
-      if (result.errors > 0) {
-        toast.error(`${result.errors} payroll gagal digenerate`);
-      }
-      setShowGenerateModal(false);
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Gagal generate payroll', { id: 'api-error' });
+      if (request !== detailRequest.current) return;
+      setSelectedRecord(detail); setShowDetailModal(true);
+    } catch {
+      if (request === detailRequest.current) toast.error(t("Gagal memuat detail payroll. Coba lagi."));
     } finally {
-      setIsGenerating(false);
+      if (request === detailRequest.current) setDetailLoading(null);
     }
   };
 
@@ -200,10 +199,10 @@ export function PayrollPage() {
     setIsProcessing(true);
     try {
       await payrollService.validate(id);
-      toast.success('Payroll berhasil divalidasi');
+      toast.success(t("Payroll berhasil divalidasi"));
       fetchPayrollData();
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Gagal memvalidasi payroll', { id: 'api-error' });
+    } catch (error) {
+      toast.error((isAxiosError(error) ? error.response?.data?.message : undefined) || t('Gagal memvalidasi payroll'), { id: 'api-error' });
     } finally {
       setIsProcessing(false);
     }
@@ -214,10 +213,10 @@ export function PayrollPage() {
     setIsProcessing(true);
     try {
       await payrollService.submit(id);
-      toast.success('Payroll berhasil disubmit');
+      toast.success(t("Payroll berhasil disubmit"));
       fetchPayrollData();
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Gagal submit payroll', { id: 'api-error' });
+    } catch (error) {
+      toast.error((isAxiosError(error) ? error.response?.data?.message : undefined) || t('Gagal submit payroll'), { id: 'api-error' });
     } finally {
       setIsProcessing(false);
     }
@@ -228,10 +227,10 @@ export function PayrollPage() {
     setIsProcessing(true);
     try {
       await payrollService.approve(id);
-      toast.success('Payroll berhasil diapprove');
+      toast.success(t("Payroll berhasil diapprove"));
       fetchPayrollData();
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Gagal approve payroll', { id: 'api-error' });
+    } catch (error) {
+      toast.error((isAxiosError(error) ? error.response?.data?.message : undefined) || t('Gagal approve payroll'), { id: 'api-error' });
     } finally {
       setIsProcessing(false);
     }
@@ -242,10 +241,10 @@ export function PayrollPage() {
     setIsProcessing(true);
     try {
       await payrollService.markAsPaid(id);
-      toast.success('Payroll berhasil dibayar');
+      toast.success(t("Payroll berhasil dibayar"));
       fetchPayrollData();
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Gagal membayar payroll', { id: 'api-error' });
+    } catch (error) {
+      toast.error((isAxiosError(error) ? error.response?.data?.message : undefined) || t('Gagal membayar payroll'), { id: 'api-error' });
     } finally {
       setIsProcessing(false);
     }
@@ -254,21 +253,21 @@ export function PayrollPage() {
   // Batch validate
   const handleBatchValidate = async () => {
     if (selectedIds.length === 0) {
-      toast.error('Pilih minimal 1 payroll');
+      toast.error(t("Pilih minimal 1 payroll"));
       return;
     }
 
     setIsProcessing(true);
     try {
       const result = await payrollService.validateBatch(selectedIds);
-      toast.success(`${result.success} payroll berhasil divalidasi`);
+      toast.success(t("{value0} payroll berhasil divalidasi", { value0: payrollNumber(result.success) }));
       if (result.failed > 0) {
-        toast.error(`${result.failed} payroll gagal divalidasi`);
+        toast.error(t("{value0} payroll gagal divalidasi", { value0: payrollNumber(result.failed) }));
       }
       setSelectedIds([]);
       fetchPayrollData();
     } catch {
-      toast.error('Gagal memvalidasi payroll');
+      toast.error(t("Gagal memvalidasi payroll"));
     } finally {
       setIsProcessing(false);
     }
@@ -277,21 +276,21 @@ export function PayrollPage() {
   // Batch submit (validated -> submitted)
   const handleBatchSubmit = async () => {
     if (selectedIds.length === 0) {
-      toast.error('Pilih minimal 1 payroll');
+      toast.error(t("Pilih minimal 1 payroll"));
       return;
     }
 
     setIsProcessing(true);
     try {
-      const result = await payrollService.submitBatch(selectedIds);
-      toast.success(`${result.success} payroll berhasil disubmit`);
+      const result = await payrollService.submitBatch(records.filter(r => selectedIds.includes(r.id) && r.status === PAYROLL_STATUS.VALIDATED).map(r => r.id));
+      toast.success(t("{value0} payroll berhasil disubmit", { value0: payrollNumber(result.success) }));
       if (result.failed > 0) {
-        toast.error(`${result.failed} payroll gagal disubmit`);
+        toast.error(t("{value0} payroll gagal disubmit", { value0: payrollNumber(result.failed) }));
       }
       setSelectedIds([]);
       fetchPayrollData();
     } catch {
-      toast.error('Gagal submit payroll');
+      toast.error(t("Gagal submit payroll"));
     } finally {
       setIsProcessing(false);
     }
@@ -300,21 +299,21 @@ export function PayrollPage() {
   // Batch approve (submitted -> approved)
   const handleBatchApprove = async () => {
     if (selectedIds.length === 0) {
-      toast.error('Pilih minimal 1 payroll');
+      toast.error(t("Pilih minimal 1 payroll"));
       return;
     }
 
     setIsProcessing(true);
     try {
-      const result = await payrollService.approveBatch(selectedIds);
-      toast.success(`${result.success} payroll berhasil diapprove`);
+      const result = await payrollService.approveBatch(records.filter(r => selectedIds.includes(r.id) && r.status === PAYROLL_STATUS.SUBMITTED).map(r => r.id));
+      toast.success(t("{value0} payroll berhasil diapprove", { value0: payrollNumber(result.success) }));
       if (result.failed > 0) {
-        toast.error(`${result.failed} payroll gagal diapprove`);
+        toast.error(t("{value0} payroll gagal diapprove", { value0: payrollNumber(result.failed) }));
       }
       setSelectedIds([]);
       fetchPayrollData();
     } catch {
-      toast.error('Gagal approve payroll');
+      toast.error(t("Gagal approve payroll"));
     } finally {
       setIsProcessing(false);
     }
@@ -323,21 +322,21 @@ export function PayrollPage() {
   // Batch mark as paid
   const handleBatchMarkAsPaid = async () => {
     if (selectedIds.length === 0) {
-      toast.error('Pilih minimal 1 payroll');
+      toast.error(t("Pilih minimal 1 payroll"));
       return;
     }
 
     setIsProcessing(true);
     try {
       const result = await payrollService.markAsPaidBatch(selectedIds);
-      toast.success(`${result.success} payroll berhasil dibayar`);
+      toast.success(t("{value0} payroll berhasil dibayar", { value0: payrollNumber(result.success) }));
       if (result.failed > 0) {
-        toast.error(`${result.failed} payroll gagal dibayar`);
+        toast.error(t("{value0} payroll gagal dibayar", { value0: payrollNumber(result.failed) }));
       }
       setSelectedIds([]);
       fetchPayrollData();
     } catch {
-      toast.error('Gagal membayar payroll');
+      toast.error(t("Gagal membayar payroll"));
     } finally {
       setIsProcessing(false);
     }
@@ -349,13 +348,13 @@ export function PayrollPage() {
 
   const handleExport = async (exportAll: boolean = false) => {
     if (!exportAll && !selectedCompanyId) {
-      toast.error('Pilih company terlebih dahulu');
+      toast.error(t("Pilih company terlebih dahulu"));
       return;
     }
 
     // Check if there are approved or paid payrolls
-    if (tabCounts.approved === 0 && tabCounts.paid === 0) {
-      toast.error('Tidak ada payroll dengan status Approved/Paid. Approve payroll terlebih dahulu sebelum export.');
+    if (!exportAll && tabCounts.approved === 0 && tabCounts.paid === 0) {
+      toast.error(t("Tidak ada payroll dengan status Approved/Paid. Approve payroll terlebih dahulu sebelum export."));
       return;
     }
 
@@ -367,12 +366,12 @@ export function PayrollPage() {
       const companyIdToExport = exportAll ? null : selectedCompanyId;
       await payrollService.exportExcel(companyIdToExport, selectedPeriod);
       toast.success(exportAll
-        ? 'Data payroll semua company berhasil diekspor ke Excel'
-        : 'Data payroll berhasil diekspor ke Excel'
+        ? t("Data payroll semua company berhasil diekspor ke Excel")
+        : t("Data payroll berhasil diekspor ke Excel")
       );
-    } catch (error: any) {
+    } catch (error) {
       console.error('Export error:', error);
-      toast.error(error.response?.data?.message || 'Gagal mengekspor data', { id: 'api-error' });
+      toast.error((isAxiosError(error) ? error.response?.data?.message : undefined) || t('Gagal mengekspor data'), { id: 'api-error' });
     } finally {
       setIsExporting(false);
     }
@@ -389,7 +388,7 @@ export function PayrollPage() {
 
   // Toggle select all
   const toggleSelectAll = () => {
-    if (selectedIds.length === filteredRecords.length) {
+    if (filteredRecords.every(record => selectedIds.includes(record.id))) {
       setSelectedIds([]);
     } else {
       setSelectedIds(filteredRecords.map(r => r.id));
@@ -398,53 +397,48 @@ export function PayrollPage() {
 
   // Get action button based on status
   const getActionButton = (record: Payroll) => {
+    if ([PAYROLL_STATUS.SUBMITTED, PAYROLL_STATUS.APPROVED].includes(record.status as 'submitted' | 'approved') ? !canApprove : !canPrepare) return null;
     switch (record.status) {
       case PAYROLL_STATUS.DRAFT:
       case PAYROLL_STATUS.PROCESSING:
+        if (!canUpdateRun) return null;
         return (
           <button
             onClick={() => handleValidate(record.id)}
             disabled={isProcessing}
-            className="px-3 py-1.5 bg-purple-600 text-white text-xs font-medium rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
-          >
-            Validasi
-          </button>
+            className="ow-button ow-primary pw-row-action"
+          >{t("Validasi")} </button>
         );
       case PAYROLL_STATUS.VALIDATED:
+        if (!canSubmitRun) return null;
         return (
           <button
             onClick={() => handleSubmit(record.id)}
             disabled={isProcessing}
-            className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-          >
-            Submit
-          </button>
+            className="ow-button ow-primary pw-row-action"
+          >{t("Submit")} </button>
         );
       case PAYROLL_STATUS.SUBMITTED:
+        if (!canApproveRun) return null;
         return (
           <button
             onClick={() => handleApprove(record.id)}
             disabled={isProcessing}
-            className="px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
-          >
-            Approve
-          </button>
+            className="ow-button ow-primary pw-row-action"
+          >{t("Approve")} </button>
         );
       case PAYROLL_STATUS.APPROVED:
+        if (!canPayRun) return null;
         return (
           <button
             onClick={() => handleMarkAsPaid(record.id)}
             disabled={isProcessing}
-            className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-medium rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50"
-          >
-            Bayar
-          </button>
+            className="ow-button ow-primary pw-row-action"
+          >{t("Bayar")} </button>
         );
       case PAYROLL_STATUS.PAID:
         return (
-          <span className="px-3 py-1.5 bg-gray-100 text-gray-500 text-xs font-medium rounded-lg">
-            Selesai
-          </span>
+          <span className="px-3 py-1.5 bg-gray-100 text-gray-500 text-xs font-medium rounded-lg">{t("Selesai")} </span>
         );
       default:
         return null;
@@ -456,517 +450,152 @@ export function PayrollPage() {
       case PAYROLL_STATUS.DRAFT:
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
-            <span className="w-1.5 h-1.5 rounded-full bg-gray-500"></span>
-            Draft
-          </span>
+            <span className="w-1.5 h-1.5 rounded-full bg-gray-500"></span>{t("Draft")} </span>
         );
       case PAYROLL_STATUS.PROCESSING:
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
-            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
-            Processing
-          </span>
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>{t("Processing")} </span>
         );
       case PAYROLL_STATUS.VALIDATED:
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            Validated
-          </span>
+            </svg>{t("Validated")} </span>
         );
       case PAYROLL_STATUS.SUBMITTED:
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700">
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            Submitted
-          </span>
+            </svg>{t("Submitted")} </span>
         );
       case PAYROLL_STATUS.APPROVED:
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-            Approved
-          </span>
+            </svg>{t("Approved")} </span>
         );
       case PAYROLL_STATUS.PAID:
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-            Paid
-          </span>
+            </svg>{t("Paid")} </span>
         );
       case PAYROLL_STATUS.REJECTED:
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-            Rejected
-          </span>
+            </svg>{t("Rejected")} </span>
         );
       default:
         return null;
     }
   };
 
+  const pageCount = Math.max(1, Math.ceil(filteredRecords.length / 25));
+  const visibleRecords = filteredRecords.slice((page - 1) * 25, page * 25);
+  const busy = isLoading || companyLoading || isProcessing;
+
   return (
-    <div className="space-y-6">
-      {/* Header Banner */}
-      <div className="relative bg-gradient-to-br from-purple-600 via-violet-600 to-indigo-600 rounded-2xl shadow-lg">
-        <div className="absolute inset-0 bg-grid-white/10 [mask-image:linear-gradient(0deg,transparent,rgba(255,255,255,0.5))]"></div>
-        <div className="absolute -top-24 -right-24 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
-        <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-purple-400/20 rounded-full blur-3xl"></div>
+    <OperationalWorkspace module="payroll" title={t("Payroll Management")}
+      description={t("Tinjau perhitungan, persetujuan, dan pembayaran gaji per periode.")}
+      className="payroll-workspace"
+      actions={<>
+        {canExportPayroll && <div className="pw-export">
+          <button className="ow-button" onClick={() => setShowExportMenu(value => !value)} disabled={isExporting || busy || companyError}
+            aria-expanded={showExportMenu}>{isExporting ? t("Mengekspor…") : t("Export Excel")}</button>
+          {showExportMenu && <div className="pw-export-menu" onKeyDown={event => { if (event.key === 'Escape') setShowExportMenu(false); }}>
+            <button className="ow-button" disabled={!selectedCompanyId || (tabCounts.approved === 0 && tabCounts.paid === 0)} onClick={() => handleExport(false)}>{t("Export Company Ini")}</button>
+            <button className="ow-button" onClick={() => handleExport(true)}>{t("Export Semua Company")}</button>
+            <p>{t("Hanya payroll Approved / Paid. Semua company mengikuti akses akun.")}</p>
+            <button className="pw-text-button" onClick={() => setShowExportMenu(false)}>{t("Tutup menu")}</button>
+          </div>}
+        </div>}
+        {canGenerate && <button className="ow-button ow-primary" disabled={busy || !selectedCompanyId || companyError} onClick={() => setShowPreparation(true)}>{t("Generate Payroll")}</button>}
+      </>}>
+      <section className="ow-register pw-register" aria-label={t("Register payroll")}>
+      <section className="pw-controls" aria-label={t("Periode payroll")}>
+        <label className="ow-field">{t("Company")}<select aria-label={t("Company payroll")} value={selectedCompanyId ?? ''} disabled={companyLoading || isProcessing} onChange={event => { setSelectedCompanyId(Number(event.target.value)); setShowExportMenu(false); }}>
+          {!companies.length && <option value="">{companyLoading ? t("Memuat company…") : t("Tidak ada company")}</option>}
+          {companies.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}
+        </select></label>
+        <label className="ow-field">{t("Periode")}<select aria-label={t("Periode payroll")} value={selectedPeriod} disabled={isProcessing} onChange={event => { setSelectedPeriod(event.target.value); setShowExportMenu(false); }}>
+          {periodOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select></label>
+          <label className="ow-field pw-search"><span className="sr-only">{t("Cari karyawan")}</span><input aria-label={t("Cari karyawan")} placeholder={t("Cari nama atau ID karyawan…")} value={search} disabled={isProcessing} onChange={event => { setSearch(event.target.value); setSelectedIds([]); setPage(1); }} /></label>
+        <button className="ow-button" disabled={busy || !selectedCompanyId} onClick={() => fetchPayrollData()}>{t("Refresh")}</button>
+      </section>
+      {companyError && <div role="alert" className="ow-feedback">{t("Gagal memuat company.")} <button className="ow-button" onClick={() => fetchCompanies()}>{t("Coba lagi company")}</button></div>}
 
-        <div className="relative px-6 py-8 sm:px-8 sm:py-10">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-14 h-14 bg-white/20 backdrop-blur-xl rounded-2xl flex items-center justify-center shadow-lg">
-                  <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                </div>
-                <div>
-                  <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-                    Payroll Management
-                  </h1>
-                  <p className="text-purple-100 text-sm mt-1">
-                    {selectedCompany ? (
-                      <>Proses payroll - <span className="font-semibold">{selectedCompany.name}</span></>
-                    ) : (
-                      'Pilih company untuk memulai'
-                    )}
-                  </p>
-                </div>
-              </div>
-              <div className="flex flex-wrap items-center gap-3 mt-4">
-                <span className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-xl rounded-xl text-sm text-white font-medium">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                  {summary.total_employees} Karyawan
-                </span>
-                <span className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-xl rounded-xl text-sm text-white font-medium">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  {formatCurrency(summary.total_net)}
-                </span>
-              </div>
-            </div>
 
-            <div className="flex flex-wrap items-center gap-3">
-              {/* Company Selector */}
-              <div className="relative">
-                <select
-                  value={selectedCompanyId || ''}
-                  onChange={(e) => setSelectedCompanyId(Number(e.target.value))}
-                  className="appearance-none pl-10 pr-10 py-2.5 bg-white/20 backdrop-blur-xl text-white rounded-xl border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50 text-sm font-medium cursor-pointer min-w-[200px]"
-                >
-                  {companies.map(company => (
-                    <option key={company.id} value={company.id} className="text-gray-900">
-                      {company.name}
-                    </option>
-                  ))}
-                </select>
-                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                </svg>
-                <svg className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </div>
+        <div className="pw-stages" role="tablist" aria-label={t("Tahap payroll")}>
+          {([
+            { id: 'processing', label: t('Processing'), note: t('Draft & perhitungan') },
+            { id: 'validation', label: t('Validation'), note: t('Validasi & pengajuan') },
+            { id: 'approved', label: t('Approved'), note: t('Siap dibayar') },
+            { id: 'paid', label: t('Paid'), note: t('Pembayaran selesai') },
+          ] as const).map(tab => <button key={tab.id} title={tab.note} role="tab" aria-selected={activeTab === tab.id} disabled={isProcessing}
+            onClick={() => { setActiveTab(tab.id); setSelectedIds([]); setPage(1); }}>
+            <span>{tab.label}</span><em>{payrollNumber(Number(tabCounts[tab.id]))}</em>
+          </button>)}
+        </div>
+        <div className="ow-toolbar pw-toolbar">
 
-              {/* Period Selector */}
-              <div className="relative">
-                <select
-                  value={selectedPeriod}
-                  onChange={(e) => setSelectedPeriod(e.target.value)}
-                  className="appearance-none pl-10 pr-10 py-2.5 bg-white/20 backdrop-blur-xl text-white rounded-xl border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50 text-sm font-medium cursor-pointer"
-                >
-                  {periodOptions.map(opt => (
-                    <option key={opt.value} value={opt.value} className="text-gray-900">{opt.label}</option>
-                  ))}
-                </select>
-                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                <svg className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </div>
-
-              {/* Export Dropdown - Only enabled when there are approved payrolls */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowExportMenu(!showExportMenu)}
-                  disabled={isExporting || (tabCounts.approved === 0 && tabCounts.paid === 0)}
-                  title={tabCounts.approved === 0 && tabCounts.paid === 0 ? 'Approve payroll terlebih dahulu' : 'Export Excel'}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-white/20 backdrop-blur-xl text-white rounded-xl border border-white/30 hover:bg-white/30 transition-all duration-200 font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isExporting ? (
-                    <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                  ) : (
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                  )}
-                  <span>{isExporting ? 'Exporting...' : 'Export Excel'}</span>
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-
-                {showExportMenu && (
-                  <>
-                    <div className="fixed inset-0 z-[100]" onClick={() => setShowExportMenu(false)} />
-                    <div className="absolute top-full right-0 mt-2 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 py-2 z-[101]">
-                      <button
-                        onClick={() => handleExport(false)}
-                        disabled={!selectedCompanyId}
-                        className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-3"
-                      >
-                        <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                        </svg>
-                        <div>
-                          <div className="font-medium">Export Company Ini</div>
-                          <div className="text-xs text-gray-500">{selectedCompany?.name || 'Pilih company dulu'}</div>
-                        </div>
-                      </button>
-                      <button
-                        onClick={() => handleExport(true)}
-                        className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
-                      >
-                        <svg className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <div>
-                          <div className="font-medium text-green-700">Export Semua Company</div>
-                          <div className="text-xs text-gray-500">PFI Groups (sorted by PFI first)</div>
-                        </div>
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              <button
-                onClick={() => setShowGenerateModal(true)}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-purple-700 rounded-xl hover:bg-purple-50 transition-all duration-200 font-semibold shadow-lg"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                </svg>
-                <span>Generate Payroll</span>
-              </button>
-            </div>
+          <span className="pw-count">{payrollNumber(Number(filteredRecords.length))}{' '}{t("payroll")}{' '}{selectedIds.length > 0 && t(" · {value0} dipilih", { value0: payrollNumber(selectedIds.length) })}</span>
+          <div className="pw-bulk">
+            {canUpdateRun && activeTab === 'processing' && selectedIds.length > 0 && <button className="ow-button ow-primary" disabled={busy} onClick={handleBatchValidate}>{t("Validasi (")}{payrollNumber(Number(selectedIds.length))})</button>}
+            {canSubmitRun && activeTab === 'validation' && selectedCounts.validated > 0 && <button className="ow-button ow-primary" disabled={busy} onClick={handleBatchSubmit}>{t("Submit (")}{payrollNumber(Number(selectedCounts.validated))})</button>}
+            {canApproveRun && activeTab === 'validation' && selectedCounts.submitted > 0 && <button className="ow-button ow-primary" disabled={busy} onClick={handleBatchApprove}>{t("Approve (")}{payrollNumber(Number(selectedCounts.submitted))})</button>}
+            {canPayRun && activeTab === 'approved' && selectedIds.length > 0 && <button className="ow-button ow-primary" disabled={busy} onClick={handleBatchMarkAsPaid}>{t("Bayar (")}{payrollNumber(Number(selectedIds.length))})</button>}
           </div>
         </div>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
-              <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </div>
-            <span className="text-xs font-semibold text-gray-500">Total</span>
-          </div>
-          <p className="text-3xl font-bold text-gray-900 mb-1">{summary.total_employees}</p>
-          <p className="text-sm text-gray-500">Total Karyawan</p>
-        </div>
-
-        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl flex items-center justify-center shadow-lg">
-              <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <span className="inline-flex items-center px-2 py-1 bg-amber-50 text-amber-700 text-xs font-bold rounded-lg">
-              Pending
-            </span>
-          </div>
-          <p className="text-3xl font-bold text-gray-900 mb-1">{summary.pending_count}</p>
-          <p className="text-sm text-gray-500">Perlu Diproses</p>
-        </div>
-
-        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center shadow-lg">
-              <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <span className="inline-flex items-center px-2 py-1 bg-green-50 text-green-700 text-xs font-bold rounded-lg">
-              Done
-            </span>
-          </div>
-          <p className="text-3xl font-bold text-gray-900 mb-1">{summary.paid_count}</p>
-          <p className="text-sm text-gray-500">Sudah Dibayar</p>
-        </div>
-
-        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-              <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-            </div>
-            <span className="text-xs font-semibold text-gray-500">IDR</span>
-          </div>
-          <p className="text-2xl font-bold text-gray-900 mb-1">
-            {formatCurrency(summary.total_gross)}
-          </p>
-          <p className="text-sm text-gray-500">Total Gross</p>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-        {/* Tabs */}
-        <div className="px-6 py-4 border-b border-gray-100">
-          <div className="flex items-center gap-2 overflow-x-auto">
-            {[
-              { id: 'processing', label: 'Processing', count: tabCounts.processing },
-              { id: 'validation', label: 'Validation', count: tabCounts.validation },
-              { id: 'approved', label: 'Approved', count: tabCounts.approved },
-              { id: 'paid', label: 'Paid', count: tabCounts.paid },
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => {
-                  setActiveTab(tab.id as any);
-                  setSelectedIds([]);
-                }}
-                className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition whitespace-nowrap ${
-                  activeTab === tab.id
-                    ? 'bg-purple-100 text-purple-700'
-                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                }`}
-              >
-                {tab.label}
-                {tab.count > 0 && (
-                  <span className={`ml-1 px-2 py-0.5 text-xs font-bold rounded-full ${
-                    activeTab === tab.id ? 'bg-purple-200 text-purple-800' : 'bg-gray-200 text-gray-700'
-                  }`}>
-                    {tab.count}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Search & Batch Actions */}
-        <div className="px-6 py-4 border-b border-gray-100">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-            <div className="relative flex-1 max-w-md">
-              <input
-                type="text"
-                placeholder="Cari karyawan..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
-              />
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </div>
-
-            {/* Batch Actions based on active tab */}
-            <div className="flex items-center gap-2">
-              {activeTab === 'processing' && selectedIds.length > 0 && (
-                <button
-                  onClick={handleBatchValidate}
-                  disabled={isProcessing}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
-                >
-                  {isProcessing ? (
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                  ) : (
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  )}
-                  Validasi ({selectedIds.length})
-                </button>
-              )}
-
-              {activeTab === 'validation' && selectedCounts.validated > 0 && (
-                <button
-                  onClick={handleBatchSubmit}
-                  disabled={isProcessing}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-                >
-                  {isProcessing ? (
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                  ) : (
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  )}
-                  Submit ({selectedCounts.validated})
-                </button>
-              )}
-
-              {activeTab === 'validation' && selectedCounts.submitted > 0 && (
-                <button
-                  onClick={handleBatchApprove}
-                  disabled={isProcessing}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
-                >
-                  {isProcessing ? (
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                  ) : (
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  )}
-                  Approve ({selectedCounts.submitted})
-                </button>
-              )}
-
-              {activeTab === 'approved' && selectedIds.length > 0 && (
-                <button
-                  onClick={handleBatchMarkAsPaid}
-                  disabled={isProcessing}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50"
-                >
-                  {isProcessing ? (
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                  ) : (
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-                    </svg>
-                  )}
-                  Bayar ({selectedIds.length})
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
-            <div className="flex items-center gap-4 text-sm text-gray-500">
-              <span>
-                Company: <span className="font-semibold text-gray-900">{selectedCompany?.name || '-'}</span>
-              </span>
-              <span className="text-gray-300">|</span>
-              <span>
-                Periode: <span className="font-semibold text-gray-900">{formatPeriod(selectedPeriod)}</span>
-              </span>
-            </div>
-            {filteredRecords.length > 0 && (
-              <span className="text-sm text-gray-500">
-                {selectedIds.length > 0 && (
-                  <span className="text-purple-600 font-medium">{selectedIds.length} dipilih dari </span>
-                )}
-                {filteredRecords.length} data
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Table */}
-        <div className="overflow-x-auto">
-          {!selectedCompanyId ? (
-            <div className="text-center py-16">
-              <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                </svg>
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900">Pilih Company</h3>
-              <p className="mt-1 text-gray-500">Pilih company terlebih dahulu untuk melihat data payroll.</p>
-            </div>
-          ) : isLoading ? (
-            <div className="flex items-center justify-center py-20">
-              <div className="flex flex-col items-center gap-3">
-                <div className="w-10 h-10 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin"></div>
-                <p className="text-gray-500">Memuat data payroll...</p>
-              </div>
-            </div>
-          ) : filteredRecords.length === 0 ? (
-            <div className="text-center py-16">
-              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900">Tidak ada data</h3>
-              <p className="mt-1 text-gray-500">
-                {records.length === 0
-                  ? 'Belum ada payroll untuk periode ini. Klik "Generate Payroll" untuk memulai.'
-                  : 'Tidak ada data payroll untuk filter ini.'}
-              </p>
-              {records.length === 0 && (
-                <button
-                  onClick={() => setShowGenerateModal(true)}
-                  className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  Generate Payroll
-                </button>
-              )}
-            </div>
-          ) : (
-            <table className="w-full">
+        {loadError ? <div role="alert" className="ow-feedback">{t("Gagal memuat payroll. Data periode ini belum tersedia.")} <button className="ow-button" onClick={() => fetchPayrollData()}>{t("Coba lagi")}</button></div>
+          : busy && !isProcessing ? <div role="status" className="pw-empty">{t("Memuat payroll…")}</div>
+          : !filteredRecords.length ? <div className="pw-empty"><h2>{!selectedCompanyId ? t("Pilih company") : t("Tidak ada payroll di tahap ini")}</h2><p>{search ? t("Coba nama atau ID lain, atau ubah tahap payroll.") : t("Pilih tahap lain atau klik Generate Payroll untuk meninjau payroll periode ini.")}</p>
+          </div> : <div className="pw-table-scroll" tabIndex={0} role="region" aria-label={t("Tabel payroll, geser untuk kolom lainnya")}>
+            <table className="ow-table pw-table">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
                   {activeTab !== 'paid' && (
                     <th className="w-12 px-4 py-4">
                       <input
                         type="checkbox"
-                        checked={filteredRecords.length > 0 && selectedIds.length === filteredRecords.length}
-                        onChange={toggleSelectAll}
-                        className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                        checked={filteredRecords.length > 0 && filteredRecords.every(record => selectedIds.includes(record.id))}
+                        onChange={toggleSelectAll} aria-label={t("Pilih semua hasil filter")} disabled={isProcessing}
+                        className="w-4 h-4 text-emerald-700 border-gray-300 rounded focus:ring-emerald-500"
                       />
                     </th>
                   )}
-                  <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Karyawan</th>
-                  <th className="text-right px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Gaji Pokok</th>
-                  <th className="text-right px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">BPJS</th>
-                  <th className="text-right px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">PPh21</th>
-                  <th className="text-right px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Take Home Pay</th>
-                  <th className="text-center px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="text-center px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Aksi</th>
+                  <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">{t("Karyawan")}</th>
+                  <th className="text-right px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">{t("Gaji Pokok")}</th>
+                  <th className="text-right px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">{t("BPJS")}</th>
+                  <th className="text-right px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">{t("PPh21")}</th>
+                  <th className="text-right px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">{t("Take Home Pay")}</th>
+                  <th className="text-center px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">{t("Status")}</th>
+                  <th className="text-center px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">{t("Aksi")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filteredRecords.map(record => (
-                  <tr key={record.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.includes(record.id) ? 'bg-purple-50' : ''}`}>
+                {visibleRecords.map(record => (
+                  <tr key={record.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.includes(record.id) ? 'pw-selected' : ''}`}>
                     {activeTab !== 'paid' && (
                       <td className="w-12 px-4 py-4">
                         <input
                           type="checkbox"
                           checked={selectedIds.includes(record.id)}
-                          onChange={() => toggleSelection(record.id)}
-                          className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                          onChange={() => toggleSelection(record.id)} aria-label={t("Pilih {value0}", { value0: record.employee.name })} disabled={isProcessing}
+                          className="w-4 h-4 text-emerald-700 border-gray-300 rounded focus:ring-emerald-500"
                         />
                       </td>
                     )}
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-semibold text-sm shadow-sm bg-gradient-to-br from-purple-500 to-indigo-600">
-                          {record.employee.name.charAt(0)}
-                        </div>
+
                         <div>
                           <p className="font-semibold text-gray-900">{record.employee.name}</p>
                           <p className="text-xs text-gray-500">
@@ -977,22 +606,34 @@ export function PayrollPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <p className="font-medium text-gray-900">{formatCurrency(record.basic_salary)}</p>
-                      <p className="text-xs text-gray-500">{record.pay_type === 'gross' ? 'Gross' : 'Nett'}</p>
+                      <p className="font-medium text-gray-900">{record.metadata?.calculation?.version === 2
+                        ? payrollCalculationCurrency(record.basic_salary)
+                        : formatCurrency(record.basic_salary)}</p>
+                      <p className="text-xs text-gray-500">{record.pay_type === 'gross' ? t("Gross") : t("Nett")}</p>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      {(record.bpjs_employee_total || 0) > 0 ? (
+                      {record.metadata?.calculation?.version === 2 ? (
+                        <>
+                          <p className="font-medium text-gray-900">{payrollCalculationCurrency(record.bpjs_employee_total)}</p>
+                          <p className="text-xs text-gray-500">{record.metadata.calculation.policy?.bpjs_paid_by_company == null ? '-' : record.metadata.calculation.policy.bpjs_paid_by_company ? t("Ditanggung perusahaan") : t("Porsi karyawan")}</p>
+                        </>
+                      ) : (record.bpjs_employee_total ?? 0) > 0 ? (
                         <p className="font-medium text-red-600">-{formatCurrency(record.bpjs_employee_total || 0)}</p>
                       ) : (
                         <p className="text-gray-400">-</p>
                       )}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      {(record.pph21 || 0) > 0 ? (
+                      {record.metadata?.calculation?.version === 2 ? (
                         <>
-                          <p className="font-medium text-orange-600">-{formatCurrency(record.pph21)}</p>
+                          <p className="font-medium text-slate-700">{payrollCalculationCurrency(record.pph21)}</p>
+                          <p className="text-xs text-gray-500">{t("Pajak diterapkan")}</p>
+                        </>
+                      ) : (record.pph21 ?? 0) > 0 ? (
+                        <>
+                          <p className="font-medium text-slate-700">-{formatCurrency(record.pph21)}</p>
                           {record.ter_category && (
-                            <p className="text-xs text-gray-500">TER {record.ter_category}</p>
+                            <p className="text-xs text-gray-500">{t("TER")} {record.ter_category}</p>
                           )}
                         </>
                       ) : (
@@ -1000,7 +641,9 @@ export function PayrollPage() {
                       )}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <p className="font-bold text-gray-900 text-lg">{formatCurrency(record.take_home_pay || record.net_salary)}</p>
+                      <p className="font-bold text-gray-900 text-sm">{record.metadata?.calculation?.version === 2
+                        ? payrollCalculationCurrency(record.take_home_pay ?? record.net_salary)
+                        : formatCurrency(record.take_home_pay ?? record.net_salary)}</p>
                     </td>
                     <td className="px-6 py-4 text-center">
                       {getStatusBadge(record.status)}
@@ -1008,9 +651,9 @@ export function PayrollPage() {
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-center gap-2">
                         <button
-                          onClick={() => handleViewDetail(record)}
-                          className="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
-                          title="Lihat Detail"
+                          onClick={() => handleViewDetail(record)} aria-disabled={detailLoading === record.id} aria-busy={detailLoading === record.id} aria-label={t("Detail {value0}", { value0: record.employee.name })}
+                          className="p-2 text-gray-400 hover:text-emerald-700 hover:pw-selected rounded-lg transition-colors"
+                          title={t("Lihat Detail")}
                         >
                           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -1024,189 +667,90 @@ export function PayrollPage() {
                 ))}
               </tbody>
             </table>
-          )}
-        </div>
+        </div>}
+        <div className="pw-ledger-footer">
+        <p className="pw-ledger-scope">{t("Semua status · Tanpa filter pencarian")}</p>
+        <dl className="pw-ledger-summary" aria-label={t("Ringkasan periode")}>
+        <div><dt>{t("Karyawan")}</dt><dd>{busy || loadError || companyError ? '—' : summary.total_employees}</dd></div>
+        <div><dt>{t("Total gross")}</dt><dd>{busy || loadError || companyError ? '—' : formatCurrency(summary.total_gross)}</dd></div>
+        <div><dt>{t("Total take home pay")}</dt><dd>{busy || loadError || companyError ? '—' : formatCurrency(summary.total_net)}</dd></div>
+        <div><dt>{t("Sudah dibayar")}</dt><dd>{busy || loadError || companyError ? '—' : summary.paid_count}{!busy && !loadError && !companyError && <small> / {payrollNumber(Number(summary.total_employees))}{' '}{t("payroll")}</small>}</dd></div>
+      </dl>
       </div>
-
-      {/* Generate Payroll Modal */}
-      {showGenerateModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex min-h-screen items-center justify-center p-4">
-            <div className="fixed inset-0 bg-black/50 transition-opacity" onClick={() => setShowGenerateModal(false)} />
-
-            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-              <div className="bg-gradient-to-br from-purple-600 via-violet-600 to-indigo-600 px-6 py-5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-white/20 backdrop-blur-xl rounded-xl flex items-center justify-center">
-                      <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                      </svg>
+        <div className="ow-pagination pw-pagination"><span>{filteredRecords.length ? t("{value0}–{value1} dari {value2}", { value0: payrollNumber((page - 1) * 25 + 1), value1: payrollNumber(Math.min(page * 25, filteredRecords.length)), value2: payrollNumber(filteredRecords.length) }) : t("0 payroll")}{' '}{t("· Pilih semua mencakup seluruh hasil filter")}</span><div>
+          <button className="ow-button" disabled={page === 1 || busy} onClick={() => setPage(value => value - 1)}>{t("Sebelumnya")}</button><span>{payrollNumber(Number(page))} / {payrollNumber(Number(pageCount))}</span><button className="ow-button" disabled={page >= pageCount || busy} onClick={() => setPage(value => value + 1)}>{t("Berikutnya")}</button>
+        </div></div>
+      </section>
+      {showPreparation && canGenerate && <PayrollPreparation companies={companies} initialCompanyId={selectedCompanyId} initialPeriod={selectedPeriod}
+        onClose={() => setShowPreparation(false)} onGenerated={async (companyId, period) => {
+          setSelectedIds([]); setSelectedCompanyId(companyId); setSelectedPeriod(period);
+          if (companyId === selectedCompanyId && period === selectedPeriod) await fetchPayrollData();
+        }} />}
+      {showDetailModal && selectedRecord && <OperationalDialog title={t("Detail payroll")} subtitle={`${selectedRecord.employee.employee_id} · ${formatPeriod(selectedRecord.period)}`} onClose={() => setShowDetailModal(false)} className="pw-detail-dialog payroll-refresh-dialog ph-workflow">
+        <div className="pw-detail-identity"><div><h3>{selectedRecord.employee.name}</h3><p>{selectedRecord.employee.position?.name} · {selectedRecord.employee.department?.name} · {selectedCompany?.name}</p></div><div>{getStatusBadge(selectedRecord.status)}<span className="ow-status">{selectedRecord.pay_type ? payrollEnumLabel(selectedRecord.pay_type) : t('GROSS')}</span></div></div>
+        <div className="pw-detail-content ph-workflow">
+                {/* Summary */}
+                <div role="region" aria-label={t("Ringkasan payroll")} className="pw-detail-totals">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="pw-summary-value">
+                      <p className="text-slate-600 text-sm">{t("Total Potongan")}</p>
+                      <p className="text-2xl font-bold mt-1">{formatDetailCurrency(selectedRecord.total_deductions)}</p>
                     </div>
-                    <div>
-                      <h2 className="text-xl font-bold text-white">Generate Payroll</h2>
-                      <p className="text-purple-100 text-sm">Buat payroll untuk periode ini</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setShowGenerateModal(false)}
-                    className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center text-white hover:bg-white/30 transition-colors"
-                  >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-
-              <div className="p-6">
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Company</label>
-                    <div className="px-4 py-3 bg-gray-50 rounded-lg text-gray-900 font-medium">
-                      {selectedCompany?.name || '-'}
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Periode</label>
-                    <div className="px-4 py-3 bg-gray-50 rounded-lg text-gray-900 font-medium">
-                      {formatPeriod(selectedPeriod)}
-                    </div>
-                  </div>
-
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                    <div className="flex items-start gap-3">
-                      <svg className="w-5 h-5 text-amber-500 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                      </svg>
-                      <div>
-                        <p className="text-sm font-medium text-amber-800">Perhatian</p>
-                        <p className="text-sm text-amber-700 mt-1">
-                          Sistem akan menghitung payroll untuk semua karyawan aktif dengan status employment "active".
-                          Kalkulasi meliputi BPJS, PPh21, dan prorate jika ada.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 mt-6">
-                  <button
-                    onClick={() => setShowGenerateModal(false)}
-                    className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    Batal
-                  </button>
-                  <button
-                    onClick={handleGeneratePayroll}
-                    disabled={isGenerating}
-                    className="flex-1 px-4 py-2.5 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {isGenerating ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                        Generating...
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                        </svg>
-                        Generate
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Detail Modal */}
-      {showDetailModal && selectedRecord && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex min-h-screen items-center justify-center p-4">
-            <div className="fixed inset-0 bg-black/50 transition-opacity" onClick={() => setShowDetailModal(false)} />
-
-            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
-              {/* Modal Header */}
-              <div className="bg-gradient-to-br from-purple-600 via-violet-600 to-indigo-600 px-6 py-5">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 bg-white/20 backdrop-blur-xl rounded-2xl flex items-center justify-center text-white text-xl font-bold">
-                      {selectedRecord.employee.name.charAt(0)}
-                    </div>
-                    <div>
-                      <h2 className="text-xl font-bold text-white">{selectedRecord.employee.name}</h2>
-                      <p className="text-purple-100 text-sm">
-                        {selectedRecord.employee.employee_id}
-                        {selectedRecord.employee.position && ` • ${selectedRecord.employee.position.name}`}
+                    <div className="pw-summary-value">
+                      <p className="text-slate-600 text-sm">
+                        {detailGrossUp ? t("Gross Up Final") : t("Net Salary")}
                       </p>
-                      <p className="text-purple-200 text-xs mt-1">
-                        {selectedRecord.employee.department?.name} • {selectedCompany?.name}
+                      <p className="text-2xl font-bold mt-1">
+                        {formatDetailCurrency(
+                          detailGrossUp
+                            ? (selectedRecord.final_gross_up ?? selectedRecord.gross_salary)
+                            : selectedRecord.net_salary
+                        )}
                       </p>
                     </div>
+                    <div className="pw-summary-value">
+                      <p className="text-slate-600 text-sm">{t("Take Home Pay")}</p>
+                      <p className="text-3xl font-bold mt-1">{formatDetailCurrency(selectedRecord.thp ?? selectedRecord.take_home_pay ?? selectedRecord.net_salary)}</p>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => setShowDetailModal(false)}
-                    className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center text-white hover:bg-white/30 transition-colors"
-                  >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
                 </div>
-                <div className="flex flex-wrap items-center gap-2 mt-4">
-                  <span className="inline-flex items-center gap-2 px-3 py-1.5 bg-white/20 rounded-lg text-sm text-white">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    Periode: {formatPeriod(selectedRecord.period)}
-                  </span>
-                  {getStatusBadge(selectedRecord.status)}
-                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
-                    selectedRecord.pay_type === 'gross' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'
-                  }`}>
-                    {selectedRecord.pay_type?.toUpperCase() || 'GROSS'}
-                  </span>
-                </div>
-              </div>
 
-              {/* Modal Body */}
-              <div className="overflow-y-auto max-h-[calc(90vh-180px)] p-6">
+
+                {selectedCalculation && (
+                  <>
+                    <PayrollPolicyDetail snapshot={selectedCalculation} appliedTax={selectedRecord.pph21}
+                      workDays={selectedRecord.metadata?.proration?.work_days_per_week} />
+                    <PayrollPaymentHold key={selectedRecord.id} record={selectedRecord} onUpdated={updated => {
+                      setSelectedRecord(current => current?.id === updated.id ? updated : current);
+                      setRecords(current => current.map(record => record.id === updated.id ? updated : record));
+                    }} />
+                  </>
+                )}
                 {/* Calculation Breakdown Table - Like Laravel */}
-                <div className="bg-gray-50 rounded-xl p-4 mb-6 overflow-x-auto">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                    <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-                      <svg className="w-4 h-4 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                      </svg>
-                    </div>
-                    Calculation Breakdown
-                  </h3>
+                {!selectedCalculation && (
+                <div className="pw-breakdown-section ph-table-scroll pw-calculation-scroll">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">{t("Calculation Breakdown")} </h3>
 
                   <table className="w-full text-xs">
                     <tbody>
                       {/* BPJS Section */}
-                      <tr className="bg-blue-100">
-                        <td colSpan={5} className="px-2 py-1.5 font-semibold text-blue-800">BPJS PAYMENT BY COMPANY</td>
-                        <td colSpan={3} className="px-2 py-1.5 font-semibold text-blue-800">BPJS BY EMPLOYEE</td>
-                        <td className="px-2 py-1.5 font-semibold text-blue-800">SUB TOTAL</td>
-                        <td className="px-2 py-1.5 font-semibold text-blue-800">OBJECT PPH21</td>
+                      <tr className="pw-table-band">
+                        <td colSpan={5} className="px-2 py-1.5 font-semibold pw-amount">{t("BPJS PAYMENT BY COMPANY")}</td>
+                        <td colSpan={3} className="px-2 py-1.5 font-semibold pw-amount">{t("BPJS BY EMPLOYEE")}</td>
+                        <td className="px-2 py-1.5 font-semibold pw-amount">{t("SUB TOTAL")}</td>
+                        <td className="px-2 py-1.5 font-semibold pw-amount">{t("OBJECT PPH21")}</td>
                       </tr>
-                      <tr className="bg-blue-50 text-center">
-                        <td className="px-2 py-1 border-r border-blue-200">JHT</td>
-                        <td className="px-2 py-1 border-r border-blue-200">JKM</td>
-                        <td className="px-2 py-1 border-r border-blue-200">JKK</td>
-                        <td className="px-2 py-1 border-r border-blue-200">JKS</td>
-                        <td className="px-2 py-1 border-r border-blue-200">JP</td>
-                        <td className="px-2 py-1 border-r border-blue-200">JHT</td>
-                        <td className="px-2 py-1 border-r border-blue-200">JP</td>
-                        <td className="px-2 py-1 border-r border-blue-200">JKS</td>
-                        <td className="px-2 py-1 border-r border-blue-200">BPJS</td>
-                        <td className="px-2 py-1">BPJS</td>
+                      <tr className="pw-table-band text-center">
+                        <td className="px-2 py-1 border-r pw-rule">{t("JHT")}</td>
+                        <td className="px-2 py-1 border-r pw-rule">{t("JKM")}</td>
+                        <td className="px-2 py-1 border-r pw-rule">{t("JKK")}</td>
+                        <td className="px-2 py-1 border-r pw-rule">{t("JKS")}</td>
+                        <td className="px-2 py-1 border-r pw-rule">{t("JP")}</td>
+                        <td className="px-2 py-1 border-r pw-rule">{t("JHT")}</td>
+                        <td className="px-2 py-1 border-r pw-rule">{t("JP")}</td>
+                        <td className="px-2 py-1 border-r pw-rule">{t("JKS")}</td>
+                        <td className="px-2 py-1 border-r pw-rule">{t("BPJS")}</td>
+                        <td className="px-2 py-1">{t("BPJS")}</td>
                       </tr>
                       <tr className="text-center text-gray-500">
                         <td className="px-2 py-0.5 border-r border-gray-200">3.70%</td>
@@ -1229,44 +773,44 @@ export function PayrollPage() {
                         <td className="px-2 py-1.5 border-r border-gray-200">{formatCurrency(selectedRecord.bpjs_jht_employee || 0)}</td>
                         <td className="px-2 py-1.5 border-r border-gray-200">{formatCurrency(selectedRecord.bpjs_jp_employee || 0)}</td>
                         <td className="px-2 py-1.5 border-r border-gray-200">{formatCurrency(selectedRecord.bpjs_kes_employee || 0)}</td>
-                        <td className="px-2 py-1.5 border-r border-gray-200 text-blue-700 font-bold">
+                        <td className="px-2 py-1.5 border-r border-gray-200 pw-amount font-bold">
                           {formatCurrency((Number(selectedRecord.bpjs_company_total) || 0) + (Number(selectedRecord.bpjs_employee_total) || 0))}
                         </td>
-                        <td className="px-2 py-1.5 text-purple-700 font-bold">{formatCurrency(selectedRecord.bpjs_object_pph21 || 0)}</td>
+                        <td className="px-2 py-1.5 pw-amount font-bold">{formatCurrency(selectedRecord.bpjs_object_pph21 || 0)}</td>
                       </tr>
 
                       {/* Calculation Section */}
-                      <tr className="bg-orange-100">
-                        <td colSpan={2} className="px-2 py-1.5 font-semibold text-orange-800">TOTAL GROSS</td>
-                        <td colSpan={2} className="px-2 py-1.5 font-semibold text-orange-800">GROSS UP</td>
-                        <td colSpan={2} className="px-2 py-1.5 font-semibold text-orange-800">GROSS UP FINAL</td>
-                        <td className="px-2 py-1.5 font-semibold text-orange-800">GOL</td>
-                        <td className="px-2 py-1.5 font-semibold text-orange-800">TER</td>
-                        <td className="px-2 py-1.5 font-semibold text-orange-800">TER FINAL</td>
-                        <td className="px-2 py-1.5 font-semibold text-orange-800">PPH21</td>
+                      <tr className="pw-table-band">
+                        <td colSpan={2} className="px-2 py-1.5 font-semibold pw-amount">{t("TOTAL GROSS")}</td>
+                        <td colSpan={2} className="px-2 py-1.5 font-semibold pw-amount">{t("GROSS UP")}</td>
+                        <td colSpan={2} className="px-2 py-1.5 font-semibold pw-amount">{t("GROSS UP FINAL")}</td>
+                        <td className="px-2 py-1.5 font-semibold pw-amount">{t("GOL")}</td>
+                        <td className="px-2 py-1.5 font-semibold pw-amount">{t("TER")}</td>
+                        <td className="px-2 py-1.5 font-semibold pw-amount">{t("TER FINAL")}</td>
+                        <td className="px-2 py-1.5 font-semibold pw-amount">{t("PPH21")}</td>
                       </tr>
                       <tr className="text-center font-medium">
-                        <td colSpan={2} className="px-2 py-1.5 border-r border-gray-200">{formatCurrency(selectedRecord.total_gross || selectedRecord.gross_salary)}</td>
+                        <td colSpan={2} className="px-2 py-1.5 border-r border-gray-200">{formatCurrency(selectedRecord.total_gross ?? selectedRecord.gross_salary)}</td>
                         <td colSpan={2} className="px-2 py-1.5 border-r border-gray-200">{formatCurrency(selectedRecord.gross_up_initial || 0)}</td>
-                        <td colSpan={2} className="px-2 py-1.5 border-r border-gray-200 text-orange-700 font-bold">{formatCurrency(selectedRecord.final_gross_up || 0)}</td>
+                        <td colSpan={2} className="px-2 py-1.5 border-r border-gray-200 pw-amount font-bold">{formatCurrency(selectedRecord.final_gross_up || 0)}</td>
                         <td className="px-2 py-1.5 border-r border-gray-200 font-bold">{selectedRecord.ter_category || '-'}</td>
-                        <td className="px-2 py-1.5 border-r border-gray-200">{((Number(selectedRecord.ter_rate_initial) || 0) * 100).toFixed(2)}%</td>
-                        <td className="px-2 py-1.5 border-r border-gray-200 text-orange-700">{((Number(selectedRecord.ter_rate) || 0) * 100).toFixed(2)}%</td>
+                        <td className="px-2 py-1.5 border-r border-gray-200">{Number(((Number(selectedRecord.ter_rate_initial) || 0) * 100).toFixed(2)).toLocaleString(intlLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%</td>
+                        <td className="px-2 py-1.5 border-r border-gray-200 pw-amount">{Number(((Number(selectedRecord.ter_rate) || 0) * 100).toFixed(2)).toLocaleString(intlLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%</td>
                         <td className="px-2 py-1.5 text-red-600 font-bold">{formatCurrency(selectedRecord.pph21)}</td>
                       </tr>
 
                       {/* Result Section */}
-                      <tr className="bg-green-100">
-                        <td colSpan={4} className="px-2 py-1.5 font-semibold text-green-800">TAKE HOME PAY (THP)</td>
-                        <td colSpan={3} className="px-2 py-1.5 font-semibold text-green-800">TOTAL COST COMPANY</td>
-                        <td colSpan={3} className="px-2 py-1.5 font-semibold text-green-800">PTKP STATUS</td>
+                      <tr className="pw-table-band">
+                        <td colSpan={4} className="px-2 py-1.5 font-semibold pw-amount">{t("TAKE HOME PAY (THP)")}</td>
+                        <td colSpan={3} className="px-2 py-1.5 font-semibold pw-amount">{t("TOTAL COST COMPANY")}</td>
+                        <td colSpan={3} className="px-2 py-1.5 font-semibold pw-amount">{t("PTKP STATUS")}</td>
                       </tr>
                       <tr className="text-center font-bold">
-                        <td colSpan={4} className="px-2 py-2 border-r border-gray-200 text-green-700 text-base">
-                          {formatCurrency(selectedRecord.thp || selectedRecord.take_home_pay || selectedRecord.net_salary)}
+                        <td colSpan={4} className="px-2 py-2 border-r border-gray-200 pw-amount text-base">
+                          {formatDetailCurrency(selectedRecord.thp ?? selectedRecord.take_home_pay ?? selectedRecord.net_salary)}
                         </td>
-                        <td colSpan={3} className="px-2 py-2 border-r border-gray-200 text-purple-700 text-base">
-                          {formatCurrency(selectedRecord.total_cost_company || selectedRecord.total_cost_to_company || 0)}
+                        <td colSpan={3} className="px-2 py-2 border-r border-gray-200 pw-amount text-base">
+                          {formatCurrency(selectedRecord.total_cost_company ?? selectedRecord.total_cost_to_company ?? 0)}
                         </td>
                         <td colSpan={3} className="px-2 py-2 text-gray-700">
                           {selectedRecord.ptkp_status || '-'}
@@ -1275,64 +819,58 @@ export function PayrollPage() {
                     </tbody>
                   </table>
                 </div>
+                )}
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="pw-detail-columns">
                   {/* Left Column - Income */}
                   <div className="space-y-4">
                     {/* Basic Salary */}
-                    <div className="bg-gray-50 rounded-xl p-4">
-                      <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                        <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                          <svg className="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </div>
-                        Penghasilan
-                      </h3>
+                    <div className="pw-breakdown-section">
+                      <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">{t("Penghasilan")} </h3>
                       <div className="space-y-2">
                         <div className="flex items-center justify-between text-sm">
-                          <span className="text-gray-600">Gaji Pokok</span>
-                          <span className="font-medium text-gray-900">{formatCurrency(selectedRecord.basic_salary)}</span>
+                          <span className="text-gray-600">{t("Gaji Pokok")}</span>
+                          <span className="font-medium text-gray-900">{formatDetailCurrency(selectedRecord.basic_salary)}</span>
                         </div>
                         {(selectedRecord.transport_allowance || 0) > 0 && (
                           <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-600">Tunjangan Transport</span>
-                            <span className="font-medium text-green-600">+{formatCurrency(selectedRecord.transport_allowance!)}</span>
+                            <span className="text-gray-600">{t("Tunjangan Transport")}</span>
+                            <span className="font-medium pw-amount">+{formatDetailCurrency(selectedRecord.transport_allowance)}</span>
                           </div>
                         )}
                         {(selectedRecord.meal_allowance || 0) > 0 && (
                           <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-600">Tunjangan Makan</span>
-                            <span className="font-medium text-green-600">+{formatCurrency(selectedRecord.meal_allowance!)}</span>
+                            <span className="text-gray-600">{t("Tunjangan Makan")}</span>
+                            <span className="font-medium pw-amount">+{formatDetailCurrency(selectedRecord.meal_allowance)}</span>
                           </div>
                         )}
                         {(selectedRecord.position_allowance || 0) > 0 && (
                           <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-600">Tunjangan Jabatan</span>
-                            <span className="font-medium text-green-600">+{formatCurrency(selectedRecord.position_allowance!)}</span>
+                            <span className="text-gray-600">{t("Tunjangan Jabatan")}</span>
+                            <span className="font-medium pw-amount">+{formatDetailCurrency(selectedRecord.position_allowance)}</span>
                           </div>
                         )}
-                        {selectedRecord.allowances_detail && Array.isArray(selectedRecord.allowances_detail) && selectedRecord.allowances_detail.map((al: any, idx: number) => (
+                        {selectedRecord.allowances_detail && Array.isArray(selectedRecord.allowances_detail) && selectedRecord.allowances_detail.map((al: { name: string; amount: number }, idx: number) => (
                           <div key={idx} className="flex items-center justify-between text-sm">
                             <span className="text-gray-600">{al.name}</span>
-                            <span className="font-medium text-green-600">+{formatCurrency(al.amount)}</span>
+                            <span className="font-medium pw-amount">+{formatDetailCurrency(al.amount)}</span>
                           </div>
                         ))}
                         {(selectedRecord.other_allowances || 0) > 0 && (!selectedRecord.allowances_detail || !Array.isArray(selectedRecord.allowances_detail) || selectedRecord.allowances_detail.length === 0) && (
                           <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-600">Tunjangan Lainnya</span>
-                            <span className="font-medium text-green-600">+{formatCurrency(selectedRecord.other_allowances!)}</span>
+                            <span className="text-gray-600">{t("Tunjangan Lainnya")}</span>
+                            <span className="font-medium pw-amount">+{formatDetailCurrency(selectedRecord.other_allowances)}</span>
                           </div>
                         )}
                         {(selectedRecord.overtime_pay || 0) > 0 && (
                           <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-600">Lembur ({selectedRecord.overtime_hours} jam)</span>
-                            <span className="font-medium text-green-600">+{formatCurrency(selectedRecord.overtime_pay!)}</span>
+                            <span className="text-gray-600">{t("Lembur (")}{payrollNumber(Number(selectedRecord.overtime_hours))}{' '}{t("jam)")}</span>
+                            <span className="font-medium pw-amount">+{formatDetailCurrency(selectedRecord.overtime_pay)}</span>
                           </div>
                         )}
                         <div className="border-t border-gray-200 pt-2 mt-2 flex items-center justify-between">
-                          <span className="font-semibold text-gray-900">Gross Salary</span>
-                          <span className="text-lg font-bold text-gray-900">{formatCurrency(selectedRecord.gross_salary)}</span>
+                          <span className="font-semibold text-gray-900">{t("Gross Salary")}</span>
+                          <span className="text-lg font-bold text-gray-900">{formatDetailCurrency(selectedRecord.gross_salary)}</span>
                         </div>
                       </div>
                     </div>
@@ -1340,22 +878,17 @@ export function PayrollPage() {
                     {/* Prorate Info */}
                     {selectedRecord.is_prorated && (
                       <div className="bg-amber-50 rounded-xl p-4">
-                        <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                          <div className="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center">
-                            <svg className="w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                          </div>
-                          Prorate
-                        </h3>
+                        <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">{t("Prorate")} </h3>
                         <div className="space-y-2">
                           <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-600">Factor</span>
-                            <span className="font-medium">{((selectedRecord.prorate_factor || 1) * 100).toFixed(2)}%</span>
+                            <span className="text-gray-600">{t("Factor")}</span>
+                            <span className="font-medium">{selectedRecord.prorate_factor != null && Number.isFinite(Number(selectedRecord.prorate_factor))
+                              ? `${Number((Number(selectedRecord.prorate_factor) * 100).toFixed(2)).toLocaleString(intlLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`
+                              : '-'}</span>
                           </div>
                           {selectedRecord.prorate_reason && (
                             <div className="flex items-center justify-between text-sm">
-                              <span className="text-gray-600">Alasan</span>
+                              <span className="text-gray-600">{t("Alasan")}</span>
                               <span className="font-medium">{selectedRecord.prorate_reason}</span>
                             </div>
                           )}
@@ -1367,39 +900,32 @@ export function PayrollPage() {
                   {/* Right Column - Deductions */}
                   <div className="space-y-4">
                     {/* Attendance Info */}
-                    {(selectedRecord.working_days || selectedRecord.absent_days || selectedRecord.late_days) && (
-                      <div className="bg-gray-50 rounded-xl p-4">
-                        <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                          <div className="w-8 h-8 bg-gray-200 rounded-lg flex items-center justify-center">
-                            <svg className="w-4 h-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                          </div>
-                          Info Kehadiran
-                        </h3>
+                    {(selectedRecord.working_days != null || selectedRecord.actual_working_days != null || !!selectedRecord.absent_days || !!selectedRecord.late_days) && (
+                      <div className="pw-breakdown-section">
+                        <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">{t("Info Kehadiran")} </h3>
                         <div className="grid grid-cols-2 gap-3 text-sm">
-                          {selectedRecord.working_days && (
+                          {selectedRecord.working_days != null && (
                             <div>
-                              <span className="text-gray-500">Hari Kerja</span>
-                              <p className="font-medium">{selectedRecord.working_days} hari</p>
+                              <span className="text-gray-500">{t("Hari Kerja")}</span>
+                              <p className="font-medium">{payrollNumber(Number(selectedRecord.working_days))}{' '}{t("hari")}</p>
                             </div>
                           )}
-                          {selectedRecord.actual_working_days && (
+                          {selectedRecord.actual_working_days != null && (
                             <div>
-                              <span className="text-gray-500">Hari Hadir</span>
-                              <p className="font-medium">{selectedRecord.actual_working_days} hari</p>
+                              <span className="text-gray-500">{t("Hari Hadir")}</span>
+                              <p className="font-medium">{selectedRecord.actual_working_days}{' '}{t("hari")}</p>
                             </div>
                           )}
                           {(selectedRecord.absent_days || 0) > 0 && (
                             <div>
-                              <span className="text-gray-500">Tidak Hadir</span>
-                              <p className="font-medium text-red-600">{selectedRecord.absent_days} hari</p>
+                              <span className="text-gray-500">{t("Tidak Hadir")}</span>
+                              <p className="font-medium text-red-600">{payrollNumber(Number(selectedRecord.absent_days))}{' '}{t("hari")}</p>
                             </div>
                           )}
                           {(selectedRecord.late_days || 0) > 0 && (
                             <div>
-                              <span className="text-gray-500">Terlambat</span>
-                              <p className="font-medium text-orange-600">{selectedRecord.late_days} hari</p>
+                              <span className="text-gray-500">{t("Terlambat")}</span>
+                              <p className="font-medium pw-amount">{payrollNumber(Number(selectedRecord.late_days))}{' '}{t("hari")}</p>
                             </div>
                           )}
                         </div>
@@ -1407,15 +933,9 @@ export function PayrollPage() {
                     )}
 
                     {/* BPJS */}
-                    <div className="bg-blue-50 rounded-xl p-4">
-                      <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                        <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                          <svg className="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                          </svg>
-                        </div>
-                        BPJS (Karyawan)
-                      </h3>
+                    {selectedCalculation ? <PayrollSavedBPJS record={selectedRecord} /> : (
+                    <div className="pw-breakdown-section">
+                      <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">{t("BPJS (Karyawan)")} </h3>
                       {selectedRecord.pph21_paid_by_company ? (
                         /* Gross-up: company bears all employee BPJS via tunjangan;
                            raw bpjs_*_employee fields still hold computed amounts but
@@ -1423,95 +943,91 @@ export function PayrollPage() {
                            to keep card consistent with THP. */
                         <div className="space-y-2">
                           <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-600">BPJS Kesehatan (1%)</span>
-                            <span className="font-medium text-gray-400 italic">Ditanggung Perusahaan</span>
+                            <span className="text-gray-600">{t("BPJS Kesehatan (1%)")}</span>
+                            <span className="font-medium text-gray-400 italic">{t("Ditanggung Perusahaan")}</span>
                           </div>
                           <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-600">BPJS JHT (2%)</span>
-                            <span className="font-medium text-gray-400 italic">Ditanggung Perusahaan</span>
+                            <span className="text-gray-600">{t("BPJS JHT (2%)")}</span>
+                            <span className="font-medium text-gray-400 italic">{t("Ditanggung Perusahaan")}</span>
                           </div>
                           <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-600">BPJS JP (1%)</span>
-                            <span className="font-medium text-gray-400 italic">Ditanggung Perusahaan</span>
+                            <span className="text-gray-600">{t("BPJS JP (1%)")}</span>
+                            <span className="font-medium text-gray-400 italic">{t("Ditanggung Perusahaan")}</span>
                           </div>
-                          <div className="border-t border-blue-200 pt-2 mt-2 flex items-center justify-between">
-                            <span className="font-semibold text-gray-900">Total Potongan BPJS</span>
-                            <span className="font-bold text-emerald-600">Rp 0</span>
+                          <div className="border-t pw-rule pt-2 mt-2 flex items-center justify-between">
+                            <span className="font-semibold text-gray-900">{t("Total Potongan BPJS")}</span>
+                            <span className="font-bold pw-amount">{t("Rp 0")}</span>
                           </div>
-                          <p className="text-xs text-blue-600 mt-1">* Skema gross-up — PFI tanggung BPJS karyawan</p>
+                          <p className="text-xs pw-amount mt-1">{t("* BPJS karyawan ditanggung perusahaan sesuai kebijakan payroll.")}</p>
                         </div>
                       ) : (
                         <div className="space-y-2">
                           {(selectedRecord.bpjs_kes_employee || 0) > 0 && (
                             <div className="flex items-center justify-between text-sm">
-                              <span className="text-gray-600">BPJS Kesehatan (1%)</span>
+                              <span className="text-gray-600">{t("BPJS Kesehatan (1%)")}</span>
                               <span className="font-medium text-red-600">-{formatCurrency(selectedRecord.bpjs_kes_employee!)}</span>
                             </div>
                           )}
                           {(selectedRecord.bpjs_jht_employee || 0) > 0 && (
                             <div className="flex items-center justify-between text-sm">
-                              <span className="text-gray-600">BPJS JHT (2%)</span>
+                              <span className="text-gray-600">{t("BPJS JHT (2%)")}</span>
                               <span className="font-medium text-red-600">-{formatCurrency(selectedRecord.bpjs_jht_employee!)}</span>
                             </div>
                           )}
                           {(selectedRecord.bpjs_jp_employee || 0) > 0 && (
                             <div className="flex items-center justify-between text-sm">
-                              <span className="text-gray-600">BPJS JP (1%)</span>
+                              <span className="text-gray-600">{t("BPJS JP (1%)")}</span>
                               <span className="font-medium text-red-600">-{formatCurrency(selectedRecord.bpjs_jp_employee!)}</span>
                             </div>
                           )}
-                          <div className="border-t border-blue-200 pt-2 mt-2 flex items-center justify-between">
-                            <span className="font-semibold text-gray-900">Total BPJS</span>
+                          <div className="border-t pw-rule pt-2 mt-2 flex items-center justify-between">
+                            <span className="font-semibold text-gray-900">{t("Total BPJS")}</span>
                             <span className="font-bold text-red-600">-{formatCurrency(selectedRecord.bpjs_employee_total || 0)}</span>
                           </div>
                         </div>
                       )}
                     </div>
 
+                    )}
+
                     {/* Tax */}
-                    <div className="bg-orange-50 rounded-xl p-4">
-                      <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                        <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center">
-                          <svg className="w-4 h-4 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" />
-                          </svg>
-                        </div>
-                        PPh21
-                      </h3>
+                    {!selectedCalculation && (
+                    <div className="pw-breakdown-section">
+                      <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">{t("PPh21")} </h3>
                       <div className="space-y-2">
                         {selectedRecord.ptkp_status && (
                           <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-600">Status PTKP</span>
+                            <span className="text-gray-600">{t("Status PTKP")}</span>
                             <span className="font-medium">{selectedRecord.ptkp_status}</span>
                           </div>
                         )}
                         {selectedRecord.ter_category && (
                           <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-600">Kategori TER</span>
-                            <span className="font-medium">TER {selectedRecord.ter_category}</span>
+                            <span className="text-gray-600">{t("Kategori TER")}</span>
+                            <span className="font-medium">{t("TER")} {selectedRecord.ter_category}</span>
                           </div>
                         )}
                         {/* Gross Up Iteration — shown for any payroll where company bears
                             PPh21 (Wave 6.5: PFI uses gross-up regardless of pay_type label) */}
                         {selectedRecord.pph21_paid_by_company && selectedRecord.gross_up_initial && (
                           <>
-                            <div className="border-t border-orange-200 pt-2 mt-2">
-                              <p className="text-xs font-semibold text-orange-700 mb-2">Gross Up Calculation:</p>
+                            <div className="border-t pw-rule pt-2 mt-2">
+                              <p className="text-xs font-semibold pw-amount mb-2">{t("Gross Up Calculation:")}</p>
                               <div className="flex items-center justify-between text-sm">
-                                <span className="text-gray-600">Gross Up Initial</span>
+                                <span className="text-gray-600">{t("Gross Up Initial")}</span>
                                 <span className="font-medium">{formatCurrency(selectedRecord.gross_up_initial)}</span>
                               </div>
                               <div className="flex items-center justify-between text-sm">
-                                <span className="text-gray-600">TER Rate Initial</span>
-                                <span className="font-medium">{((Number(selectedRecord.ter_rate_initial) || 0) * 100).toFixed(2)}%</span>
+                                <span className="text-gray-600">{t("TER Rate Initial")}</span>
+                                <span className="font-medium">{Number(((Number(selectedRecord.ter_rate_initial) || 0) * 100).toFixed(2)).toLocaleString(intlLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%</span>
                               </div>
                               <div className="flex items-center justify-between text-sm mt-1">
-                                <span className="text-gray-600">Gross Up Final</span>
-                                <span className="font-medium text-orange-700">{formatCurrency(selectedRecord.final_gross_up || 0)}</span>
+                                <span className="text-gray-600">{t("Gross Up Final")}</span>
+                                <span className="font-medium pw-amount">{formatCurrency(selectedRecord.final_gross_up || 0)}</span>
                               </div>
                               <div className="flex items-center justify-between text-sm">
-                                <span className="text-gray-600">TER Rate Final</span>
-                                <span className="font-medium text-orange-700">{((Number(selectedRecord.ter_rate) || 0) * 100).toFixed(2)}%</span>
+                                <span className="text-gray-600">{t("TER Rate Final")}</span>
+                                <span className="font-medium pw-amount">{Number(((Number(selectedRecord.ter_rate) || 0) * 100).toFixed(2)).toLocaleString(intlLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%</span>
                               </div>
                             </div>
                           </>
@@ -1519,57 +1035,52 @@ export function PayrollPage() {
                         {/* For pure GROSS (employee pays tax) — TER rate only, no iteration panel */}
                         {!selectedRecord.pph21_paid_by_company && selectedRecord.ter_rate && (
                           <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-600">TER Rate</span>
-                            <span className="font-medium">{((Number(selectedRecord.ter_rate) || 0) * 100).toFixed(2)}%</span>
+                            <span className="text-gray-600">{t("TER Rate")}</span>
+                            <span className="font-medium">{Number(((Number(selectedRecord.ter_rate) || 0) * 100).toFixed(2)).toLocaleString(intlLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%</span>
                           </div>
                         )}
-                        <div className="border-t border-orange-200 pt-2 mt-2 flex items-center justify-between">
-                          <span className="font-semibold text-gray-900">{selectedRecord.pph21_paid_by_company ? 'PPh21 (Ditanggung Perusahaan)' : 'PPh21'}</span>
+                        <div className="border-t pw-rule pt-2 mt-2 flex items-center justify-between">
+                          <span className="font-semibold text-gray-900">{selectedRecord.pph21_paid_by_company ? t("PPh21 (Ditanggung Perusahaan)") : t("PPh21")}</span>
                           {selectedRecord.pph21_paid_by_company ? (
-                            <span className="font-bold text-emerald-600">Rp 0</span>
+                            <span className="font-bold pw-amount">{t("Rp 0")}</span>
                           ) : (
                             <span className="font-bold text-red-600">-{formatCurrency(selectedRecord.pph21)}</span>
                           )}
                         </div>
                         {selectedRecord.pph21_paid_by_company && (
-                          <p className="text-xs text-orange-600 mt-1">* Tunjangan Jabatan {formatCurrency(selectedRecord.pph21)} = nilai PPh21 yang dibayar perusahaan (skema gross-up)</p>
+                          <p className="text-xs pw-amount mt-1">{t("* Tunjangan Jabatan")} {formatCurrency(selectedRecord.pph21)}{' '}{t("= nilai PPh21 yang dibayar perusahaan (skema gross-up)")}</p>
                         )}
                       </div>
                     </div>
 
+                    )}
+
                     {/* Other Deductions */}
-                    {(selectedRecord.total_deductions || 0) > (selectedRecord.bpjs_employee_total || 0) + (selectedRecord.pph21 || 0) && (
-                      <div className="bg-red-50 rounded-xl p-4">
-                        <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                          <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
-                            <svg className="w-4 h-4 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                          </div>
-                          Potongan Lain
-                        </h3>
+                    {!selectedCalculation && (selectedRecord.total_deductions ?? 0) > (selectedRecord.bpjs_employee_total ?? 0) + (selectedRecord.pph21 ?? 0) && (
+                      <div className="pw-breakdown-section">
+                        <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">{t("Potongan Lain")} </h3>
                         <div className="space-y-2">
                           {(selectedRecord.absence_deduction || 0) > 0 && (
                             <div className="flex items-center justify-between text-sm">
-                              <span className="text-gray-600">Potongan Absen</span>
+                              <span className="text-gray-600">{t("Potongan Absen")}</span>
                               <span className="font-medium text-red-600">-{formatCurrency(selectedRecord.absence_deduction!)}</span>
                             </div>
                           )}
                           {(selectedRecord.late_deduction || 0) > 0 && (
                             <div className="flex items-center justify-between text-sm">
-                              <span className="text-gray-600">Potongan Telat</span>
+                              <span className="text-gray-600">{t("Potongan Telat")}</span>
                               <span className="font-medium text-red-600">-{formatCurrency(selectedRecord.late_deduction!)}</span>
                             </div>
                           )}
                           {(selectedRecord.loan_deduction || 0) > 0 && (
                             <div className="flex items-center justify-between text-sm">
-                              <span className="text-gray-600">Potongan Pinjaman</span>
+                              <span className="text-gray-600">{t("Potongan Pinjaman")}</span>
                               <span className="font-medium text-red-600">-{formatCurrency(selectedRecord.loan_deduction!)}</span>
                             </div>
                           )}
                           {(selectedRecord.other_deductions || 0) > 0 && (
                             <div className="flex items-center justify-between text-sm">
-                              <span className="text-gray-600">Potongan Lainnya</span>
+                              <span className="text-gray-600">{t("Potongan Lainnya")}</span>
                               <span className="font-medium text-red-600">-{formatCurrency(selectedRecord.other_deductions!)}</span>
                             </div>
                           )}
@@ -1579,76 +1090,48 @@ export function PayrollPage() {
                   </div>
                 </div>
 
-                {/* Summary */}
-                <div className="mt-6 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl p-6 text-white">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="text-center">
-                      <p className="text-purple-100 text-sm">Total Potongan</p>
-                      <p className="text-2xl font-bold mt-1">{formatCurrency(selectedRecord.total_deductions)}</p>
-                    </div>
-                    <div className="text-center border-x border-white/20">
-                      <p className="text-purple-100 text-sm">
-                        {selectedRecord.pph21_paid_by_company ? 'Gross Up Final' : 'Net Salary'}
-                      </p>
-                      <p className="text-2xl font-bold mt-1">
-                        {formatCurrency(
-                          selectedRecord.pph21_paid_by_company
-                            ? (selectedRecord.final_gross_up || selectedRecord.gross_salary)
-                            : selectedRecord.net_salary
-                        )}
-                      </p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-purple-100 text-sm">Take Home Pay</p>
-                      <p className="text-3xl font-bold mt-1">{formatCurrency(selectedRecord.thp || selectedRecord.take_home_pay || selectedRecord.net_salary)}</p>
-                    </div>
-                  </div>
-                </div>
-
                 {/* BPJS Company */}
-                {(selectedRecord.bpjs_company_total || 0) > 0 && (
-                  <div className="mt-4 bg-gray-50 rounded-xl p-4">
-                    <h3 className="text-sm font-semibold text-gray-900 mb-3">BPJS (Ditanggung Perusahaan)</h3>
+                {!selectedCalculation && (selectedRecord.bpjs_company_total ?? 0) > 0 && (
+                  <div className="mt-4 pw-breakdown-section">
+                    <h3 className="text-sm font-semibold text-gray-900 mb-3">{t("BPJS (Ditanggung Perusahaan)")}</h3>
                     <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 text-sm">
                       <div>
-                        <p className="text-gray-500">Kesehatan (4%)</p>
+                        <p className="text-gray-500">{t("Kesehatan (4%)")}</p>
                         <p className="font-medium">{formatCurrency(selectedRecord.bpjs_kes_company || 0)}</p>
                       </div>
                       <div>
-                        <p className="text-gray-500">JHT (3.7%)</p>
+                        <p className="text-gray-500">{t("JHT (3.7%)")}</p>
                         <p className="font-medium">{formatCurrency(selectedRecord.bpjs_jht_company || 0)}</p>
                       </div>
                       <div>
-                        <p className="text-gray-500">JP (2%)</p>
+                        <p className="text-gray-500">{t("JP (2%)")}</p>
                         <p className="font-medium">{formatCurrency(selectedRecord.bpjs_jp_company || 0)}</p>
                       </div>
                       <div>
-                        <p className="text-gray-500">JKK</p>
+                        <p className="text-gray-500">{t("JKK")}</p>
                         <p className="font-medium">{formatCurrency(selectedRecord.bpjs_jkk_company || 0)}</p>
                       </div>
                       <div>
-                        <p className="text-gray-500">JKM</p>
+                        <p className="text-gray-500">{t("JKM")}</p>
                         <p className="font-medium">{formatCurrency(selectedRecord.bpjs_jkm_company || 0)}</p>
                       </div>
                     </div>
                     {/* BPJS Object PPh21 (for NET pay type) */}
                     {selectedRecord.bpjs_object_pph21 && (
                       <div className="border-t border-gray-200 mt-3 pt-3 flex justify-between text-sm">
-                        <span className="text-gray-600">BPJS Object PPh21</span>
+                        <span className="text-gray-600">{t("BPJS Object PPh21")}</span>
                         <span className="font-medium">{formatCurrency(selectedRecord.bpjs_object_pph21)}</span>
                       </div>
                     )}
                     <div className="border-t border-gray-200 mt-3 pt-3 flex justify-between">
-                      <span className="font-semibold">Total Cost to Company</span>
-                      <span className="font-bold text-purple-600">{formatCurrency(selectedRecord.total_cost_company || selectedRecord.total_cost_to_company || 0)}</span>
+                      <span className="font-semibold">{t("Total Cost to Company")}</span>
+                      <span className="font-bold pw-amount">{formatCurrency(selectedRecord.total_cost_company ?? selectedRecord.total_cost_to_company ?? 0)}</span>
                     </div>
                   </div>
                 )}
-              </div>
-            </div>
-          </div>
+
         </div>
-      )}
-    </div>
+      </OperationalDialog>}
+    </OperationalWorkspace>
   );
 }

@@ -44,8 +44,8 @@ export interface CreateWorkLocationRequest {
   province?: string;
   postal_code?: string;
   country?: string;
-  latitude?: number;
-  longitude?: number;
+  latitude?: number | null;
+  longitude?: number | null;
   radius_meters?: number;
   enable_attendance?: boolean;
   enable_shift_system?: boolean;
@@ -112,10 +112,11 @@ export const workLocationService = {
     return list.map((w) => ({ id: w.id, name: w.name, code: w.code, company_id: w.company_id }));
   },
 
-  getAll: async (params?: WorkLocationListParams): Promise<{ data: WorkLocation[]; total: number }> => {
+  getAll: async (params?: WorkLocationListParams): Promise<{ data: WorkLocation[]; total: number; pagination?: { totalPages: number; total: number } }> => {
     const response = await api.get<BackendPaginatedResponse<WorkLocation>>('/work-locations', { params });
     return {
       data: response.data.data,
+      pagination: response.data.meta?.pagination ?? (response.data as unknown as { pagination?: { totalPages: number; total: number } }).pagination,
       // BE returns pagination at top level ({ data, pagination }), not under
       // `meta` — without this the total fell back to data.length (page size).
       total:

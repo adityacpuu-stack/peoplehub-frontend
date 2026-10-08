@@ -1,31 +1,22 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { quantity } from '@/components/leave/presentation';
+import { getLocale, t, useLocale } from '@/i18n';
+import '@/pages/leave/domain-workflows.css';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useAuthStore } from '@/stores/auth.store';
+import { canAction } from '@/lib/actions';
 import toast from 'react-hot-toast';
-import {
-  Users,
-  Search,
-  Download,
-  Loader2,
-  Calendar,
-  Building,
-  User,
-  ChevronLeft,
-  ChevronRight,
-  Filter,
-  BarChart3,
-  Clock,
-  CheckCircle2,
-  CalendarDays,
-  Briefcase,
-  Eye,
-  X,
-  RefreshCw,
-  Plus,
-} from 'lucide-react';
-import { leaveService } from '../../services/leave.service';
+import { OperationalWorkspace, OperationalDialog } from '@/components/ui/OperationalWorkspace';
+import { collectPages } from '@/services/master-data';
+import api from '@/services/api';
+import './leave-workspace.css';
+import './leave-refresh.css';
+import { Search, Download, Loader2, ChevronLeft, ChevronRight, Eye, RefreshCw, Plus, CheckCircle2 } from 'lucide-react';
+import { leaveService, type LeaveAllocationRequest, type LeaveAllocationResult } from '../../services/leave.service';
+import { AllocationPreview } from '@/components/leave/AllocationPreview';
 import { companyService } from '../../services/company.service';
 import { employeeService } from '../../services/employee.service';
 import { departmentService } from '../../services/department.service';
-import type { LeaveType } from '@/types';
+import type { LeaveType, PaginatedResponse } from '@/types';
 
 interface Company {
   id: number;
@@ -69,9 +60,30 @@ interface EmployeeEntitlement {
   balances: LocalLeaveBalance[];
 }
 
+/** Filters captured when the export dialog opens, plus the export-only year and status. */
+interface ExportDraft {
+  companyId?: number;
+  companyName?: string;
+  departmentId?: number;
+  departmentName?: string;
+  search?: string;
+  year: number;
+  employmentStatus: 'all' | 'active';
+}
+
 export function LeaveEntitlementsPage() {
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
+  useLocale();
+  const user = useAuthStore(state => state.user);
+  // Existing role ceiling AND the covered leave.administer action.
+  const canAllocate = (user?.roles ?? []).some(role => ['Super Admin', 'Group CEO', 'CEO', 'HR Manager', 'Finance Manager', 'Tax Manager', 'HR Staff'].includes(role))
+    && canAction(user, 'leave.administer');
+  const [loadError, setLoadError] = useState(false);
+  const [optionError, setOptionError] = useState(false);
+  const [typesLoaded, setTypesLoaded] = useState(false);
+  const [matrixType, setMatrixType] = useState('');
+  const requestSequence = useRef(0);
+  const departmentSequence = useRef(0);
+  const [leaveTypes, setLeaveTypes] = useState<(LeaveType & { company_id?: number | null })[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [entitlements, setEntitlements] = useState<EmployeeEntitlement[]>([]);
   const [loading, setLoading] = useState(true);
@@ -87,8 +99,32 @@ export function LeaveEntitlementsPage() {
   const [allocateForm, setAllocateForm] = useState({
     employee_id: 0,
     leave_type_id: 0,
-    allocated_days: 0,
   });
+  const [allocationRequest, setAllocationRequest] = useState<LeaveAllocationRequest | null>(null);
+  const [previewState, setPreviewState] = useState<{
+    request: LeaveAllocationRequest; result: LeaveAllocationResult | null; error: boolean;
+  } | null>(null);
+  const [previewRetry, setPreviewRetry] = useState(0);
+  const allocationPreview = previewState?.request === allocationRequest ? previewState?.result ?? null : null;
+  const previewError = previewState?.request === allocationRequest && previewState?.error === true;
+
+  useEffect(() => {
+    if (!allocationRequest) return;
+    let cancelled = false;
+    setPreviewState(null);
+    leaveService.allocateDefaults({ ...allocationRequest, dry_run: true }).then(result => {
+      if (!cancelled) setPreviewState({ request: allocationRequest, result, error: false });
+    }).catch(() => {
+      if (!cancelled) setPreviewState({ request: allocationRequest, result: null, error: true });
+    });
+    return () => { cancelled = true; };
+  }, [allocationRequest, previewRetry]);
+  const currentYear = new Date().getFullYear();
+  const exportYears = Array.from({ length: 7 }, (_, index) => currentYear + 1 - index);
+  const [exportDraft, setExportDraft] = useState<ExportDraft | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState(false);
+  const exportInFlight = useRef(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
@@ -97,9 +133,12 @@ export function LeaveEntitlementsPage() {
   // Fetch leave types
   const fetchLeaveTypes = useCallback(async () => {
     try {
-      const types = await leaveService.getTypes();
-      setLeaveTypes(types);
+      const types = await collectPages(async (page, limit) =>
+        (await api.get<PaginatedResponse<LeaveType>>('/leaves/types', { params: { page, limit } })).data);
+      setLeaveTypes(types); setTypesLoaded(true);
+      setMatrixType(current => current || String(types[0]?.id ?? ''));
     } catch (error) {
+      setOptionError(true); setLoading(false);
       console.error('Failed to fetch leave types:', error);
     }
   }, []);
@@ -107,16 +146,18 @@ export function LeaveEntitlementsPage() {
   // Fetch companies
   const fetchCompanies = useCallback(async () => {
     try {
-      const response = await companyService.getAll({ limit: 100 });
-      setCompanies(response.data);
+      const rows = await collectPages((page, limit) => companyService.getAll({ page, limit }));
+      setCompanies(rows);
     } catch (error) {
+      setOptionError(true);
       console.error('Failed to fetch companies:', error);
     }
   }, []);
 
   // Fetch employees with their leave balances
   const fetchEntitlements = useCallback(async () => {
-    setLoading(true);
+    const sequence = ++requestSequence.current;
+    setLoading(true); setLoadError(false);
     try {
       const params: { page: number; limit: number; search?: string; company_id?: number; department_id?: number; employment_status?: string } = {
         page,
@@ -135,20 +176,6 @@ export function LeaveEntitlementsPage() {
 
       // Fetch employees (only active)
       const response = await employeeService.getAll(params);
-      setEmployees(response.data.map(emp => ({
-        id: emp.id,
-        name: emp.name,
-        employee_id: emp.employee_id || '',
-        company_id: emp.company_id,
-        company: emp.company || undefined,
-        department: emp.department || undefined,
-        position: emp.position || undefined,
-        join_date: emp.join_date,
-        probation_end_date: (emp as any).probation_end_date,
-        employment_status: emp.employment_status ?? undefined,
-      })));
-      setTotalPages(response.pagination?.totalPages || 1);
-      setTotalItems(response.pagination?.total || response.data.length);
 
       // Fetch real leave balances from backend
       const balanceParams: { company_id?: number; year: number } = {
@@ -158,23 +185,15 @@ export function LeaveEntitlementsPage() {
         balanceParams.company_id = Number(filterCompany);
       }
 
-      let allBalances: LocalLeaveBalance[] = [];
-      try {
-        const balancesResponse = await leaveService.getBalances(balanceParams);
-        allBalances = (balancesResponse || []).map((b: any) => ({
-          id: b.id,
-          employee_id: b.employee_id,
-          leave_type_id: b.leave_type_id,
-          year: b.year,
-          allocated_days: Number(b.allocated_days) || 0,
-          used_days: Number(b.used_days) || 0,
-          pending_days: Number(b.pending_days) || 0,
-          remaining_days: Number(b.remaining_days) || 0,
-          leaveType: b.leaveType,
-        }));
-      } catch (err) {
-        console.warn('No balances found, will show empty entitlements');
-      }
+      // A failed balance request is an error, never a zero balance.
+      const balancesResponse = await leaveService.getBalances(balanceParams);
+      if (sequence !== requestSequence.current) return;
+      const allBalances: LocalLeaveBalance[] = balancesResponse.map(b => ({ ...b,
+        allocated_days: Number(b.allocated_days), used_days: Number(b.used_days),
+        pending_days: Number(b.pending_days), remaining_days: Number(b.remaining_days),
+      }));
+      setTotalPages(response.pagination?.totalPages || 1);
+      setTotalItems(response.pagination?.total ?? response.data.length);
 
       // Group balances by employee
       const balancesByEmployee = new Map<number, LocalLeaveBalance[]>();
@@ -185,12 +204,12 @@ export function LeaveEntitlementsPage() {
         balancesByEmployee.get(balance.employee_id)!.push(balance);
       }
 
-      // Build entitlements - use real data if available, otherwise show zeros
+      // Build entitlements. Missing allocations render as a dash, never a real zero balance.
       const realEntitlements: EmployeeEntitlement[] = response.data.map(emp => {
         const empBalances = balancesByEmployee.get(emp.id) || [];
 
         // For each leave type, find balance or create empty one
-        const balances: LocalLeaveBalance[] = leaveTypes.map(type => {
+        const balances: LocalLeaveBalance[] = leaveTypes.filter(type => type.company_id == null || type.company_id === emp.company_id || empBalances.some(balance => balance.leave_type_id === type.id)).map(type => {
           const existingBalance = empBalances.find(b => b.leave_type_id === type.id);
           if (existingBalance) {
             return {
@@ -198,7 +217,7 @@ export function LeaveEntitlementsPage() {
               leaveType: type,
             };
           }
-          // No balance allocated yet - show zeros
+          // The id=0 marker represents an unallocated policy, not a stored balance.
           return {
             id: 0,
             employee_id: emp.id,
@@ -222,7 +241,7 @@ export function LeaveEntitlementsPage() {
             department: emp.department || undefined,
             position: emp.position || undefined,
             join_date: emp.join_date,
-            probation_end_date: (emp as any).probation_end_date,
+            probation_end_date: emp.probation_end_date ?? undefined,
             employment_status: emp.employment_status ?? undefined,
           },
           balances,
@@ -231,24 +250,30 @@ export function LeaveEntitlementsPage() {
 
       setEntitlements(realEntitlements);
     } catch (error) {
+      if (sequence !== requestSequence.current) return;
+      setEntitlements([]); setLoadError(true);
       console.error('Failed to fetch entitlements:', error);
-      toast.error('Failed to load employee entitlements');
+      toast.error(t("Failed to load employee entitlements"));
     } finally {
-      setLoading(false);
+      if (sequence === requestSequence.current) setLoading(false);
     }
   }, [page, debouncedSearch, filterCompany, filterDepartment, leaveTypes]);
 
   // Fetch departments
   const [departments, setDepartments] = useState<{ id: number; name: string }[]>([]);
   const fetchDepartments = useCallback(async () => {
+    const sequence = ++departmentSequence.current;
     try {
       const params: { limit: number; company_id?: number } = { limit: 200 };
       if (filterCompany !== 'all') {
         params.company_id = Number(filterCompany);
       }
-      const response = await departmentService.getAll(params);
-      setDepartments(response.data.map(d => ({ id: d.id, name: d.name })));
+      const rows = await collectPages((page, limit) => departmentService.getAll({ ...params, page, limit }));
+      if (sequence !== departmentSequence.current) return;
+      setDepartments(rows.map(d => ({ id: d.id, name: d.name })));
     } catch (error) {
+      if (sequence !== departmentSequence.current) return;
+      setDepartments([]); setOptionError(true);
       console.error('Failed to fetch departments:', error);
     }
   }, [filterCompany]);
@@ -263,10 +288,10 @@ export function LeaveEntitlementsPage() {
   }, [fetchDepartments]);
 
   useEffect(() => {
-    if (leaveTypes.length > 0) {
+    if (typesLoaded) {
       fetchEntitlements();
     }
-  }, [fetchEntitlements, leaveTypes]);
+  }, [fetchEntitlements, typesLoaded]);
 
   useEffect(() => {
     setPage(1);
@@ -274,7 +299,7 @@ export function LeaveEntitlementsPage() {
 
   // Define custom sort order for companies based on employee_id prefix
   // PFI (Path Finder), GDI (Growpath), LFS (Lampung Farm), UOR (UOR Kreatif), BCI (Buka Cerita), PDR (Pilar Dana)
-  const COMPANY_ORDER = ['PFI', 'GDI', 'LFS', 'UOR', 'BCI', 'PDR'];
+  const COMPANY_ORDER = useMemo(() => ['PFI', 'GDI', 'LFS', 'UOR', 'BCI', 'PDR'], []);
 
   // Helper function to extract company prefix from employee_id
   // Format: "PFI-GDI-2500014" -> company is "GDI" (second part)
@@ -338,7 +363,7 @@ export function LeaveEntitlementsPage() {
     });
 
     return result;
-  }, [entitlements]);
+  }, [entitlements, COMPANY_ORDER]);
 
   // Stats
   const stats = useMemo(() => {
@@ -372,914 +397,151 @@ export function LeaveEntitlementsPage() {
 
   const handleOpenAllocate = (entitlement: EmployeeEntitlement) => {
     setSelectedEmployee(entitlement);
-    const firstType = leaveTypes[0];
-    const proratedDays = firstType
-      ? calculateProratedDays(entitlement.employee.join_date, Number(firstType.default_days) || 0, firstType.code, new Date().getFullYear())
-      : 0;
-    setAllocateForm({
-      employee_id: entitlement.employee.id,
-      leave_type_id: firstType?.id || 0,
-      allocated_days: proratedDays,
-    });
+    if (!canAllocate) return;
+    const typeId = leaveTypes.find(type => type.is_active !== false && (type.company_id == null || type.company_id === entitlement.employee.company_id))?.id || 0;
+    setAllocateForm({ employee_id: entitlement.employee.id, leave_type_id: typeId });
+    setAllocationRequest(typeId ? { employee_id: entitlement.employee.id, leave_type_ids: [typeId], dry_run: true } : null);
     setShowAllocateModal(true);
   };
 
   const handleCloseAllocateModal = () => {
+    if (allocating) return;
     setShowAllocateModal(false);
+    setAllocationRequest(null);
     setSelectedEmployee(null);
   };
 
-  const handleAllocate = async () => {
-    if (!allocateForm.employee_id || !allocateForm.leave_type_id) {
-      toast.error('Please select employee and leave type');
-      return;
-    }
+  const handleCloseBulkAllocateModal = () => {
+    if (allocating) return;
+    setShowBulkAllocateModal(false);
+    setAllocationRequest(null);
+  };
 
+  const handleBulkAllocate = () => {
+    if (!canAllocate) return;
+    // Snapshot visible filters. The server selects all matching employees,
+    // without the old 1,000-row browser fetch limit or browser salary/date math.
+    setAllocationRequest({
+      dry_run: true,
+      ...(filterCompany !== 'all' ? { company_id: Number(filterCompany) } : {}),
+      ...(filterDepartment !== 'all' ? { department_id: Number(filterDepartment) } : {}),
+      ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}),
+    });
+    setShowBulkAllocateModal(true);
+  };
+
+  const confirmAllocation = async () => {
+    if (!canAllocate || allocating || !allocationRequest || !allocationPreview?.created) return;
     setAllocating(true);
     try {
-      await leaveService.allocateLeave({
-        employee_id: allocateForm.employee_id,
-        leave_type_id: allocateForm.leave_type_id,
-        year: new Date().getFullYear(),
-        allocated_days: allocateForm.allocated_days,
-      });
-      toast.success('Leave allocated successfully');
-      handleCloseAllocateModal();
-      fetchEntitlements();
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to allocate leave', { id: 'api-error' });
+      // Re-evaluate on apply: balances/history may have changed after preview.
+      const result = await leaveService.allocateDefaults({ ...allocationRequest, year: allocationPreview.year, dry_run: false });
+      toast.success(
+        t('Allocated {created} balances. Skipped {skipped}.', { created: result.created, skipped: result.skippedBalanceExists + result.skippedHasLeaveHistory + result.skippedNotEntitledThisYear }),
+      );
+      setShowAllocateModal(false);
+      setShowBulkAllocateModal(false);
+      setAllocationRequest(null);
+      setSelectedEmployee(null);
+      await fetchEntitlements();
+    } catch {
+      toast.error(t("Allocation could not finish. Refreshing the preview before retry."), { id: 'api-error' });
+      setPreviewState(null);
+      setPreviewRetry(value => value + 1);
     } finally {
       setAllocating(false);
     }
   };
 
-  const handleBulkAllocate = () => {
-    if (entitlements.length === 0) {
-      toast.error('No employees to allocate');
-      return;
-    }
-    setShowBulkAllocateModal(true);
+  // Excel export of ALL matching employees (server-side, every page and leave type). The visible
+  // filters are snapshotted when the dialog opens, so later table changes cannot alter what the
+  // dialog describes. The export year and status are export-only: the table year and allocation
+  // state are not touched.
+  const openExport = () => {
+    const trimmed = search.trim();
+    setExportError(false);
+    setExportDraft({
+      ...(filterCompany !== 'all' ? { companyId: Number(filterCompany), companyName: companies.find(company => String(company.id) === filterCompany)?.name ?? `#${filterCompany}` } : {}),
+      ...(filterDepartment !== 'all' ? { departmentId: Number(filterDepartment), departmentName: departments.find(department => String(department.id) === filterDepartment)?.name ?? `#${filterDepartment}` } : {}),
+      ...(trimmed ? { search: trimmed } : {}),
+      year: currentYear,
+      employmentStatus: 'all',
+    });
   };
 
-  // Calculate prorated leave days based on join date and probation
-  const calculateProratedDays = (
-    joinDate: string | null | undefined,
-    defaultDays: number,
-    leaveTypeCode: string | undefined,
-    year: number
-  ): number => {
-    // Only prorate Annual Leave (AL)
-    if (leaveTypeCode !== 'AL') {
-      return defaultDays;
-    }
-
-    if (!joinDate) {
-      return defaultDays; // No join date, give full entitlement
-    }
-
-    const join = new Date(joinDate);
-    const probationMonths = 3;
-
-    // Calculate probation end date (join + 3 months)
-    const probationEnd = new Date(join);
-    probationEnd.setMonth(probationEnd.getMonth() + probationMonths);
-
-    const currentYearStart = new Date(year, 0, 1);
-    const currentYearEnd = new Date(year, 11, 31);
-    const today = new Date();
-
-    // If probation ends after this year, no annual leave for this year
-    if (probationEnd > currentYearEnd) {
-      return 0;
-    }
-
-    // If still on probation (probation end is in future)
-    if (probationEnd > today) {
-      return 0;
-    }
-
-    // If joined before this year and probation ended before this year
-    if (probationEnd < currentYearStart) {
-      return defaultDays; // Full entitlement
-    }
-
-    // Prorate: remaining months after probation ends
-    const probationEndMonth = probationEnd.getMonth(); // 0-11
-    const remainingMonths = 12 - probationEndMonth;
-    const proratedDays = Math.round((defaultDays * remainingMonths) / 12);
-
-    return proratedDays;
+  const closeExport = () => {
+    if (exportInFlight.current) return;
+    setExportDraft(null);
+    setExportError(false);
   };
 
-  const confirmBulkAllocate = async () => {
-    setAllocating(true);
-    let success = 0;
-    let failed = 0;
-
-    // Helper function to delay
-    const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
+  const runExport = async () => {
+    if (!exportDraft || exportInFlight.current) return;
+    exportInFlight.current = true;
+    setExporting(true);
+    setExportError(false);
+    let url: string | null = null;
     try {
-      // Fetch ALL active employees (not just current page)
-      const params: { page: number; limit: number; company_id?: number; employment_status?: string } = {
-        page: 1,
-        limit: 1000,
-        employment_status: 'active'
-      };
-      if (filterCompany !== 'all') {
-        params.company_id = Number(filterCompany);
-      }
-      const allEmployeesResponse = await employeeService.getAll(params);
-      const allEmployees = allEmployeesResponse.data;
-
-      const totalOperations = allEmployees.length * leaveTypes.length;
-      let completed = 0;
-
-      toast.loading(`Allocating... 0/${totalOperations}`, { id: 'bulk-allocate' });
-
-      // Process in batches to avoid rate limiting
-      const BATCH_SIZE = 5; // Process 5 employees at a time
-      const DELAY_BETWEEN_BATCHES = 500; // 500ms delay between batches
-
-      for (let i = 0; i < allEmployees.length; i += BATCH_SIZE) {
-        const batch = allEmployees.slice(i, i + BATCH_SIZE);
-
-        // Process batch in parallel
-        await Promise.all(
-          batch.map(async (emp) => {
-            for (const type of leaveTypes) {
-              try {
-                const allocatedDays = calculateProratedDays(
-                  emp.join_date,
-                  Number(type.default_days) || 0,
-                  type.code,
-                  new Date().getFullYear()
-                );
-
-                await leaveService.allocateLeave({
-                  employee_id: emp.id,
-                  leave_type_id: type.id,
-                  year: new Date().getFullYear(),
-                  allocated_days: allocatedDays,
-                });
-                success++;
-              } catch {
-                failed++;
-              }
-              completed++;
-            }
-          })
-        );
-
-        // Update progress
-        toast.loading(`Allocating... ${completed}/${totalOperations}`, { id: 'bulk-allocate' });
-
-        // Delay between batches to avoid rate limiting
-        if (i + BATCH_SIZE < allEmployees.length) {
-          await delay(DELAY_BETWEEN_BATCHES);
-        }
-      }
-
-      toast.dismiss('bulk-allocate');
-      toast.success(`Allocated ${success} balances to ${allEmployees.length} employees. ${failed > 0 ? `${failed} failed.` : ''}`);
-    } catch (error) {
-      toast.dismiss('bulk-allocate');
-      toast.error('Failed to fetch employees');
+      const blob = await leaveService.exportBalances({
+        year: exportDraft.year,
+        employment_status: exportDraft.employmentStatus,
+        locale: getLocale(),
+        ...(exportDraft.companyId !== undefined ? { company_id: exportDraft.companyId } : {}),
+        ...(exportDraft.departmentId !== undefined ? { department_id: exportDraft.departmentId } : {}),
+        ...(exportDraft.search ? { search: exportDraft.search } : {}),
+      });
+      url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `leave-entitlements-${exportDraft.year}-${exportDraft.employmentStatus}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      toast.success(t('Leave entitlements Excel downloaded.'));
+      setExportDraft(null);
+    } catch {
+      setExportError(true);
+    } finally {
+      // Released after the click has started the download.
+      if (url) { const objectUrl = url; window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0); }
+      exportInFlight.current = false;
+      setExporting(false);
     }
-
-    setAllocating(false);
-    setShowBulkAllocateModal(false);
-    fetchEntitlements();
   };
 
-  const handleExport = () => {
-    if (filteredEntitlements.length === 0) {
-      toast.error('No data to export');
-      return;
-    }
+  const allocationTypes = leaveTypes.filter(type => type.is_active !== false && (type.company_id == null || type.company_id === selectedEmployee?.employee.company_id));
 
-    const headers = [
-      'Employee ID',
-      'Employee Name',
-      'Department',
-      'Company',
-      ...leaveTypes.map(t => `${t.name} Allocated`),
-      ...leaveTypes.map(t => `${t.name} Used`),
-      ...leaveTypes.map(t => `${t.name} Pending`),
-      ...leaveTypes.map(t => `${t.name} Remaining`),
-    ];
-
-    const rows = filteredEntitlements.map(ent => [
-      ent.employee.employee_id,
-      ent.employee.name,
-      ent.employee.department?.name || '-',
-      ent.employee.company?.name || '-',
-      ...leaveTypes.map(t => ent.balances.find(b => b.leave_type_id === t.id)?.allocated_days || 0),
-      ...leaveTypes.map(t => ent.balances.find(b => b.leave_type_id === t.id)?.used_days || 0),
-      ...leaveTypes.map(t => ent.balances.find(b => b.leave_type_id === t.id)?.pending_days || 0),
-      ...leaveTypes.map(t => ent.balances.find(b => b.leave_type_id === t.id)?.remaining_days || 0),
-    ]);
-
-    const csv = [headers.join(','), ...rows.map(row => row.map(cell => `"${cell}"`).join(','))].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `leave_entitlements_${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    toast.success('Export successful');
-  };
-
-  const handleRefresh = () => {
-    fetchEntitlements();
-    toast.success('Data refreshed');
-  };
-
-  const getBalanceColor = (remaining: number, allocated: number) => {
-    if (allocated === 0) return 'text-gray-400';
-    const percentage = (remaining / allocated) * 100;
-    if (percentage > 50) return 'text-green-600';
-    if (percentage > 20) return 'text-amber-600';
-    return 'text-red-600';
-  };
-
-  const getProgressColor = (remaining: number, allocated: number) => {
-    if (allocated === 0) return 'bg-gray-200';
-    const percentage = (remaining / allocated) * 100;
-    if (percentage > 50) return 'bg-green-500';
-    if (percentage > 20) return 'bg-amber-500';
-    return 'bg-red-500';
-  };
-
-  return (
-    <div className="space-y-6">
-      {/* Header Banner */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-cyan-500 via-teal-500 to-emerald-500 rounded-2xl shadow-lg">
-        <div className="absolute inset-0 bg-grid-white/10 [mask-image:linear-gradient(0deg,transparent,rgba(255,255,255,0.5))]"></div>
-        <div className="absolute -top-24 -right-24 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
-        <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-cyan-400/20 rounded-full blur-3xl"></div>
-
-        <div className="relative px-6 py-8 sm:px-8 sm:py-10">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-14 h-14 bg-white/20 backdrop-blur-xl rounded-2xl flex items-center justify-center shadow-lg">
-                  <Users className="w-7 h-7 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-                    Leave Entitlements
-                  </h1>
-                  <p className="text-cyan-100 text-sm mt-1">
-                    Employee leave balances and entitlements for {new Date().getFullYear()}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleRefresh}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-white/20 backdrop-blur-xl text-white rounded-xl border border-white/30 hover:bg-white/30 transition-all duration-200 font-semibold"
-              >
-                <RefreshCw className="w-5 h-5" />
-                <span>Refresh</span>
-              </button>
-              <button
-                onClick={handleBulkAllocate}
-                disabled={allocating || entitlements.length === 0}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-white/20 backdrop-blur-xl text-white rounded-xl border border-white/30 hover:bg-white/30 transition-all duration-200 font-semibold disabled:opacity-50"
-              >
-                {allocating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Calendar className="w-5 h-5" />}
-                <span>Bulk Allocate</span>
-              </button>
-              <button
-                onClick={handleExport}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-cyan-600 rounded-xl hover:bg-cyan-50 transition-all duration-200 font-semibold shadow-lg"
-              >
-                <Download className="w-5 h-5" />
-                <span>Export</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-cyan-500 to-teal-600 rounded-xl flex items-center justify-center shadow-lg">
-              <Users className="w-6 h-6 text-white" />
-            </div>
-          </div>
-          <p className="text-3xl font-bold text-gray-900 mb-1">{stats.totalEmployees}</p>
-          <p className="text-sm text-gray-500">Total Employees</p>
-        </div>
-
-        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
-              <Calendar className="w-6 h-6 text-white" />
-            </div>
-          </div>
-          <p className="text-3xl font-bold text-gray-900 mb-1">{stats.totalAllocated}</p>
-          <p className="text-sm text-gray-500">Total Allocated Days</p>
-        </div>
-
-        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg">
-              <CheckCircle2 className="w-6 h-6 text-white" />
-            </div>
-            <span className="inline-flex items-center px-2 py-1 bg-green-50 text-green-700 text-xs font-bold rounded-lg">
-              Used
-            </span>
-          </div>
-          <p className="text-3xl font-bold text-gray-900 mb-1">{stats.totalUsed}</p>
-          <p className="text-sm text-gray-500">Total Used Days</p>
-        </div>
-
-        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-yellow-500 to-amber-500 rounded-xl flex items-center justify-center shadow-lg">
-              <Clock className="w-6 h-6 text-white" />
-            </div>
-            <span className="inline-flex items-center px-2 py-1 bg-yellow-50 text-yellow-700 text-xs font-bold rounded-lg">
-              Pending
-            </span>
-          </div>
-          <p className="text-3xl font-bold text-gray-900 mb-1">{stats.totalPending}</p>
-          <p className="text-sm text-gray-500">Total Pending Days</p>
-        </div>
-
-        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-purple-500 to-violet-600 rounded-xl flex items-center justify-center shadow-lg">
-              <BarChart3 className="w-6 h-6 text-white" />
-            </div>
-          </div>
-          <p className="text-3xl font-bold text-gray-900 mb-1">{stats.totalRemaining}</p>
-          <p className="text-sm text-gray-500">Total Remaining Days</p>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-        {/* Filters */}
-        <div className="px-6 py-4 border-b border-gray-100">
-          <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search by employee name, ID..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500"
-              />
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-2 text-sm text-gray-500">
-                <Filter className="w-4 h-4" />
-                <span>Filters:</span>
-              </div>
-              <select
-                value={filterCompany}
-                onChange={(e) => { setFilterCompany(e.target.value); setFilterDepartment('all'); }}
-                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500"
-              >
-                <option value="all">All Companies</option>
-                {companies.map(company => (
-                  <option key={company.id} value={company.id}>{company.name}</option>
-                ))}
-              </select>
-
-              <select
-                value={filterDepartment}
-                onChange={(e) => setFilterDepartment(e.target.value)}
-                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500"
-              >
-                <option value="all">All Departments</option>
-                {departments.map(dept => (
-                  <option key={dept.id} value={dept.id}>{dept.name}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Table */}
-        <div className="overflow-x-auto">
-          {loading ? (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="w-8 h-8 text-cyan-500 animate-spin" />
-            </div>
-          ) : filteredEntitlements.length === 0 ? (
-            <div className="text-center py-16">
-              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Users className="w-8 h-8 text-gray-400" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900">No employees found</h3>
-              <p className="mt-1 text-gray-500">Try adjusting your search or filters</p>
-            </div>
-          ) : (
-            <table className="w-full">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-100">
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                    Employee
-                  </th>
-                  {leaveTypes.map(type => (
-                    <th key={type.id} className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      <div className="flex flex-col items-center gap-1">
-                        <span>{type.code || type.name}</span>
-                        {type.available_during_probation === false && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 bg-orange-50 text-orange-600 text-[10px] font-medium rounded normal-case">
-                            No Probation
-                          </span>
-                        )}
-                      </div>
-                    </th>
-                  ))}
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                    Total
-                  </th>
-                  <th className="px-6 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filteredEntitlements.map((ent) => {
-                  const totalAllocated = ent.balances.reduce((sum, b) => sum + (b.allocated_days || 0), 0);
-                  const totalUsed = ent.balances.reduce((sum, b) => sum + (b.used_days || 0), 0);
-                  const totalRemaining = ent.balances.reduce((sum, b) => sum + (b.remaining_days || 0), 0);
-
-                  return (
-                    <tr key={ent.employee.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-cyan-100 rounded-full flex items-center justify-center">
-                            <User className="w-5 h-5 text-cyan-600" />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <p className="font-medium text-gray-900">{ent.employee.name}</p>
-                              {ent.employee.probation_end_date && new Date(ent.employee.probation_end_date) > new Date() && (
-                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">
-                                  Probation
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-xs text-gray-500">
-                              {ent.employee.employee_id}
-                              {ent.employee.department?.name && (
-                                <span className="text-gray-400"> • {ent.employee.department.name}</span>
-                              )}
-                            </p>
-                          </div>
-                        </div>
-                      </td>
-                      {leaveTypes.map(type => {
-                        const balance = ent.balances.find(b => b.leave_type_id === type.id);
-                        const allocated = balance?.allocated_days || 0;
-                        const remaining = balance?.remaining_days || 0;
-                        const percentage = allocated > 0 ? (remaining / allocated) * 100 : 0;
-
-                        return (
-                          <td key={type.id} className="px-4 py-4">
-                            <div className="text-center">
-                              <div className="flex items-center justify-center gap-2">
-                                <span className={`font-semibold ${getBalanceColor(remaining, allocated)}`}>
-                                  {remaining}
-                                </span>
-                                <span className="text-gray-400">/</span>
-                                <span className="text-gray-500">{allocated}</span>
-                              </div>
-                              <div className="mt-1 w-16 h-1.5 bg-gray-200 rounded-full mx-auto overflow-hidden">
-                                <div
-                                  className={`h-full ${getProgressColor(remaining, allocated)} transition-all`}
-                                  style={{ width: `${percentage}%` }}
-                                />
-                              </div>
-                            </div>
-                          </td>
-                        );
-                      })}
-                      <td className="px-4 py-4">
-                        <div className="text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            <span className={`font-semibold ${getBalanceColor(totalRemaining, totalAllocated)}`}>
-                              {totalRemaining}
-                            </span>
-                            <span className="text-gray-400">/</span>
-                            <span className="text-gray-500">{totalAllocated}</span>
-                          </div>
-                          <p className="text-xs text-gray-400 mt-1">
-                            {totalUsed} used
-                          </p>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            onClick={() => handleOpenAllocate(ent)}
-                            className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                            title="Allocate Leave"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleViewDetail(ent)}
-                            className="p-2 text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg transition-colors"
-                            title="View Details"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between">
-            <p className="text-sm text-gray-500">
-              Showing {filteredEntitlements.length} of {totalItems} employees
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="p-2 text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-              <span className="text-sm text-gray-600">
-                Page {page} of {totalPages}
-              </span>
-              <button
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="p-2 text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Bulk Allocate Confirmation Modal */}
-      {showBulkAllocateModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex min-h-screen items-center justify-center p-4">
-            <div className="fixed inset-0 bg-black/50 transition-opacity" onClick={() => !allocating && setShowBulkAllocateModal(false)} />
-
-            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
-              <div className="bg-gradient-to-br from-amber-500 via-orange-500 to-red-500 px-6 py-5">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-white/20 backdrop-blur-xl rounded-xl flex items-center justify-center">
-                    <Calendar className="w-6 h-6 text-white" />
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-bold text-white">Bulk Allocate Leave</h2>
-                    <p className="text-amber-100 text-sm">Confirm allocation for all employees</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-6 space-y-4">
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                  <p className="text-amber-800 font-medium mb-2">
-                    This will allocate default leave balances to:
-                  </p>
-                  <ul className="text-sm text-amber-700 space-y-1">
-                    <li>• <strong>{totalItems}</strong> employees {filterCompany !== 'all' ? '(filtered by company)' : '(all companies)'}</li>
-                    <li>• <strong>{leaveTypes.length}</strong> leave types</li>
-                    <li>• Year: <strong>{new Date().getFullYear()}</strong></li>
-                  </ul>
-                </div>
-
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-sm font-medium text-gray-700 mb-2">Leave types to allocate:</p>
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {leaveTypes.map(type => (
-                      <div key={type.id} className="flex items-center justify-between text-sm">
-                        <div className="flex items-center gap-2">
-                          <span className="text-gray-600">{type.code} - {type.name}</span>
-                          {type.available_during_probation === false && (
-                            <span className="inline-flex items-center px-1.5 py-0.5 bg-orange-50 text-orange-600 text-[10px] font-medium rounded">
-                              No Probation
-                            </span>
-                          )}
-                        </div>
-                        <span className="font-medium text-gray-900">{type.default_days} days</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <p className="text-sm font-medium text-blue-800 mb-1">Proration Rules (Annual Leave):</p>
-                  <ul className="text-xs text-blue-700 space-y-1">
-                    <li>• Probation period: <strong>3 months</strong> from join date</li>
-                    <li>• Still on probation → <strong>0 days</strong></li>
-                    <li>• After probation → Prorated by remaining months</li>
-                    <li>• Other leave types → Full default days</li>
-                  </ul>
-                </div>
-
-                <p className="text-sm text-gray-500">
-                  Existing balances will be updated with the calculated values.
-                </p>
-
-                <div className="flex items-center gap-3 pt-4">
-                  <button
-                    onClick={() => setShowBulkAllocateModal(false)}
-                    disabled={allocating}
-                    className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={confirmBulkAllocate}
-                    disabled={allocating}
-                    className="flex-1 px-4 py-2.5 bg-amber-600 text-white font-medium rounded-lg hover:bg-amber-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {allocating ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Allocating...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 className="w-4 h-4" />
-                        Confirm Allocate
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Allocate Modal */}
-      {showAllocateModal && selectedEmployee && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex min-h-screen items-center justify-center p-4">
-            <div className="fixed inset-0 bg-black/50 transition-opacity" onClick={handleCloseAllocateModal} />
-
-            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-              <div className="bg-gradient-to-br from-green-500 via-emerald-500 to-teal-500 px-6 py-5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-white/20 backdrop-blur-xl rounded-xl flex items-center justify-center">
-                      <Plus className="w-6 h-6 text-white" />
-                    </div>
-                    <div>
-                      <h2 className="text-xl font-bold text-white">Allocate Leave</h2>
-                      <p className="text-green-100 text-sm">{selectedEmployee.employee.name}</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={handleCloseAllocateModal}
-                    className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center text-white hover:bg-white/30 transition-colors"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="p-6 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Leave Type
-                  </label>
-                  <select
-                    value={allocateForm.leave_type_id}
-                    onChange={(e) => {
-                      const typeId = Number(e.target.value);
-                      const selectedType = leaveTypes.find(t => t.id === typeId);
-                      const proratedDays = selectedType
-                        ? calculateProratedDays(selectedEmployee.employee.join_date, Number(selectedType.default_days) || 0, selectedType.code, new Date().getFullYear())
-                        : 0;
-                      setAllocateForm(prev => ({
-                        ...prev,
-                        leave_type_id: typeId,
-                        allocated_days: proratedDays,
-                      }));
-                    }}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500"
-                  >
-                    {leaveTypes.map(type => (
-                      <option key={type.id} value={type.id}>
-                        {type.code} - {type.name} (Default: {type.default_days} days){type.available_during_probation === false ? ' [No Probation]' : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Allocated Days
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="365"
-                    step="0.5"
-                    value={allocateForm.allocated_days}
-                    onChange={(e) => setAllocateForm(prev => ({ ...prev, allocated_days: Number(e.target.value) }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500"
-                  />
-                </div>
-
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-sm text-gray-600">
-                    <strong>Year:</strong> {new Date().getFullYear()}
-                  </p>
-                  <p className="text-sm text-gray-600 mt-1">
-                    <strong>Employee:</strong> {selectedEmployee.employee.name} ({selectedEmployee.employee.employee_id})
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-3 pt-4">
-                  <button
-                    onClick={handleCloseAllocateModal}
-                    className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleAllocate}
-                    disabled={allocating}
-                    className="flex-1 px-4 py-2.5 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {allocating && <Loader2 className="w-4 h-4 animate-spin" />}
-                    Allocate
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Detail Modal */}
-      {showDetailModal && selectedEmployee && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex min-h-screen items-center justify-center p-4">
-            <div className="fixed inset-0 bg-black/50 transition-opacity" onClick={handleCloseDetailModal} />
-
-            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden">
-              <div className="bg-gradient-to-br from-cyan-500 via-teal-500 to-emerald-500 px-6 py-5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-white/20 backdrop-blur-xl rounded-xl flex items-center justify-center">
-                      <User className="w-6 h-6 text-white" />
-                    </div>
-                    <div>
-                      <h2 className="text-xl font-bold text-white">Leave Entitlements</h2>
-                      <p className="text-cyan-100 text-sm">{selectedEmployee.employee.name}</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={handleCloseDetailModal}
-                    className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center text-white hover:bg-white/30 transition-colors"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="p-6">
-                {/* Employee Info */}
-                <div className="bg-gray-50 rounded-lg p-4 mb-6">
-                  <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 bg-cyan-100 rounded-full flex items-center justify-center">
-                      <User className="w-7 h-7 text-cyan-600" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-semibold text-gray-900 text-lg">{selectedEmployee.employee.name}</p>
-                      <p className="text-sm text-gray-500">{selectedEmployee.employee.employee_id}</p>
-                      <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
-                        {selectedEmployee.employee.department?.name && (
-                          <div className="flex items-center gap-1">
-                            <Briefcase className="w-4 h-4" />
-                            <span>{selectedEmployee.employee.department.name}</span>
-                          </div>
-                        )}
-                        {selectedEmployee.employee.company?.name && (
-                          <div className="flex items-center gap-1">
-                            <Building className="w-4 h-4" />
-                            <span>{selectedEmployee.employee.company.name}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Leave Balances */}
-                <div className="space-y-4">
-                  <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                    <CalendarDays className="w-5 h-5 text-cyan-600" />
-                    Leave Balances ({new Date().getFullYear()})
-                  </h3>
-
-                  <div className="grid grid-cols-1 gap-3">
-                    {selectedEmployee.balances.map(balance => {
-                      const percentage = balance.allocated_days > 0
-                        ? (balance.remaining_days / balance.allocated_days) * 100
-                        : 0;
-
-                      return (
-                        <div key={balance.id || balance.leave_type_id} className="bg-gray-50 rounded-lg p-4">
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium text-gray-900">
-                                {balance.leaveType?.code ? `${balance.leaveType.code} - ${balance.leaveType.name}` : balance.leaveType?.name || 'Unknown'}
-                              </span>
-                              {balance.leaveType?.available_during_probation === false && (
-                                <span className="inline-flex items-center px-1.5 py-0.5 bg-orange-50 text-orange-600 text-[10px] font-medium rounded">
-                                  No Probation
-                                </span>
-                              )}
-                              {balance.leaveType?.available_during_probation === true && (
-                                <span className="inline-flex items-center px-1.5 py-0.5 bg-green-50 text-green-600 text-[10px] font-medium rounded">
-                                  Probation OK
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className={`font-bold ${getBalanceColor(balance.remaining_days, balance.allocated_days)}`}>
-                                {balance.remaining_days} days remaining
-                              </span>
-                            </div>
-                          </div>
-                          <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full ${getProgressColor(balance.remaining_days, balance.allocated_days)} transition-all`}
-                              style={{ width: `${percentage}%` }}
-                            />
-                          </div>
-                          <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
-                            <div className="flex items-center gap-4">
-                              <span>Allocated: {balance.allocated_days}</span>
-                              <span className="text-green-600">Used: {balance.used_days}</span>
-                              <span className="text-amber-600">Pending: {balance.pending_days}</span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Summary */}
-                  <div className="bg-cyan-50 rounded-lg p-4 border border-cyan-200">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-cyan-700">Total Summary</span>
-                      <div className="flex items-center gap-4 text-sm">
-                        <span className="text-gray-600">
-                          Allocated: {selectedEmployee.balances.reduce((sum, b) => sum + (b.allocated_days || 0), 0)}
-                        </span>
-                        <span className="text-green-600">
-                          Used: {selectedEmployee.balances.reduce((sum, b) => sum + (b.used_days || 0), 0)}
-                        </span>
-                        <span className="font-bold text-cyan-700">
-                          Remaining: {selectedEmployee.balances.reduce((sum, b) => sum + (b.remaining_days || 0), 0)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 mt-6">
-                  <button
-                    onClick={handleCloseDetailModal}
-                    className="flex-1 px-4 py-2.5 bg-cyan-600 text-white font-medium rounded-lg hover:bg-cyan-700 transition-colors"
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  return <OperationalWorkspace module="leave" title={t("Leave Entitlements")} description={t('Employee leave balances and allocations for {year}.', { year: new Date().getFullYear() })} className="lw-page"
+    actions={<><button className="ow-button" onClick={fetchEntitlements} disabled={loading}><RefreshCw size={16} />{t("Refresh")}</button><button className="ow-button" onClick={openExport} disabled={exporting}><Download size={16} />{t('Export Excel')}</button>{canAllocate && <button className="ow-button ow-primary" onClick={handleBulkAllocate} disabled={allocating || loading || loadError || optionError || !entitlements.length || !leaveTypes.length}><Plus size={16} />{t("Bulk Allocate")}</button>}</>}
+    filters={<><label className="ow-field">{t("Company")}<select aria-label={t("Company filter")} value={filterCompany} onChange={e => { setFilterCompany(e.target.value); setFilterDepartment('all'); setPage(1); }}><option value="all">{t("All assigned companies")}</option>{companies.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}</select></label><label className="ow-field">{t("Department")}<select aria-label={t("Department filter")} value={filterDepartment} onChange={e => { setFilterDepartment(e.target.value); setPage(1); }}><option value="all">{t("All departments")}</option>{departments.map(department => <option key={department.id} value={department.id}>{department.name}</option>)}</select></label><label className="ow-field">{t("Displayed leave type")}<select aria-label={t("Displayed leave type")} value={matrixType} onChange={e => setMatrixType(e.target.value)}>{!leaveTypes.length && <option value="">{t("No leave types")}</option>}{leaveTypes.map(type => <option key={type.id} value={type.id}>{type.name}</option>)}</select></label><button className="ow-button" onClick={() => { setFilterCompany('all'); setFilterDepartment('all'); setSearch(''); setPage(1); }}>{t("Reset filters")}</button><details className="lw-help"><summary>{t("About allocation")}</summary><p>{t("Allocation previews follow employee eligibility. Existing balances and leave history are skipped.")}</p></details></>}
+    >
+    {optionError && <p className="ow-feedback" role="alert">{t("Unable to load filter options.")} <button onClick={() => { setOptionError(false); fetchCompanies(); fetchLeaveTypes(); fetchDepartments(); }}>{t("Retry options")}</button></p>}
+    <section className="ow-register"><div className="lw-register-tools"><p className="lw-note">{t("Pending requests reserve part of the remaining balance.")}</p><label className="lw-search"><Search size={17} /><input aria-label={t("Search employees")} placeholder={t("Search by employee name, ID...")} value={search} onChange={e => setSearch(e.target.value)} /></label></div>
+      {loading ? <div className="lw-empty" role="status"><Loader2 className="animate-spin" />{t("Loading balances…")}</div> : loadError ? <div className="lw-empty" role="alert">{t("Unable to load employee balances.")}<button className="ow-button" onClick={fetchEntitlements}>{t("Retry balances")}</button></div> : !filteredEntitlements.length ? <div className="lw-empty"><h3>{t("No employees found")}</h3><p>{t("Adjust the company, department or search.")}</p></div> : <div className="lw-table-wrap"><table className="ow-table lw-records lw-matrix"><thead><tr><th>{t("Employee")}</th><th>{t("Allocated")}</th><th>{t("Used")}</th><th>{t("Pending")}</th><th>{t("Remaining balance")}</th><th>{t("Actions")}</th></tr></thead><tbody>
+        {filteredEntitlements.map(entitlement => { const balance = entitlement.balances.find(item => item.leave_type_id === Number(matrixType)); return <tr key={entitlement.employee.id} data-leave-balance>
+          <td data-label={t("Employee")}><strong>{entitlement.employee.name}</strong><span className="lw-sub">{entitlement.employee.employee_id}</span><span className="lw-sub">{entitlement.employee.company?.name || '—'} / {entitlement.employee.department?.name || '—'}</span>{balance?.id === 0 && <span className="lw-sub">{t("Not allocated")}</span>}{!balance && <span className="lw-sub">{t("Not applicable")}</span>}</td>
+          <td data-label={t("Allocated")} className="lw-number">{quantity(balance?.id ? balance.allocated_days : '—')}</td><td data-label={t("Used")} className="lw-number">{quantity(balance?.id ? balance.used_days : '—')}</td><td data-label={t("Pending")} className="lw-number">{quantity(balance?.id ? balance.pending_days : '—')}</td><td data-label={t("Remaining balance")} className="lw-number lw-available">{quantity(balance?.id ? balance.remaining_days : '—')}</td>
+          <td data-label={t("Actions")}><div className="lw-actions"><button className="ow-button" title={t("View Details")} onClick={() => handleViewDetail(entitlement)}><Eye size={15} /><span className="lw-sr-only">{t("Details")}</span></button>{canAllocate && <button className="ow-button" title={t("Allocate Leave")} disabled={optionError || !leaveTypes.length} onClick={() => handleOpenAllocate(entitlement)}><Plus size={15} /><span>{t("Allocate")}</span></button>}</div></td>
+        </tr>; })}
+      </tbody></table></div>}
+      {!loading && !loadError && <div className="lw-page-totals"><span>{t("All leave types on this page")}</span><span><strong>{quantity(stats.totalUsed)}</strong>{' '}{t("days used")}</span><span><strong>{quantity(stats.totalPending)}</strong>{' '}{t("pending")}</span><span><strong>{quantity(stats.totalRemaining)}</strong>{' '}{t("remaining balance")}</span></div>}
+      {!loading && !loadError && <div className="ow-pagination"><span>{quantity(filteredEntitlements.length)}{' '}{t("shown ·")} {quantity(totalItems)}{' '}{t("matching employees")}</span><div className="lw-actions"><button className="ow-button" aria-label={t("Previous page")} disabled={page <= 1} onClick={() => setPage(p => p - 1)}><ChevronLeft size={16} /></button><span>{t("Page")} {page}{' '}{t("of")} {totalPages}</span><button className="ow-button" aria-label={t("Next page")} disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}><ChevronRight size={16} /></button></div></div>}
+    </section>
+    {exportDraft && <OperationalDialog title={t('Export leave entitlements')} subtitle={t('Excel workbook for every matching employee')} onClose={closeExport} busy={exporting} className="lw-dialog leave-refresh-dialog"><div className="ph-workflow dw-detail dw-fields">
+      <p className="dw-note">{t('The current Company, Department and Search filters apply. Every page and every leave type is included — not only the rows or the leave type shown on screen.')}</p>
+      <dl className="dw-kv" aria-label={t('Export filters')}>
+        <div><dt>{t('Company')}</dt><dd>{exportDraft.companyId === undefined ? t('All assigned companies') : exportDraft.companyName}</dd></div>
+        <div><dt>{t('Department')}</dt><dd>{exportDraft.departmentId === undefined ? t('All departments') : exportDraft.departmentName}</dd></div>
+        <div><dt>{t('Search text')}</dt><dd>{exportDraft.search ?? t('No search')}</dd></div>
+      </dl>
+      <label className="ow-field">{t('Balance year')}<select aria-label={t('Export year')} disabled={exporting} value={exportDraft.year} onChange={event => { const year = Number(event.target.value); setExportDraft(draft => draft && { ...draft, year }); }}>{exportYears.map(year => <option key={year} value={year}>{year}</option>)}</select></label>
+      <label className="ow-field">{t('Employees to include')}<select aria-label={t('Employees to include')} disabled={exporting} value={exportDraft.employmentStatus} onChange={event => { const employmentStatus = event.target.value === 'active' ? 'active' : 'all'; setExportDraft(draft => draft && { ...draft, employmentStatus }); }}><option value="all">{t('All employment statuses')}</option><option value="active">{t('Active employees only')}</option></select></label>
+      <p className="ph-callout dw-callout">{t('The table on this page lists active employees only. "All employment statuses" also includes resigned and inactive employees, so leave they already used in that year stays visible.')} {t('Exporting does not change the table year, balances or allocations.')}</p>
+      {exportError && <p className="ow-feedback" role="alert">{t('The export could not be created. Nothing was changed. Please try again.')}</p>}
+      <div className="ph-form-actions dw-actions"><button className="ow-button" disabled={exporting} onClick={closeExport}>{t('Cancel')}</button><button className="ow-button ow-primary" disabled={exporting} aria-busy={exporting} onClick={runExport}>{exporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}{' '}{exporting ? t('Preparing export…') : exportError ? t('Try export again') : t('Download Excel')}</button></div>
+    </div></OperationalDialog>}
+    {showBulkAllocateModal && <OperationalDialog title={t("Bulk Allocate Leave")} subtitle={t("Allocate missing balances for the selected filters.")} onClose={handleCloseBulkAllocateModal} busy={allocating} className="lw-dialog leave-refresh-dialog"><div className="ph-workflow dw-detail dw-fields"><AllocationPreview result={allocationPreview} error={previewError} onRetry={() => setPreviewRetry(value => value + 1)} /><div className="ph-form-actions dw-actions"><button className="ow-button" disabled={allocating} onClick={handleCloseBulkAllocateModal}>{t("Cancel")}</button><button className="ow-button ow-primary" disabled={allocating || !canAllocate || !allocationPreview?.created} onClick={confirmAllocation}>{allocating ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}{' '}{t("Confirm Allocate")}</button></div></div></OperationalDialog>}
+    {showAllocateModal && selectedEmployee && <OperationalDialog title={t("Allocate Leave")} subtitle={selectedEmployee.employee.name} onClose={handleCloseAllocateModal} busy={allocating} className="lw-dialog leave-refresh-dialog"><div className="ph-workflow dw-detail dw-fields"><label className="ow-field">{t("Leave Type")}<select aria-label={t("Allocation leave type")} disabled={allocating} value={allocateForm.leave_type_id} onChange={e => { const typeId = Number(e.target.value); setAllocateForm(prev => ({ ...prev, leave_type_id: typeId })); setAllocationRequest({ employee_id: allocateForm.employee_id, leave_type_ids: [typeId], dry_run: true }); }}>{allocationTypes.map(type => <option key={type.id} value={type.id}>{type.code} - {type.name}{' '}{t("(Default:")} {quantity(type.default_days)}{' '}{t("days)")}</option>)}</select></label>{allocationRequest ? <AllocationPreview result={allocationPreview} error={previewError} onRetry={() => setPreviewRetry(value => value + 1)} /> : <p role="alert">{t("No leave types available for allocation.")}</p>}<div className="ph-form-actions dw-actions"><button className="ow-button" disabled={allocating} onClick={handleCloseAllocateModal}>{t("Cancel")}</button><button className="ow-button ow-primary" disabled={allocating || !canAllocate || !allocationPreview?.created} onClick={confirmAllocation}>{allocating && <Loader2 size={16} className="animate-spin" />}{' '}{t("Allocate")}</button></div></div></OperationalDialog>}
+    {showDetailModal && selectedEmployee && <OperationalDialog title={t("Employee leave balances")} subtitle={`${selectedEmployee.employee.name} / ${new Date().getFullYear()}`} onClose={handleCloseDetailModal} className="lw-dialog lw-dialog-wide leave-refresh-dialog"><div className="ph-workflow dw-detail dw-fields"><p className="lw-note">{selectedEmployee.employee.company?.name} / {selectedEmployee.employee.department?.name}</p><div className="ph-table-scroll dw-table-scroll"><table className="ow-table"><thead><tr><th>{t("Leave type")}</th><th>{t("Allocated")}</th><th>{t("Used")}</th><th>{t("Pending")}</th><th>{t("Remaining balance")}</th></tr></thead><tbody>{selectedEmployee.balances.map(balance => <tr key={balance.leave_type_id}><td>{balance.leaveType?.name}{!balance.id && <span className="lw-sub">{t("Not allocated")}</span>}</td><td>{quantity(balance.id ? balance.allocated_days : '—')}</td><td>{quantity(balance.id ? balance.used_days : '—')}</td><td>{quantity(balance.id ? balance.pending_days : '—')}</td><td className="lw-available">{quantity(balance.id ? balance.remaining_days : '—')}</td></tr>)}</tbody></table></div><div className="ph-form-actions dw-actions"><button className="ow-button" onClick={handleCloseDetailModal}>{t("Close")}</button></div></div></OperationalDialog>}
+  </OperationalWorkspace>;
 }

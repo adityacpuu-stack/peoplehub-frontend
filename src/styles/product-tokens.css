@@ -1,0 +1,17 @@
+/* PeopleHub: quiet navigation, readable people records and precise financial tables. */
+@font-face { font-family: 'Public Sans'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/public-sans/400.ttf') format('truetype'); }
+@font-face { font-family: 'Public Sans'; font-style: normal; font-weight: 500; font-display: swap; src: url('/fonts/public-sans/500.ttf') format('truetype'); }
+@font-face { font-family: 'Public Sans'; font-style: normal; font-weight: 600; font-display: swap; src: url('/fonts/public-sans/600.ttf') format('truetype'); }
+@font-face { font-family: 'Public Sans'; font-style: normal; font-weight: 700; font-display: swap; src: url('/fonts/public-sans/700.ttf') format('truetype'); }
+:root {
+  --ph-font: 'Public Sans', 'Segoe UI', sans-serif;
+  --ph-paper: #ffffff;
+  --ph-navigation: #f5f6f7;
+  --ph-ink: #24302b;
+  --ph-muted: #65716b;
+  --ph-line: #e4e9e6;
+  --ph-accent: #187451;
+  --ph-accent-hover: #115d40;
+  --ph-selection: #edf4f0;
+  --ph-focus: #78ad96;
+}

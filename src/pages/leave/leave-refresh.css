@@ -1,0 +1,102 @@
+/* Leave Management only: one full-width register and compact workflow forms. */
+.ow-leave.lw-page { color:#243b32; }
+.ow-leave .ow-header { margin-bottom:22px; }
+.ow-leave .ow-header h1 { font-size:28px; line-height:1.25; letter-spacing:-.8px; color:#163e2f; margin-bottom:8px; }
+.ow-leave .ow-header p { font-size:14px; color:#718077; }
+.ow-leave .ow-workspace { border:1px solid #e1e8e3; border-radius:12px; background:#fff; overflow:hidden; }
+.ow-leave .ow-filters { padding:22px 24px 18px; gap:14px; border-bottom:1px solid #e8eee9; }
+.ow-leave .ow-filters > .ow-field { flex:0 1 210px; }
+.ow-leave .ow-filters :is(input,select) { font-size:13px; min-height:40px; border-color:#e1e8e3; border-radius:8px; }
+.ow-leave .ow-filters > .lw-help { order:3; flex-basis:100%; max-width:none; }
+.ow-leave .lw-help summary { padding:0; width:fit-content; font-size:11px; color:#718077; }
+.ow-leave .lw-help[open] p { padding:8px 0 0; max-width:80ch; }
+.ow-leave .ow-button,.leave-refresh-dialog :is(.ow-button,.ph-button) { border-radius:8px; min-height:38px; font-weight:500; }
+.ow-leave .ow-primary,.leave-refresh-dialog :is(.ow-primary,.ph-button-primary) { background:#176b4a; border-color:#176b4a; color:#fff; }
+.ow-leave .ow-primary:hover:not(:disabled),.leave-refresh-dialog :is(.ow-primary,.ph-button-primary):hover:not(:disabled) { background:#115439; }
+.ow-leave .lw-register-tools { padding:18px 24px; }
+.ow-leave .lw-search { width:min(360px,100%); min-height:40px; border-radius:8px; border-color:#e1e8e3; }
+.ow-leave .lw-search input { font-size:13px; }
+.ow-leave .ow-table th { background:#f8faf8; padding:12px 20px; font-size:11px; color:#718077; }
+.ow-leave .ow-table td { padding:18px 20px; border-color:#edf1ed; font-size:13px; }
+.ow-leave .ow-table :is(th,td):first-child { padding-left:24px; }
+.ow-leave .ow-table :is(th,td):last-child { padding-right:24px; }
+.ow-leave .lw-status { padding:4px 9px; border-radius:6px; font-size:11px; background:#f2f5f2; }
+.ow-leave .lw-status.bg-green-100,.ow-leave .lw-active { background:#edf6ef; color:#247247; }
+.ow-leave .lw-status.bg-yellow-100 { background:#fff7e6; color:#8c641f; }
+.ow-leave .lw-status.bg-red-100 { background:#fdf0f0; color:#a14040; }
+.ow-leave .lw-actions .ow-button { min-height:32px; }
+.ow-leave .lw-requests td:last-child { min-width:190px; }
+.ow-leave .lw-page-totals { padding:16px 24px; background:#fbfcfa; border-color:#edf1ed; }
+.ow-leave .ow-pagination { padding:16px 24px; background:white; }
+.ow-leave .lw-policy-details summary { color:#49715a; }
+.ow-leave .lw-policy-details[open] { border-left:2px solid #d8e5d3; padding-left:12px; }
+.ow-leave .lw-matrix .lw-available { color:#176b4a; font-size:15px; }
+.ow-leave .lw-report-heading { padding:24px; display:block; }
+.ow-leave .lw-report-heading h2 { font-size:17px; color:#163e2f; }
+.ow-leave .lw-report-totals { margin-top:22px; gap:18px 36px; }
+.ow-leave .lw-report-totals > span { display:flex; flex-direction:column; gap:5px; }
+.ow-leave .lw-report-totals strong { font-size:28px; line-height:1.1; letter-spacing:-.6px; margin:0; color:#163e2f; }
+.ow-leave .lw-chart { margin:0 24px; padding:12px 0 18px; height:225px; border-color:#e8eee9; }
+.ow-leave .lw-chart-track > div { background:#438265; border-radius:4px 4px 0 0; }
+.ow-leave .lw-status-report { padding:18px 24px 24px; border-bottom:1px solid #e8eee9; }
+.ow-leave .leave-report-breakdowns { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); }
+.ow-leave .leave-report-breakdowns > section { min-width:0; margin:0; }
+.ow-leave .leave-report-breakdowns > section + section { border-left:1px solid #e8eee9; }
+.ow-leave .leave-report-breakdowns .lw-register-tools { align-items:start; flex-direction:column; gap:5px; }
+.ow-leave .leave-report-breakdowns .ow-table :is(th,td) { padding:14px 12px; }
+.ow-leave .leave-report-breakdowns .ow-table :is(th,td):first-child { padding-left:24px; }
+.leave-refresh-dialog.ph-account-dialog.ow-dialog[open] { display:flex; flex-direction:column; border-radius:14px; overflow:hidden; }
+.leave-refresh-dialog .ow-dialog-header { padding:22px 26px; background:#fbfcfa; flex-shrink:0; border-color:#e1e8e3; }
+.leave-refresh-dialog .ow-dialog-header h2 { color:#163e2f; font-size:21px; }
+.leave-refresh-dialog .ow-dialog-header p { margin-top:5px; line-height:1.5; }
+.leave-refresh-dialog > :is(.dw-form,.dw-detail,.dw-confirm) { overflow-y:auto; min-height:0; padding:22px 26px; overscroll-behavior:contain; }
+.leave-refresh-dialog .dw-form-content { gap:20px; }
+.leave-refresh-dialog .dw-section { padding-bottom:20px; border-color:#e8eee9; }
+.leave-refresh-dialog .dw-section > h3 { color:#386346; margin-bottom:14px; }
+.leave-refresh-dialog .dw-form-grid { gap:16px 22px; }
+.leave-refresh-dialog .dw-form label { font-size:12px; color:#496153; }
+.leave-refresh-dialog .dw-form :is(input:not([type=checkbox]):not([type=radio]),select,textarea),.leave-refresh-dialog .dw-confirm textarea { border-radius:8px; font-size:13px; border-color:#e1e8e3; }
+.leave-refresh-dialog .dw-actions { position:sticky; bottom:-22px; padding:16px 26px; margin:22px -26px -22px; border-color:#e1e8e3; background:#fbfcfa; z-index:3; }
+.leave-refresh-dialog .dw-actions > button:first-child { margin-right:0; }
+.leave-refresh-dialog .dw-callout { border-radius:8px; margin-block:10px; }
+.leave-refresh-dialog .dw-allocation-summary { background:#f3f8ef; border:1px solid #dce7d5; padding:18px; border-radius:9px; gap:18px 26px; }
+.leave-refresh-dialog .dw-allocation-summary dd { color:#176b4a; }
+.leave-refresh-dialog .dw-detail-grid { padding:18px; border:1px solid #e1e8e3; border-radius:9px; background:#fbfcfa; }
+.leave-refresh-dialog .ow-table th { background:#f8faf8; }
+.leave-refresh-dialog .ow-table :is(th,td) { font-size:12px; padding:12px; }
+.leave-refresh-dialog .lw-detail-heading { padding-bottom:14px; border-bottom:1px solid #e8eee9; }
+.leave-request-editor.ph-account-dialog.ow-dialog,.leave-policy-editor.ph-account-dialog.ow-dialog { max-width:840px; }
+.leave-request-editor .dw-section:first-of-type > .dw-fields { grid-template-columns:repeat(2,minmax(0,1fr)); gap:22px; }
+.leave-policy-editor .dw-section:first-of-type > .dw-fields { grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px 22px; }
+.leave-policy-editor .dw-section:first-of-type > .dw-fields > .dw-form-grid { grid-column:1/-1; }
+.leave-policy-editor .dw-section:nth-of-type(2) > .dw-fields { grid-template-columns:repeat(3,minmax(0,1fr)); gap:22px; }
+.leave-policy-editor .dw-section:nth-of-type(2) > .dw-fields > .dw-form-grid { display:contents; }
+.leave-policy-editor .dw-checks { gap:14px 24px; }
+.leave-policy-editor .dw-checks input[type=number] { width:90px; }
+@media(max-width:1250px) { .ow-leave .leave-report-breakdowns { grid-template-columns:minmax(0,1fr); } .ow-leave .leave-report-breakdowns > section + section { border-left:0; border-top:1px solid #e8eee9; } }
+@media(max-width:767px) {
+  .ow-leave .ow-header h1 { font-size:25px; }
+  .ow-leave .ow-header p { font-size:13px; }
+  .ow-leave .ow-filters { padding:18px 16px; display:flex; gap:12px; }
+  .ow-leave .ow-filters > .ow-field { flex:1 1 190px; }
+  .ow-leave :is(.lw-register-tools,.ow-pagination,.lw-page-totals,.lw-report-heading,.lw-status-report) { padding:16px; }
+  .ow-leave .lw-report-totals { flex-direction:row; gap:20px; }
+  .ow-leave .lw-report-totals strong { font-size:24px; }
+  .ow-leave .lw-chart { margin-inline:16px; }
+  .leave-refresh-dialog .ow-dialog-header { padding:18px; }
+  .leave-refresh-dialog > :is(.dw-form,.dw-detail,.dw-confirm) { padding:18px; }
+  .leave-refresh-dialog .dw-actions { bottom:-18px; padding:14px 18px; margin:20px -18px -18px; }
+}
+@media(max-width:700px) {
+  .ow-leave .lw-records tr { padding:18px 16px; }
+  .ow-leave .lw-records td { padding:6px 0 6px 112px; }
+  .ow-leave .lw-records td:first-child { padding:0 0 12px; }
+  .ow-leave .lw-records td:last-child { padding-right:0; min-width:0; }
+  .ow-leave .lw-matrix td { padding:22px 0 0; }
+  .ow-leave .lw-matrix td:last-child { padding:6px 0 0; }
+  .ow-leave .leave-report-breakdowns .ow-table td:first-child { padding-left:0; }
+  .ow-leave .leave-report-breakdowns .ow-table td:not(:first-child) { padding:6px 0 6px 112px; }
+}
+@media(max-width:600px) {
+  .leave-request-editor .dw-section:first-of-type > .dw-fields,.leave-policy-editor .dw-section:first-of-type > .dw-fields,.leave-policy-editor .dw-section:nth-of-type(2) > .dw-fields { grid-template-columns:minmax(0,1fr); gap:16px; }
+}

@@ -1,20 +1,8 @@
+import { insightNumber, insightFixed } from '@/pages/ceo/insight-display';
+import { t, useLocale, intlLocale } from '@/i18n';
+import { ReportSummary, ReportPage, ReportHeader, ReportSection } from '@/pages/dashboard/ReportingLayout';
 import { useEffect, useState } from 'react';
-import {
-  DollarSign,
-  Building2,
-  Users,
-  TrendingUp,
-  Wallet,
-  CreditCard,
-  PiggyBank,
-  AlertCircle,
-  Calendar,
-  Receipt,
-  Briefcase,
-  CheckCircle,
-  Clock,
-  ArrowUpRight,
-} from 'lucide-react';
+import { DollarSign, Building2, Wallet, PiggyBank, AlertCircle, Calendar, Receipt, Briefcase, CheckCircle, Clock, ArrowUpRight } from 'lucide-react';
 import {
   XAxis,
   YAxis,
@@ -53,6 +41,7 @@ interface MonthlyTrend {
 }
 
 export function CEOFinancialOverviewPage() {
+  useLocale();
   const { user } = useAuthStore();
   const [groupData, setGroupData] = useState<GroupDashboard | null>(null);
   const [payrolls, setPayrolls] = useState<Payroll[]>([]);
@@ -88,7 +77,7 @@ export function CEOFinancialOverviewPage() {
         setPayrolls(payrollRes.data || []);
       } catch (err: any) {
         console.error('Failed to fetch financial data:', err);
-        setError(err.message || 'Failed to load data');
+        setError('Failed to load data');
       } finally {
         setIsLoading(false);
       }
@@ -98,7 +87,7 @@ export function CEOFinancialOverviewPage() {
   }, [userCompanyId, isGroupCEO, selectedPeriod]);
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('id-ID', {
+    return new Intl.NumberFormat(intlLocale(), {
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0,
@@ -108,10 +97,10 @@ export function CEOFinancialOverviewPage() {
 
   const formatCompactCurrency = (value: number) => {
     if (value >= 1000000000) {
-      return `Rp ${(value / 1000000000).toFixed(1)}B`;
+      return `Rp ${insightFixed((value / 1000000000), 1)}${t('billion short')}`;
     }
     if (value >= 1000000) {
-      return `Rp ${(value / 1000000).toFixed(0)}M`;
+      return `Rp ${insightFixed((value / 1000000), 0)}${t('million short')}`;
     }
     return formatCurrency(value);
   };
@@ -121,7 +110,7 @@ export function CEOFinancialOverviewPage() {
     const date = new Date();
     date.setMonth(date.getMonth() - i);
     const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-    const label = date.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+    const label = date.toLocaleDateString(intlLocale(), { month: 'long', year: 'numeric' });
     return { value, label };
   });
 
@@ -134,14 +123,9 @@ export function CEOFinancialOverviewPage() {
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
           <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Failed to load data</h3>
-          <p className="text-gray-600 mb-4">{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
-          >
-            Retry
-          </button>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">{t("Failed to load data")}</h3>
+          <p className="text-gray-600 mb-4">{t(error)}</p>
+          <button onClick={() => window.location.reload()} className="ph-button ph-button-primary px-4 py-2 rounded-lg">{t("Retry")} </button>
         </div>
       </div>
     );
@@ -165,7 +149,7 @@ export function CEOFinancialOverviewPage() {
   // Calculate department breakdown
   const departmentMap = new Map<string, DepartmentPayroll>();
   for (const payroll of payrolls) {
-    const deptName = payroll.employee?.department?.name || 'Unassigned';
+    const deptName = payroll.employee?.department?.name || t('Unassigned');
     if (!departmentMap.has(deptName)) {
       departmentMap.set(deptName, {
         name: deptName,
@@ -210,46 +194,23 @@ export function CEOFinancialOverviewPage() {
 
   // Cost breakdown for chart
   const costBreakdown = [
-    { name: 'Net Salary', value: totalNet, color: '#10b981' },
-    { name: 'PPh 21', value: totalTax, color: '#ef4444' },
-    { name: 'BPJS Employee', value: totalBpjsEmployee, color: '#f59e0b' },
-    { name: 'BPJS Company', value: totalBpjsCompany, color: '#6366f1' },
+    { name: t('Net Salary'), value: totalNet, color: '#10b981' },
+    { name: t('PPh 21'), value: totalTax, color: '#ef4444' },
+    { name: t('BPJS Employee'), value: totalBpjsEmployee, color: '#f59e0b' },
+    { name: t('BPJS Company'), value: totalBpjsCompany, color: '#6366f1' },
   ].filter(item => item.value > 0);
 
   const totalCost = totalNet + totalTax + totalBpjsEmployee + totalBpjsCompany;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-900 to-slate-900 rounded-2xl shadow-xl overflow-hidden">
-        <div className="px-4 md:px-8 py-6 md:py-8 relative">
-          <div className="absolute inset-0 opacity-5">
-            <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
-              <defs>
-                <pattern id="financial-pattern" width="60" height="60" patternUnits="userSpaceOnUse">
-                  <path d="M 60 0 L 0 0 0 60" fill="none" stroke="white" strokeWidth="1" />
-                </pattern>
-              </defs>
-              <rect width="100%" height="100%" fill="url(#financial-pattern)" />
-            </svg>
-          </div>
-
-          <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 md:w-14 md:h-14 bg-gradient-to-br from-green-400 to-emerald-600 rounded-2xl flex items-center justify-center shadow-lg">
-                <DollarSign className="h-6 w-6 md:h-7 md:w-7 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl md:text-2xl font-bold text-white">Financial Overview</h1>
-                <p className="text-slate-400 text-xs md:text-sm mt-1">{userCompanyName}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-white/60" />
+    <ReportPage>{/* Header */}<ReportHeader>
+<div className="report-heading"><h1 className="text-xl md:text-2xl font-bold">{t("Financial Overview")}</h1><p className="text-xs md:text-sm mt-1">{t('Your Company')}</p></div>
+<div className="report-header-context"><div className="flex items-center gap-2">
+              <Calendar className="h-4 w-4" />
               <select
                 value={selectedPeriod}
                 onChange={(e) => setSelectedPeriod(e.target.value)}
-                className="px-3 py-2 bg-white/10 border border-white/20 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/30"
+                className="px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-white/30"
               >
                 {periodOptions.map((option) => (
                   <option key={option.value} value={option.value} className="text-gray-900">
@@ -257,153 +218,76 @@ export function CEOFinancialOverviewPage() {
                   </option>
                 ))}
               </select>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Financial KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-md">
-              <Wallet className="h-5 w-5 text-white" />
-            </div>
-            <span className="text-xs text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full font-medium">
-              Net
-            </span>
-          </div>
-          <p className="text-lg md:text-xl font-bold text-gray-900">{formatCompactCurrency(totalNet)}</p>
-          <p className="text-xs text-gray-500">Total Net Salary</p>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-md">
-              <CreditCard className="h-5 w-5 text-white" />
-            </div>
-            <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-full font-medium">
-              Gross
-            </span>
-          </div>
-          <p className="text-lg md:text-xl font-bold text-gray-900">{formatCompactCurrency(totalGross)}</p>
-          <p className="text-xs text-gray-500">Total Gross Salary</p>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-violet-600 rounded-xl flex items-center justify-center shadow-md">
-              <Users className="h-5 w-5 text-white" />
-            </div>
-          </div>
-          <p className="text-xl md:text-2xl font-bold text-gray-900">{totalEmployees}</p>
-          <p className="text-xs text-gray-500">Employees</p>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl flex items-center justify-center shadow-md">
-              <TrendingUp className="h-5 w-5 text-white" />
-            </div>
-          </div>
-          <p className="text-lg md:text-xl font-bold text-gray-900">{formatCompactCurrency(avgSalary)}</p>
-          <p className="text-xs text-gray-500">Average Salary</p>
-        </div>
-      </div>
-
-      {/* Cost Breakdown Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="bg-gradient-to-br from-red-50 to-rose-50 rounded-xl border border-red-100 p-4">
-          <div className="flex items-center gap-2 mb-2">
+            </div></div>
+</ReportHeader>{/* Financial KPIs */}<ReportSummary><div className="report-metric"><div className="report-metric-context"><span className="text-xs text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full font-medium">{t("Net")} </span></div><p className="report-metric-value">{formatCompactCurrency(totalNet)}</p><p className="report-metric-label">{t("Total Net Salary")}</p></div><div className="report-metric"><div className="report-metric-context"><span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-full font-medium">{t("Gross")} </span></div><p className="report-metric-value">{formatCompactCurrency(totalGross)}</p><p className="report-metric-label">{t("Total Gross Salary")}</p></div><div className="report-metric"><div className="report-metric-context"></div><p className="report-metric-value">{insightNumber(totalEmployees)}</p><p className="report-metric-label">{t("Employees")}</p></div><div className="report-metric"><div className="report-metric-context"></div><p className="report-metric-value">{formatCompactCurrency(avgSalary)}</p><p className="report-metric-label">{t("Average Salary")}</p></div></ReportSummary>{/* Cost Breakdown Cards */}<div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <section  className="report-inline-note"><div className="flex items-center gap-2 mb-2">
             <Receipt className="h-4 w-4 text-red-500" />
-            <span className="text-xs font-medium text-red-600">PPh 21</span>
-          </div>
-          <p className="text-lg font-bold text-red-700">{formatCompactCurrency(totalTax)}</p>
-          <p className="text-xs text-red-500">{totalCost > 0 ? ((totalTax / totalCost) * 100).toFixed(1) : 0}% of total</p>
-        </div>
+            <span className="text-xs font-medium text-red-600">{t("PPh 21")}</span>
+          </div><p className="text-lg font-bold text-red-700">{formatCompactCurrency(totalTax)}</p><p className="text-xs text-red-500">{totalCost > 0 ? insightFixed(((totalTax / totalCost) * 100), 1) : 0}{' '}{t("% of total")}</p></section>
 
-        <div className="bg-gradient-to-br from-amber-50 to-yellow-50 rounded-xl border border-amber-100 p-4">
+        <div className="rounded-md border border-amber-100 p-4 bg-[#f5f6f7] text-[#24302b]">
           <div className="flex items-center gap-2 mb-2">
             <PiggyBank className="h-4 w-4 text-amber-500" />
-            <span className="text-xs font-medium text-amber-600">BPJS Employee</span>
+            <span className="text-xs font-medium text-amber-600">{t("BPJS Employee")}</span>
           </div>
           <p className="text-lg font-bold text-amber-700">{formatCompactCurrency(totalBpjsEmployee)}</p>
-          <p className="text-xs text-amber-500">{totalCost > 0 ? ((totalBpjsEmployee / totalCost) * 100).toFixed(1) : 0}% of total</p>
+          <p className="text-xs text-amber-500">{totalCost > 0 ? insightFixed(((totalBpjsEmployee / totalCost) * 100), 1) : 0}{' '}{t("% of total")}</p>
         </div>
 
-        <div className="bg-gradient-to-br from-indigo-50 to-violet-50 rounded-xl border border-indigo-100 p-4">
-          <div className="flex items-center gap-2 mb-2">
+        <section  className="report-inline-note"><div className="flex items-center gap-2 mb-2">
             <Building2 className="h-4 w-4 text-indigo-500" />
-            <span className="text-xs font-medium text-indigo-600">BPJS Company</span>
-          </div>
-          <p className="text-lg font-bold text-indigo-700">{formatCompactCurrency(totalBpjsCompany)}</p>
-          <p className="text-xs text-indigo-500">{totalCost > 0 ? ((totalBpjsCompany / totalCost) * 100).toFixed(1) : 0}% of total</p>
-        </div>
+            <span className="text-xs font-medium text-indigo-600">{t("BPJS Company")}</span>
+          </div><p className="text-lg font-bold text-indigo-700">{formatCompactCurrency(totalBpjsCompany)}</p><p className="text-xs text-indigo-500">{totalCost > 0 ? insightFixed(((totalBpjsCompany / totalCost) * 100), 1) : 0}{' '}{t("% of total")}</p></section>
 
-        <div className="bg-gradient-to-br from-emerald-50 to-green-50 rounded-xl border border-emerald-100 p-4">
-          <div className="flex items-center gap-2 mb-2">
+        <section  className="report-inline-note"><div className="flex items-center gap-2 mb-2">
             <DollarSign className="h-4 w-4 text-emerald-500" />
-            <span className="text-xs font-medium text-emerald-600">Total Cost</span>
-          </div>
-          <p className="text-lg font-bold text-emerald-700">{formatCompactCurrency(totalCost)}</p>
-          <p className="text-xs text-emerald-500">All components</p>
-        </div>
-      </div>
-
-      {/* Payroll Status */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-6">
-        <h3 className="text-base md:text-lg font-bold text-gray-900 mb-4">Payroll Status</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+            <span className="text-xs font-medium text-emerald-600">{t("Total Cost")}</span>
+          </div><p className="text-lg font-bold text-emerald-700">{formatCompactCurrency(totalCost)}</p><p className="text-xs text-emerald-500">{t("All components")}</p></section>
+      </div>{/* Payroll Status */}<ReportSection><h3 className="text-base md:text-lg font-bold text-gray-900 mb-4">{t("Payroll Status")}</h3><div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-md">
             <div className="w-10 h-10 bg-gray-200 rounded-lg flex items-center justify-center">
               <Clock className="h-5 w-5 text-gray-600" />
             </div>
             <div>
-              <p className="text-xl font-bold text-gray-900">{statusCounts.draft}</p>
-              <p className="text-xs text-gray-500">Draft</p>
+              <p className="text-xl font-bold text-gray-900">{insightNumber(statusCounts.draft)}</p>
+              <p className="text-xs text-gray-500">{t("Draft")}</p>
             </div>
           </div>
-          <div className="flex items-center gap-3 p-3 bg-indigo-50 rounded-xl">
+          <div className="flex items-center gap-3 p-3 bg-indigo-50 rounded-md">
             <div className="w-10 h-10 bg-indigo-200 rounded-lg flex items-center justify-center">
               <CheckCircle className="h-5 w-5 text-indigo-600" />
             </div>
             <div>
-              <p className="text-xl font-bold text-indigo-900">{statusCounts.validated}</p>
-              <p className="text-xs text-indigo-600">Validated</p>
+              <p className="text-xl font-bold text-indigo-900">{insightNumber(statusCounts.validated)}</p>
+              <p className="text-xs text-indigo-600">{t("Validated")}</p>
             </div>
           </div>
-          <div className="flex items-center gap-3 p-3 bg-amber-50 rounded-xl">
+          <div className="flex items-center gap-3 p-3 bg-amber-50 rounded-md">
             <div className="w-10 h-10 bg-amber-200 rounded-lg flex items-center justify-center">
               <ArrowUpRight className="h-5 w-5 text-amber-600" />
             </div>
             <div>
-              <p className="text-xl font-bold text-amber-900">{statusCounts.approved}</p>
-              <p className="text-xs text-amber-600">Approved</p>
+              <p className="text-xl font-bold text-amber-900">{insightNumber(statusCounts.approved)}</p>
+              <p className="text-xs text-amber-600">{t("Approved")}</p>
             </div>
           </div>
-          <div className="flex items-center gap-3 p-3 bg-green-50 rounded-xl">
+          <div className="flex items-center gap-3 p-3 bg-green-50 rounded-md">
             <div className="w-10 h-10 bg-green-200 rounded-lg flex items-center justify-center">
               <Wallet className="h-5 w-5 text-green-600" />
             </div>
             <div>
-              <p className="text-xl font-bold text-green-900">{statusCounts.paid}</p>
-              <p className="text-xs text-green-600">Paid</p>
+              <p className="text-xl font-bold text-green-900">{insightNumber(statusCounts.paid)}</p>
+              <p className="text-xs text-green-600">{t("Paid")}</p>
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* Charts Row */}
-      <div className="grid lg:grid-cols-2 gap-6">
+        </div></ReportSection>{/* Charts Row */}<div className="grid lg:grid-cols-2 gap-6">
         {/* Department Distribution */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-6">
-          <div className="flex items-start justify-between mb-4">
+        <ReportSection><div className="flex items-start justify-between mb-4">
             <div>
-              <h3 className="text-base md:text-lg font-bold text-gray-900">Payroll by Department</h3>
-              <p className="text-xs text-gray-500 mt-1">Distribution breakdown</p>
+              <h3 className="text-base md:text-lg font-bold text-gray-900">{t("Payroll by Department")}</h3>
+              <p className="text-xs text-gray-500 mt-1">{t("Distribution breakdown")}</p>
             </div>
-          </div>
-          {departmentDistribution.length > 0 ? (
+          </div>{departmentDistribution.length > 0 ? (
             <div className="h-56 md:h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -438,21 +322,16 @@ export function CEOFinancialOverviewPage() {
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="flex items-center justify-center h-64 text-gray-500">
-              No department data available
-            </div>
-          )}
-        </div>
+            <div className="flex items-center justify-center h-64 text-gray-500">{t("No department data available")} </div>
+          )}</ReportSection>
 
         {/* Cost Breakdown Chart */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-6">
-          <div className="flex items-start justify-between mb-4">
+        <ReportSection><div className="flex items-start justify-between mb-4">
             <div>
-              <h3 className="text-base md:text-lg font-bold text-gray-900">Cost Breakdown</h3>
-              <p className="text-xs text-gray-500 mt-1">By component</p>
+              <h3 className="text-base md:text-lg font-bold text-gray-900">{t("Cost Breakdown")}</h3>
+              <p className="text-xs text-gray-500 mt-1">{t("By component")}</p>
             </div>
-          </div>
-          {costBreakdown.length > 0 ? (
+          </div>{costBreakdown.length > 0 ? (
             <div className="h-56 md:h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={costBreakdown} layout="vertical" margin={{ top: 10, right: 20, left: 80, bottom: 10 }}>
@@ -474,7 +353,7 @@ export function CEOFinancialOverviewPage() {
                     if (value === undefined) return '';
                     return formatCurrency(value);
                   }} />
-                  <Bar dataKey="value" radius={[0, 4, 4, 0]} name="Amount">
+                  <Bar dataKey="value" radius={[0, 4, 4, 0]} name={t("Amount")}>
                     {costBreakdown.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
@@ -483,36 +362,24 @@ export function CEOFinancialOverviewPage() {
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="flex items-center justify-center h-64 text-gray-500">
-              No cost data available
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Department Payroll Table */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="px-4 md:px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
-          <h3 className="text-base md:text-lg font-bold text-gray-900">Payroll by Department</h3>
-          <p className="text-xs text-gray-500 mt-1">Detailed breakdown for {userCompanyName}</p>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
+            <div className="flex items-center justify-center h-64 text-gray-500">{t("No cost data available")} </div>
+          )}</ReportSection>
+      </div>{/* Department Payroll Table */}<ReportSection  className="overflow-hidden"><section  className="report-inline-note"><h3 className="text-base md:text-lg font-bold text-gray-900">{t("Payroll by Department")}</h3><p className="text-xs text-gray-500 mt-1">{t("Detailed breakdown for")} {userCompanyName}</p></section><div  className="ph-table-scroll overflow-x-auto"><table className="w-full">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="text-left px-4 md:px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Department</th>
-                <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500 uppercase">Employees</th>
-                <th className="text-right px-3 py-3 text-xs font-semibold text-gray-500 uppercase">Total Payroll</th>
-                <th className="text-right px-3 py-3 text-xs font-semibold text-gray-500 uppercase hidden md:table-cell">Avg Salary</th>
-                <th className="text-right px-3 py-3 text-xs font-semibold text-gray-500 uppercase hidden lg:table-cell">PPh 21</th>
-                <th className="text-right px-3 py-3 text-xs font-semibold text-gray-500 uppercase hidden lg:table-cell">BPJS Total</th>
-                <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500 uppercase">% Total</th>
+                <th className="text-left px-4 md:px-6 py-3 text-xs font-semibold text-gray-500">{t("Department")}</th>
+                <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">{t("Employees")}</th>
+                <th className="text-right px-3 py-3 text-xs font-semibold text-gray-500">{t("Total Payroll")}</th>
+                <th className="text-right px-3 py-3 text-xs font-semibold text-gray-500 hidden md:table-cell">{t("Avg Salary")}</th>
+                <th className="text-right px-3 py-3 text-xs font-semibold text-gray-500 hidden lg:table-cell">{t("PPh 21")}</th>
+                <th className="text-right px-3 py-3 text-xs font-semibold text-gray-500 hidden lg:table-cell">{t("BPJS Total")}</th>
+                <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">{t("% Total")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {departmentPayrolls.length > 0 ? (
                 departmentPayrolls.map((dept, index) => {
-                  const percentage = totalNet > 0 ? ((dept.totalPayroll / totalNet) * 100).toFixed(1) : '0';
+                  const percentage = totalNet > 0 ? insightFixed(((dept.totalPayroll / totalNet) * 100), 1) : '0';
                   return (
                     <tr key={index} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 md:px-6 py-4">
@@ -527,7 +394,7 @@ export function CEOFinancialOverviewPage() {
                         </div>
                       </td>
                       <td className="px-3 py-4 text-center">
-                        <span className="font-medium text-gray-900">{dept.employeeCount}</span>
+                        <span className="font-medium text-gray-900">{insightNumber(dept.employeeCount)}</span>
                       </td>
                       <td className="px-3 py-4 text-right">
                         <span className="font-bold text-gray-900 text-sm">{formatCompactCurrency(dept.totalPayroll)}</span>
@@ -547,12 +414,12 @@ export function CEOFinancialOverviewPage() {
                             <div
                               className="h-2 rounded-full"
                               style={{
-                                width: `${percentage}%`,
+                                width: `${insightFixed(Number(percentage), 1)}%`,
                                 backgroundColor: COLORS[index % COLORS.length],
                               }}
                             />
                           </div>
-                          <span className="text-xs font-medium text-gray-600 w-10">{percentage}%</span>
+                          <span className="text-xs font-medium text-gray-600 w-10">{insightFixed(Number(percentage), 1)}%</span>
                         </div>
                       </td>
                     </tr>
@@ -560,9 +427,7 @@ export function CEOFinancialOverviewPage() {
                 })
               ) : (
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
-                    No payroll data available for this period
-                  </td>
+                  <td colSpan={7} className="px-6 py-8 text-center text-gray-500">{t("No payroll data available for this period")} </td>
                 </tr>
               )}
             </tbody>
@@ -570,10 +435,10 @@ export function CEOFinancialOverviewPage() {
               <tfoot className="bg-gray-50 border-t-2 border-gray-200">
                 <tr>
                   <td className="px-4 md:px-6 py-4">
-                    <span className="font-bold text-gray-900">Total</span>
+                    <span className="font-bold text-gray-900">{t("Total")}</span>
                   </td>
                   <td className="px-3 py-4 text-center">
-                    <span className="font-bold text-gray-900">{totalEmployees}</span>
+                    <span className="font-bold text-gray-900">{insightNumber(totalEmployees)}</span>
                   </td>
                   <td className="px-3 py-4 text-right">
                     <span className="font-bold text-indigo-600 text-sm">{formatCompactCurrency(totalNet)}</span>
@@ -597,9 +462,6 @@ export function CEOFinancialOverviewPage() {
                 </tr>
               </tfoot>
             )}
-          </table>
-        </div>
-      </div>
-    </div>
+          </table></div></ReportSection></ReportPage>
   );
 }

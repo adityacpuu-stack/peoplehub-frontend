@@ -1,3 +1,4 @@
+import { intlLocale } from '@/i18n';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -7,7 +8,7 @@ export function cn(...inputs: ClassValue[]) {
 
 export function formatDate(date: string | Date, options?: Intl.DateTimeFormatOptions): string {
   const d = typeof date === 'string' ? new Date(date) : date;
-  return d.toLocaleDateString('id-ID', options ?? {
+  return d.toLocaleDateString(intlLocale(), options ?? {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -16,7 +17,7 @@ export function formatDate(date: string | Date, options?: Intl.DateTimeFormatOpt
 
 export function formatDateTime(date: string | Date): string {
   const d = typeof date === 'string' ? new Date(date) : date;
-  return d.toLocaleString('id-ID', {
+  return d.toLocaleString(intlLocale(), {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -26,7 +27,7 @@ export function formatDateTime(date: string | Date): string {
 }
 
 export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('id-ID', {
+  return new Intl.NumberFormat(intlLocale(), {
     style: 'currency',
     currency: 'IDR',
     minimumFractionDigits: 0,
@@ -34,7 +35,7 @@ export function formatCurrency(amount: number): string {
 }
 
 export function formatNumber(num: number): string {
-  return new Intl.NumberFormat('id-ID').format(num);
+  return new Intl.NumberFormat(intlLocale()).format(num);
 }
 
 export function getInitials(name: string): string {

@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/i18n';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
@@ -18,6 +19,7 @@ const loginSchema = z.object({
 type LoginFormData = z.infer<typeof loginSchema>;
 
 export function LoginPage() {
+  useLocale();
   const navigate = useNavigate();
   const { login } = useAuthStore();
   const [isLoading, setIsLoading] = useState(false);
@@ -43,7 +45,7 @@ export function LoginPage() {
     setIsLoading(true);
     try {
       await login(data.email, data.password);
-      toast.success('Welcome back!');
+      toast.success(t("Welcome back!"));
       // Always redirect to dashboard after login for security
       // This prevents users from being redirected to pages they don't have access to
       navigate('/dashboard', { replace: true });

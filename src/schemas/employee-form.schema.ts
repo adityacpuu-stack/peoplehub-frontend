@@ -11,11 +11,11 @@ import { z } from 'zod';
  *
  * Conventions:
  *  - Most fields are optional (backend handles defaults / minimum required set).
- *  - Required core: name, personal_email. company_id is required-ish (UI strongly
- *    encourages selection). Office email is conditionally required via a cross-field
+ *  - Required core: name, personal_email and company_id. Office email is
+ *    conditionally required via a cross-field
  *    refine driven by `has_office_email`.
  *  - Numeric inputs use `z.preprocess` so empty string → undefined.
- *  - Date fields are loose YYYY-MM-DD strings ('' allowed for unset).
+ *  - Date fields are valid YYYY-MM-DD calendar dates ('' allowed for unset).
  */
 
 // ---- Indonesian validators ----------------------------------------------------
@@ -90,7 +90,7 @@ const optionalPostalCode = z
 const optionalEmail = z
   .string()
   .trim()
-  .max(255)
+  .max(255, 'Maximum 255 characters')
   .refine((v) => v === '' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), {
     message: 'Invalid email',
   })
@@ -102,6 +102,9 @@ const optionalDate = z
   .trim()
   .refine((v) => v === '' || /^\d{4}-\d{2}-\d{2}$/.test(v), {
     message: 'Date must be YYYY-MM-DD',
+  })
+  .refine((v) => v === '' || (!Number.isNaN(Date.parse(v)) && new Date(v).toISOString().slice(0, 10) === v), {
+    message: 'Date must be a valid calendar date',
   })
   .optional()
   .or(z.literal('').transform(() => ''));
@@ -135,7 +138,7 @@ const optionalId = z
   .union([z.string(), z.number(), z.null()])
   .optional()
   .transform(toIntOrUndefined)
-  .pipe(z.number().int().positive('Must be a positive number').optional());
+  .pipe(z.number().int('Must be a whole number').positive('Must be a positive number').optional());
 
 // ---- Enums --------------------------------------------------------------------
 
@@ -193,7 +196,7 @@ export const ptkpValues = [
 ] as const;
 
 const optionalEnum = <T extends readonly [string, ...string[]]>(values: T) =>
-  z.enum(values).optional().or(z.literal('').transform(() => '' as T[number]));
+  z.enum(values, { message: 'Select a valid option' }).optional().or(z.literal('').transform(() => '' as T[number]));
 
 // ---- Schema -------------------------------------------------------------------
 
@@ -203,7 +206,7 @@ export const employeeFormSchema = z
     has_office_email: z.boolean().default(true),
 
     // Identity & demographics
-    name: z.string().trim().min(2, 'Full name is required (min 2 chars)').max(255),
+    name: z.string().trim().min(2, 'Full name is required (min 2 chars)').max(255, 'Maximum 255 characters'),
     nick_name: optionalString,
     employee_id: optionalString,
     national_id: optionalDigits('NIK', 16),
@@ -248,7 +251,7 @@ export const employeeFormSchema = z
 
     // Employment
     job_title: optionalString,
-    company_id: optionalId,
+    company_id: optionalId.refine(v => v !== undefined, 'Company is required'),
     department_id: optionalId,
     position_id: optionalId,
     work_location_id: optionalId,
@@ -269,10 +272,10 @@ export const employeeFormSchema = z
 
     // Payroll
     basic_salary: optionalCurrency,
-    salary_currency: z.enum(currencyValues).optional().default('IDR'),
+    salary_currency: z.enum(currencyValues, { message: 'Select a valid currency' }).optional().default('IDR'),
     pay_frequency: optionalEnum(payFrequencyValues),
     pay_type: optionalEnum(payTypeValues),
-    salary_status: z.enum(salaryStatusValues).default('new_gross').optional(),
+    salary_status: z.enum(salaryStatusValues, { message: 'Select a valid salary status' }).default('new_gross').optional(),
     transport_allowance: optionalCurrency,
     meal_allowance: optionalCurrency,
     position_allowance: optionalCurrency,
@@ -291,6 +294,10 @@ export const employeeFormSchema = z
     bank_account_number: optionalString,
     bank_account_holder: optionalString,
   })
+  .refine(
+    (d) => !d.probation_start_date || !d.probation_end_date || d.probation_end_date >= d.probation_start_date,
+    { message: 'Probation end must not precede start', path: ['probation_end_date'] },
+  )
   .refine(
     (d) => {
       if (!d.has_office_email) return true;
@@ -342,6 +349,8 @@ export const STEP_FIELDS = {
     'employment_type',
     'employment_status',
     'join_date',
+    'probation_start_date',
+    'probation_end_date',
     'contract_start_date',
     'contract_end_date',
   ],
@@ -356,6 +365,7 @@ export const STEP_FIELDS = {
     'position_allowance',
     'bank_name',
     'bank_account_number',
+    'bank_account_holder',
     'npwp_number',
     'ptkp_status',
     'bpjs_ketenagakerjaan_number',

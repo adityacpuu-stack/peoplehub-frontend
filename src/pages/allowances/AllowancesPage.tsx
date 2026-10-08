@@ -1,37 +1,19 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { payrollNumber } from '@/components/payroll/localization';
+import { payrollEnumLabel } from '@/components/payroll/localization';
+import { t, useLocale, intlLocale } from '@/i18n';
+import { useAuthStore } from '@/stores/auth.store';
+import { useDomainConfirmation } from '@/pages/leave/useDomainConfirmation';
+import '@/pages/leave/domain-workflows.css';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
-import {
-  Coins,
-  Plus,
-  Search,
-  Edit2,
-  Trash2,
-  Lock,
-  X,
-  Building,
-  Users,
-  Download,
-  Car,
-  Utensils,
-  Home,
-  Phone,
-  Briefcase,
-  GraduationCap,
-  Heart,
-  Shirt,
-  ChevronLeft,
-  ChevronRight,
-  Loader2,
-  Clock,
-  Wifi,
-  Gift,
-  Trophy,
-} from 'lucide-react';
+import { isAxiosError } from 'axios';
+import { Coins, Plus, Edit2, Trash2, Lock, Car, Utensils, Home, Phone, Briefcase, GraduationCap, Heart, Shirt, Loader2, Clock, Wifi, Gift, Trophy } from 'lucide-react';
 import { allowanceService, ALLOWANCE_TYPES } from '../../services/allowance.service';
 import type { Allowance, AllowanceListQuery, AllowanceType as AllowanceTypeEnum } from '../../services/allowance.service';
 import { companyService } from '../../services/company.service';
 import { employeeService } from '../../services/employee.service';
-import { SearchableSelect } from '../../components/ui/SearchableSelect';
+import { CompensationWorkspace, CompensationStatus, CompensationEmpty, CompensationDialog, CompensationEmployeeSelect } from '@/components/compensation/CompensationWorkspace';
+import { collectPages } from '@/services/master-data';
 
 interface Company {
   id: number;
@@ -51,6 +33,17 @@ interface Employee {
 }
 
 export function AllowancesPage() {
+  useLocale();
+  const { requestDecision, decisionDialog } = useDomainConfirmation('compensation-refresh-dialog');
+  const user = useAuthStore(state => state.user);
+  // Match the existing allowance/payroll-adjustment write routes.
+  const canManage = user?.roles.some(role => ['Super Admin', 'HR Manager', 'HR Staff'].includes(role)) ?? false;
+  const dataRequest = useRef(0);
+  const employeeRequest = useRef(0);
+  const [loadError, setLoadError] = useState(false);
+  const [companiesError, setCompaniesError] = useState(false);
+  const [employeesError, setEmployeesError] = useState(false);
+  useEffect(() => () => { dataRequest.current++; employeeRequest.current++; }, []);
   const [allowances, setAllowances] = useState<Allowance[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -91,6 +84,8 @@ export function AllowancesPage() {
 
   // Fetch allowances from API
   const fetchAllowances = useCallback(async () => {
+    const request = ++dataRequest.current;
+    setLoadError(false);
     setLoading(true);
     try {
       const query: AllowanceListQuery = {
@@ -110,29 +105,37 @@ export function AllowancesPage() {
       }
 
       const response = await allowanceService.list(query);
+      if (request !== dataRequest.current) return;
       setAllowances(response.data);
       setTotalPages(response.pagination.totalPages);
       setTotalItems(response.pagination.total);
     } catch (error) {
+      if (request !== dataRequest.current) return;
+      setLoadError(true);
+      setAllowances([]);
       console.error('Failed to fetch allowances:', error);
-      toast.error('Failed to load allowances');
     } finally {
-      setLoading(false);
+      if (request === dataRequest.current) setLoading(false);
     }
   }, [page, search, filterStatus, filterCompany, filterTaxable, filterType]);
 
   // Fetch companies
   const fetchCompanies = useCallback(async () => {
     try {
-      const response = await companyService.getAll({ limit: 100 });
-      setCompanies(response.data);
+      setCompaniesError(false);
+      const rows = await collectPages((page, limit) => companyService.getAll({ page, limit }));
+      setCompanies(rows);
     } catch (error) {
       console.error('Failed to fetch companies:', error);
+      setCompaniesError(true);
     }
   }, []);
 
   // Fetch employees (filtered by company if selected)
   const fetchEmployees = useCallback(async (companyId?: number) => {
+    const request = ++employeeRequest.current;
+    setEmployeesError(false);
+    setEmployees([]);
     setLoadingEmployees(true);
     try {
       const params: { page: number; limit: number; company_id?: number; employment_status?: string } = {
@@ -143,9 +146,10 @@ export function AllowancesPage() {
       if (companyId) {
         params.company_id = companyId;
       }
-      const response = await employeeService.getAll(params);
+      const rows = await collectPages((page, limit) => employeeService.getAll({ ...params, page, limit }));
+      if (request !== employeeRequest.current) return;
       // Map to our local Employee interface (only active + resigned)
-      setEmployees(response.data
+      setEmployees(rows
         .filter(emp => emp.employment_status === 'active' || emp.employment_status === 'resigned')
         .map(emp => ({
           id: emp.id,
@@ -156,10 +160,12 @@ export function AllowancesPage() {
           department: emp.department || undefined,
         })));
     } catch (error) {
+      if (request !== employeeRequest.current) return;
+      setEmployeesError(true);
       console.error('Failed to fetch employees:', error);
       setEmployees([]);
     } finally {
-      setLoadingEmployees(false);
+      if (request === employeeRequest.current) setLoadingEmployees(false);
     }
   }, []);
 
@@ -243,37 +249,6 @@ export function AllowancesPage() {
     }
   };
 
-  const getIconColor = (type: string) => {
-    switch (type) {
-      case 'transport':
-        return 'from-blue-500 to-blue-600';
-      case 'meal':
-        return 'from-orange-500 to-orange-600';
-      case 'housing':
-        return 'from-green-500 to-green-600';
-      case 'communication':
-        return 'from-purple-500 to-purple-600';
-      case 'position':
-        return 'from-indigo-500 to-indigo-600';
-      case 'medical':
-        return 'from-red-500 to-red-600';
-      case 'performance':
-        return 'from-cyan-500 to-cyan-600';
-      case 'attendance':
-        return 'from-amber-500 to-amber-600';
-      case 'shift':
-        return 'from-pink-500 to-pink-600';
-      case 'remote':
-        return 'from-teal-500 to-teal-600';
-      case 'thr':
-        return 'from-yellow-500 to-yellow-600';
-      case 'bonus':
-        return 'from-emerald-500 to-emerald-600';
-      default:
-        return 'from-gray-500 to-gray-600';
-    }
-  };
-
   const handleOpenModal = (allowance?: Allowance) => {
     if (allowance) {
       setEditingAllowance(allowance);
@@ -292,8 +267,8 @@ export function AllowancesPage() {
         company_id: allowance.company_id || '',
         employee_id: allowance.employee_id || '',
         status: allowance.status,
-        effective_date: allowance.effective_date || '',
-        end_date: allowance.end_date || '',
+        effective_date: allowance.effective_date?.split('T')[0] || '',
+        end_date: allowance.end_date?.split('T')[0] || '',
       });
       // Set selected employee from allowance data
       if (allowance.employee) {
@@ -342,13 +317,13 @@ export function AllowancesPage() {
     e.preventDefault();
 
     if (!formData.name || !formData.type) {
-      toast.error('Please fill in required fields');
+      toast.error(t("Please fill in required fields"), { id: 'api-error', toasterId: 'compensation-dialog' });
       return;
     }
 
     // Require employee for percentage-based calculations
     if (formData.calculation_base !== 'fixed' && !formData.employee_id) {
-      toast.error('Employee is required for percentage-based allowances');
+      toast.error(t("Employee is required for percentage-based allowances"), { id: 'api-error', toasterId: 'compensation-dialog' });
       return;
     }
 
@@ -375,32 +350,32 @@ export function AllowancesPage() {
 
       if (editingAllowance) {
         await allowanceService.update(editingAllowance.id, payload);
-        toast.success('Allowance updated successfully');
+        toast.success(t("Allowance updated successfully"));
       } else {
         await allowanceService.create(payload);
-        toast.success('Allowance created successfully');
+        toast.success(t("Allowance created successfully"));
       }
 
       handleCloseModal();
       fetchAllowances();
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to save allowance:', error);
-      toast.error(error.response?.data?.message || 'Failed to save allowance', { id: 'api-error' });
+      toast.error((isAxiosError(error) ? error.response?.data?.message : undefined) || t('Failed to save allowance'), { id: 'api-error', toasterId: 'compensation-dialog' });
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this allowance?')) return;
+    if (!(await requestDecision({ title: t('Delete allowance'), message: t('Are you sure you want to delete this allowance?'), confirmLabel: t('Delete') }))) return;
 
     try {
       await allowanceService.delete(id);
-      toast.success('Allowance deleted successfully');
+      toast.success(t("Allowance deleted successfully"));
       fetchAllowances();
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to delete allowance:', error);
-      toast.error(error.response?.data?.message || 'Failed to delete allowance', { id: 'api-error' });
+      toast.error((isAxiosError(error) ? error.response?.data?.message : undefined) || t('Failed to delete allowance'), { id: 'api-error' });
     }
   };
 
@@ -409,17 +384,17 @@ export function AllowancesPage() {
     try {
       const newStatus = allowance.status === 'active' ? 'inactive' : 'active';
       await allowanceService.update(allowance.id, { status: newStatus });
-      toast.success('Status updated');
+      toast.success(t("Status updated"));
       fetchAllowances();
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to update status:', error);
-      toast.error('Failed to update status');
+      toast.error(t("Failed to update status"));
     }
   };
   void _handleToggleStatus; // Silence unused warning
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('id-ID', {
+    return new Intl.NumberFormat(intlLocale(), {
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0,
@@ -428,376 +403,51 @@ export function AllowancesPage() {
 
   const typeOptions = ALLOWANCE_TYPES.map(type => ({
     value: type,
-    label: allowanceService.getTypeLabel(type),
+    label: payrollEnumLabel(type),
     icon: getIcon(type),
   }));
 
   return (
-    <div className="space-y-6">
-      {/* Header Banner */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-500 rounded-2xl shadow-lg">
-        <div className="absolute inset-0 bg-grid-white/10 [mask-image:linear-gradient(0deg,transparent,rgba(255,255,255,0.5))]"></div>
-        <div className="absolute -top-24 -right-24 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
-        <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-emerald-400/20 rounded-full blur-3xl"></div>
-
-        <div className="relative px-6 py-8 sm:px-8 sm:py-10">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-14 h-14 bg-white/20 backdrop-blur-xl rounded-2xl flex items-center justify-center shadow-lg">
-                  <Coins className="w-7 h-7 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-                    Allowance Management
-                  </h1>
-                  <p className="text-emerald-100 text-sm mt-1">
-                    Configure and manage employee allowance types
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => toast.success('Export feature coming soon')}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-white/20 backdrop-blur-xl text-white rounded-xl border border-white/30 hover:bg-white/30 transition-all duration-200 font-semibold"
-              >
-                <Download className="w-5 h-5" />
-                <span>Export</span>
-              </button>
-              <button
-                onClick={() => handleOpenModal()}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-emerald-600 rounded-xl hover:bg-emerald-50 transition-all duration-200 font-semibold shadow-lg"
-              >
-                <Plus className="w-5 h-5" />
-                <span>Add Allowance</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-lg">
-              <Coins className="w-6 h-6 text-white" />
-            </div>
-          </div>
-          <p className="text-3xl font-bold text-gray-900 mb-1">{stats.totalItems}</p>
-          <p className="text-sm text-gray-500">Total Allowances</p>
-        </div>
-
-        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center shadow-lg">
-              <Coins className="w-6 h-6 text-white" />
-            </div>
-            <span className="inline-flex items-center px-2 py-1 bg-green-50 text-green-700 text-xs font-bold rounded-lg">
-              Active
-            </span>
-          </div>
-          <p className="text-3xl font-bold text-gray-900 mb-1">{stats.activeCount}</p>
-          <p className="text-sm text-gray-500">Active on Page</p>
-        </div>
-
-        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
-              <Coins className="w-6 h-6 text-white" />
-            </div>
-          </div>
-          <p className="text-2xl font-bold text-gray-900 mb-1">{formatCurrency(stats.totalAmount)}</p>
-          <p className="text-sm text-gray-500">Total Amount</p>
-        </div>
-
-        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center shadow-lg">
-              <Coins className="w-6 h-6 text-white" />
-            </div>
-            <span className="inline-flex items-center px-2 py-1 bg-orange-50 text-orange-700 text-xs font-bold rounded-lg">
-              Taxable
-            </span>
-          </div>
-          <p className="text-2xl font-bold text-gray-900 mb-1">{formatCurrency(stats.taxableAmount)}</p>
-          <p className="text-sm text-gray-500">Taxable Amount</p>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-        {/* Filters */}
-        <div className="px-6 py-4 border-b border-gray-100">
-          <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search by employee name or allowance..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-              />
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-              >
-                <option value="all">All Status</option>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-                <option value="pending">Pending</option>
-                <option value="approved">Approved</option>
-                <option value="rejected">Rejected</option>
-              </select>
-
-              <select
-                value={filterType}
-                onChange={(e) => setFilterType(e.target.value)}
-                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-              >
-                <option value="all">All Types</option>
-                {ALLOWANCE_TYPES.map(type => (
-                  <option key={type} value={type}>{allowanceService.getTypeLabel(type)}</option>
-                ))}
-              </select>
-
-              <select
-                value={filterTaxable}
-                onChange={(e) => setFilterTaxable(e.target.value)}
-                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-              >
-                <option value="all">All Tax Status</option>
-                <option value="taxable">Taxable</option>
-                <option value="non-taxable">Non-Taxable</option>
-              </select>
-
-              <select
-                value={filterCompany}
-                onChange={(e) => setFilterCompany(e.target.value)}
-                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-              >
-                <option value="all">All Companies</option>
-                {companies.map(company => (
-                  <option key={company.id} value={company.id}>{company.name}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Allowance Cards Grid */}
-        <div className="p-6">
-          {loading ? (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
-            </div>
-          ) : allowances.length === 0 ? (
-            <div className="text-center py-16">
-              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Coins className="w-8 h-8 text-gray-400" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900">No allowances found</h3>
-              <p className="mt-1 text-gray-500">Try adjusting your search or filters</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {allowances.map(allowance => (
-                <div
-                  key={allowance.id}
-                  className={`relative overflow-hidden bg-white rounded-xl border p-5 transition-all hover:shadow-md ${
-                    allowance.status === 'active' ? 'border-gray-200' : 'border-gray-100 bg-gray-50 opacity-75'
-                  }`}
-                >
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white shadow-lg bg-gradient-to-br ${getIconColor(allowance.type)}`}>
-                        {getIcon(allowance.type)}
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-gray-900">{allowance.name}</h3>
-                        <p className="text-xs text-gray-500">{allowanceService.getTypeLabel(allowance.type)}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {allowance.is_contract ? (
-                        <div className="p-1.5 text-gray-300 cursor-not-allowed" title="Tidak dapat diubah — bagian dari kontrak/OL karyawan">
-                          <Lock className="w-4 h-4" />
-                        </div>
-                      ) : (
-                        <>
-                          <button
-                            onClick={() => handleOpenModal(allowance)}
-                            className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(allowance.id)}
-                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  {allowance.description && (
-                    <p className="text-sm text-gray-600 mb-4 line-clamp-2">{allowance.description}</p>
-                  )}
-
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    <span className={`px-2 py-0.5 text-xs font-medium rounded ${
-                      allowance.status === 'active' ? 'bg-green-100 text-green-700' :
-                      allowance.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                      allowance.status === 'approved' ? 'bg-blue-100 text-blue-700' :
-                      allowance.status === 'rejected' ? 'bg-red-100 text-red-700' :
-                      'bg-gray-100 text-gray-600'
-                    }`}>
-                      {allowance.status.charAt(0).toUpperCase() + allowance.status.slice(1)}
-                    </span>
-                    <span className={`px-2 py-0.5 text-xs font-medium rounded ${
-                      allowance.is_taxable ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'
-                    }`}>
-                      {allowance.is_taxable ? 'Taxable' : 'Non-Taxable'}
-                    </span>
-                    {allowance.is_bpjs_object && (
-                      <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-medium rounded">
-                        BPJS Object
-                      </span>
-                    )}
-                    <span className="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs font-medium rounded">
-                      {allowance.frequency.charAt(0).toUpperCase() + allowance.frequency.slice(1)}
-                    </span>
-                  </div>
-
-                  {allowance.employee ? (
-                    <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-3">
-                      <Users className="w-3.5 h-3.5" />
-                      <span>{allowance.employee.name}</span>
-                      {allowance.employee.department && (
-                        <span className="text-gray-400">({allowance.employee.department.name})</span>
-                      )}
-                    </div>
-                  ) : allowance.company ? (
-                    <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-3">
-                      <Building className="w-3.5 h-3.5" />
-                      <span>{allowance.company.name}</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-1.5 text-xs text-emerald-600 font-medium mb-3">
-                      <Building className="w-3.5 h-3.5" />
-                      <span>All Companies</span>
-                    </div>
-                  )}
-
-                  <div className="border-t border-gray-100 pt-3 mt-3">
-                    <div className="flex items-center justify-between text-sm">
-                      <div>
-                        <p className="text-gray-500">Calculation</p>
-                        <p className="font-semibold text-gray-900">
-                          {allowance.calculation_base === 'fixed' ? 'Fixed' :
-                           allowance.calculation_base === 'basic_salary' ? '% Basic' : '% Gross'}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-gray-500">Amount</p>
-                        <p className="font-semibold text-emerald-600">
-                          {allowance.amount ? formatCurrency(Number(allowance.amount)) :
-                           allowance.percentage ? `${allowance.percentage}%` : '-'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {allowance.effective_date && (
-                    <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-500">
-                      <p>Effective: {new Date(allowance.effective_date).toLocaleDateString('id-ID')}</p>
-                      {allowance.end_date && (
-                        <p>Until: {new Date(allowance.end_date).toLocaleDateString('id-ID')}</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between">
-            <p className="text-sm text-gray-500">
-              Showing {allowances.length} of {totalItems} allowances
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="p-2 text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-              <span className="text-sm text-gray-600">
-                Page {page} of {totalPages}
-              </span>
-              <button
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="p-2 text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Add/Edit Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex min-h-screen items-center justify-center p-4">
-            <div className="fixed inset-0 bg-black/50 transition-opacity" onClick={handleCloseModal} />
-
-            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden">
-              <div className="bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-500 px-6 py-5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-white/20 backdrop-blur-xl rounded-xl flex items-center justify-center">
-                      <Coins className="w-6 h-6 text-white" />
-                    </div>
+    <>
+      <CompensationWorkspace title={t("Allowances")} description={t("Kelola tunjangan karyawan, penerima, dan periode berlakunya.")}
+        actions={canManage && <button className="cp-button cp-primary" onClick={() => handleOpenModal()}><Plus size={17} />{t("Add Allowance")}</button>}
+        filters={<>
+          <label className="cp-field">{t("company")}<select aria-label={t("Filter company")} value={filterCompany} onChange={event => { setFilterCompany(event.target.value); setPage(1); }}><option value="all">{t("Semua company")}</option>{companies.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}</select></label>
+            {companiesError && <p className="cp-filter-error" role="alert">{t("Daftar company gagal dimuat.")} <button onClick={fetchCompanies}>{t("Coba lagi")}</button></p>}
+          <label className="cp-field">{t("tipe")}<select aria-label={t("Filter tipe")} value={filterType} onChange={event => { setFilterType(event.target.value); setPage(1); }}><option value="all">{t("Semua tipe")}</option>{ALLOWANCE_TYPES.map(type => <option key={type} value={type}>{payrollEnumLabel(type)}</option>)}</select></label>
+          <label className="cp-field">{t("status")}<select aria-label={t("Filter status")} value={filterStatus} onChange={event => { setFilterStatus(event.target.value); setPage(1); }}><option value="all">{t("Semua status")}</option><option value="active">{t("Active")}</option><option value="inactive">{t("Inactive")}</option><option value="pending">{t("Pending")}</option><option value="approved">{t("Approved")}</option><option value="rejected">{t("Rejected")}</option></select></label>
+          <label className="cp-field">{t("pajak")}<select aria-label={t("Filter pajak")} value={filterTaxable} onChange={event => { setFilterTaxable(event.target.value); setPage(1); }}><option value="all">{t("Semua status pajak")}</option><option value="taxable">{t("Taxable")}</option><option value="non-taxable">{t("Non-taxable")}</option></select></label>
+          <button className="cp-reset" onClick={() => { setSearch(''); setFilterCompany('all'); setFilterType('all'); setFilterStatus('all'); setFilterTaxable('all'); setPage(1); }}>{t("Reset filter")}</button>
+          <p className="cp-filter-note"><Lock size={16} />{t("Tunjangan Contract / OL dikunci dan tidak dapat diubah dari daftar ini.")}</p>
+        </>}
+        metrics={[
+          { label: t('Tunjangan ditemukan'), value: payrollNumber(totalItems), note: t('Sesuai filter yang dipilih') },
+          { label: t('Aktif'), value: payrollNumber(stats.activeCount), note: t('Pada halaman ini') },
+          { label: t('Nominal aktif'), value: formatCurrency(stats.totalAmount), note: t('Nominal tersimpan pada halaman ini') },
+        ]}
+        search={search} onSearch={value => { setSearch(value); setPage(1); }} searchLabel={t("Cari nama tunjangan…")}
+        loading={loading} error={loadError} onRetry={fetchAllowances}
+        page={page} totalPages={totalPages} onPage={setPage} count={t("{value0} dari {value1} tunjangan", { value0: payrollNumber(allowances.length), value1: payrollNumber(totalItems) })}>
+        {!allowances.length ? <CompensationEmpty /> : <table className="cp-table"><thead><tr><th>{t("Tunjangan")}</th><th>{t("Penerima")}</th><th>{t("Nominal / Periode")}</th><th>{t("Status")}</th><th><span className="sr-only">{t("Aksi")}</span></th></tr></thead>
+          <tbody>{allowances.map(allowance => <tr key={allowance.id}>
+            <td><div className="cp-record-title"><span className="cp-record-icon">{getIcon(allowance.type)}</span><div><strong>{allowance.name}</strong><small>{payrollEnumLabel(allowance.type)}</small></div></div>
+              {allowance.description && <p className="cp-description">{allowance.description}</p>}
+              <div className="cp-tags"><span>{allowance.is_taxable ? t("Taxable") : t("Non-taxable")}</span>{allowance.is_bpjs_object && <span>{t("BPJS object")}</span>}{allowance.is_contract && <span>{t("Contract / OL")}</span>}</div></td>
+            <td data-label={t("Penerima")}><strong>{allowance.employee?.name || allowance.company?.name || t('Semua company')}</strong><small>{allowance.employee?.employee_id || allowance.company?.name || t('Tunjangan global')}</small>{allowance.employee?.department && <small>{allowance.employee.department.name}</small>}</td>
+            <td data-label={t("Nominal / Periode")} className="cp-money"><strong>{allowance.calculation_base === 'basic_salary' || allowance.calculation_base === 'gross_salary' ? (allowance.percentage == null ? '?' : `${Number(allowance.percentage).toLocaleString(intlLocale(), { maximumFractionDigits: 20 })}%`) : allowance.amount == null ? '?' : formatCurrency(Number(allowance.amount))}</strong>
+              <small>{allowance.calculation_base === 'basic_salary' ? t("Dari gaji pokok") : allowance.calculation_base === 'gross_salary' ? t("Dari gross salary") : t("Nominal tetap")} · {payrollEnumLabel(allowance.frequency)}</small>
+              {allowance.effective_date && <small>{new Date(allowance.effective_date).toLocaleDateString(intlLocale())}{allowance.end_date ? ` – ${new Date(allowance.end_date).toLocaleDateString(intlLocale())}` : ''}</small>}</td>
+            <td data-label={t("Status")}><CompensationStatus status={allowance.status} /></td>
+            <td className="cp-row-actions">{allowance.is_contract ? <span title={t("Terkunci: bagian dari Contract / OL")} aria-label={t("Tunjangan kontrak terkunci")}><Lock size={16} /></span> : canManage ? <><button className="cp-icon-button" aria-label={t("Edit {value0}", { value0: allowance.name })} onClick={() => handleOpenModal(allowance)}><Edit2 size={16} /></button><button className="cp-icon-button cp-danger" aria-label={t("Hapus {value0}", { value0: allowance.name })} onClick={() => handleDelete(allowance.id)}><Trash2 size={16} /></button></> : null}</td>
+          </tr>)}</tbody></table>}
+      </CompensationWorkspace>
+      {showModal && canManage && <CompensationDialog title={editingAllowance ? t("Edit Allowance") : t("Add Allowance")} subtitle={t("Tentukan penerima dan komponen tunjangannya.")} busy={submitting} onClose={handleCloseModal}>
+        {employeesError && <p className="cp-form-error" role="alert">{t("Daftar karyawan gagal dimuat.")} <button type="button" onClick={() => fetchEmployees(formData.company_id ? Number(formData.company_id) : undefined)}>{t("Coba lagi")}</button></p>}
+        <form onSubmit={handleSubmit} className="ph-workflow dw-form">
+                <div><div className="dw-form-content"><section className="ph-section dw-section"><h3>{t("Recipient")}</h3><div className="dw-fields">{!editingAllowance && (
                     <div>
-                      <h2 className="text-xl font-bold text-white">
-                        {editingAllowance ? 'Edit Allowance' : 'Add Allowance'}
-                      </h2>
-                      <p className="text-emerald-100 text-sm">
-                        {editingAllowance ? 'Update allowance type' : 'Create new allowance type'}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={handleCloseModal}
-                    className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center text-white hover:bg-white/30 transition-colors"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-
-              <form onSubmit={handleSubmit} className="p-6 max-h-[70vh] overflow-y-auto">
-                <div className="space-y-4">
-                  {/* Template Quick Select (only for new allowances) */}
-                  {!editingAllowance && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Quick Template</label>
-                      <select
+                      <label className="block text-sm font-medium text-gray-700 mb-2">{t("Quick Template")}</label>
+                      <select aria-label={t("Quick Template")}
                         onChange={(e) => {
                           const template = allowanceService.getDefaultTemplates().find(t => t.name === e.target.value);
                           if (template) {
@@ -817,23 +467,21 @@ export function AllowancesPage() {
                         className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-emerald-50"
                         defaultValue=""
                       >
-                        <option value="" disabled>Select a template to auto-fill...</option>
+                        <option value="" disabled>{t("Select a template to auto-fill...")}</option>
                         {allowanceService.getDefaultTemplates().map(template => (
                           <option key={template.name} value={template.name}>
-                            {template.name}
+                            {t(template.name)}
                           </option>
                         ))}
                       </select>
                     </div>
                   )}
+<div className="dw-fields">
 
-                  {/* Step 1: Select Company & Employee */}
-                  <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                    <p className="text-sm font-medium text-blue-800 mb-3">Step 1: Select Target</p>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="ph-form-grid dw-form-grid">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Company</label>
-                        <select
+                        <label className="block text-sm font-medium text-gray-700 mb-2">{t("Company")}</label>
+                        <select aria-label={t("Company")}
                           value={formData.company_id}
                           onChange={(e) => {
                             setFormData(prev => ({ ...prev, company_id: e.target.value, employee_id: '' }));
@@ -841,17 +489,16 @@ export function AllowancesPage() {
                           }}
                           className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-white"
                         >
-                          <option value="">All Companies (Global)</option>
+                          <option value="">{t("All Companies (Global)")}</option>
                           {companies.map(company => (
                             <option key={company.id} value={company.id}>{company.name}</option>
                           ))}
                         </select>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Employee {formData.calculation_base !== 'fixed' && <span className="text-red-500">*</span>}
+                        <label className="block text-sm font-medium text-gray-700 mb-2">{t("Employee")} {formData.calculation_base !== 'fixed' && <span className="text-red-500">*</span>}
                         </label>
-                        <SearchableSelect
+                        <CompensationEmployeeSelect
                           options={employees.map(emp => ({
                             value: emp.id,
                             label: emp.name,
@@ -864,22 +511,20 @@ export function AllowancesPage() {
                             const emp = employees.find(emp => emp.id === Number(employeeId));
                             setSelectedEmployee(emp || null);
                           }}
-                          placeholder="Search employee..."
-                          searchPlaceholder="Type name or ID..."
+                          placeholder={t("Search employee...")}
+                          searchPlaceholder={t("Type name or ID...")}
                           disabled={loadingEmployees}
                           loading={loadingEmployees}
-                          emptyMessage="No employees found"
+                          emptyMessage={t("No employees found")}
                         />
                       </div>
                     </div>
 
                     {/* Employee Info Display */}
                     {selectedEmployee && (
-                      <div className="mt-3 bg-white rounded-lg p-3 border border-gray-200">
+                      <div className="dw-context">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center">
-                            <Users className="w-5 h-5 text-emerald-600" />
-                          </div>
+
                           <div className="flex-1">
                             <p className="font-medium text-gray-900">{selectedEmployee.name}</p>
                             <p className="text-xs text-gray-500">
@@ -888,7 +533,7 @@ export function AllowancesPage() {
                             </p>
                           </div>
                           <div className="text-right">
-                            <p className="text-xs text-gray-500">Basic Salary</p>
+                            <p className="text-xs text-gray-500">{t("Basic Salary")}</p>
                             <p className="font-semibold text-emerald-600">
                               {selectedEmployee.basic_salary ? formatCurrency(selectedEmployee.basic_salary) : '-'}
                             </p>
@@ -896,28 +541,23 @@ export function AllowancesPage() {
                         </div>
                       </div>
                     )}
-                  </div>
-
-                  {/* Step 2: Allowance Details */}
-                  <div className="grid grid-cols-2 gap-4">
+                  </div></div></section><section className="ph-section dw-section"><h3>{t("Allowance")}</h3><div className="dw-fields"><div className="ph-form-grid dw-form-grid">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Name <span className="text-red-500">*</span>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">{t("Name")} <span className="text-red-500">*</span>
                       </label>
-                      <input
+                      <input aria-label={t("Name *")}
                         type="text"
                         value={formData.name}
                         onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                         className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                        placeholder="e.g., Tunjangan Transportasi"
+                        placeholder={t("e.g., Tunjangan Transportasi")}
                         required
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Type <span className="text-red-500">*</span>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">{t("Type")} <span className="text-red-500">*</span>
                       </label>
-                      <select
+                      <select aria-label={t("Type *")}
                         value={formData.type}
                         onChange={(e) => setFormData(prev => ({ ...prev, type: e.target.value as AllowanceTypeEnum }))}
                         className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
@@ -929,37 +569,35 @@ export function AllowancesPage() {
                       </select>
                     </div>
                   </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                    <textarea
+<div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">{t("Description")}</label>
+                    <textarea aria-label={t("Description")}
                       value={formData.description}
                       onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                       className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                       rows={2}
-                      placeholder="Brief description..."
+                      placeholder={t("Brief description...")}
                     />
                   </div>
-
-                  <div className="grid grid-cols-2 gap-4">
+<div className="ph-form-grid dw-form-grid">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Calculation Base</label>
-                      <select
+                      <label className="block text-sm font-medium text-gray-700 mb-2">{t("Calculation Base")}</label>
+                      <select aria-label={t("Calculation Base")}
                         value={formData.calculation_base}
                         onChange={(e) => setFormData(prev => ({ ...prev, calculation_base: e.target.value as 'fixed' | 'basic_salary' | 'gross_salary' }))}
                         className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                       >
-                        <option value="fixed">Fixed Amount</option>
-                        <option value="basic_salary">% of Basic Salary</option>
-                        <option value="gross_salary">% of Gross Salary</option>
+                        <option value="fixed">{t("Fixed Amount")}</option>
+                        <option value="basic_salary">{t("% of Basic Salary")}</option>
+                        <option value="gross_salary">{t("% of Gross Salary")}</option>
                       </select>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        {formData.calculation_base === 'fixed' ? 'Amount (Rp)' : 'Percentage (%)'}
+                        {formData.calculation_base === 'fixed' ? t("Amount (Rp)") : t("Percentage (%)")}
                       </label>
                       {formData.calculation_base === 'fixed' ? (
-                        <input
+                        <input aria-label={t("Amount (Rp)")}
                           type="number"
                           value={formData.amount}
                           onChange={(e) => setFormData(prev => ({ ...prev, amount: Number(e.target.value) }))}
@@ -967,7 +605,7 @@ export function AllowancesPage() {
                           placeholder="0"
                         />
                       ) : (
-                        <input
+                        <input aria-label={t("Percentage (%)")}
                           type="number"
                           step="0.01"
                           value={formData.percentage}
@@ -977,40 +615,37 @@ export function AllowancesPage() {
                         />
                       )}
                     </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
+                  </div></div></section><section className="ph-section dw-section"><h3>{t("Schedule")}</h3><div className="dw-fields"><div className="ph-form-grid dw-form-grid">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Frequency</label>
-                      <select
+                      <label className="block text-sm font-medium text-gray-700 mb-2">{t("Frequency")}</label>
+                      <select aria-label={t("Frequency")}
                         value={formData.frequency}
                         onChange={(e) => setFormData(prev => ({ ...prev, frequency: e.target.value as 'monthly' | 'weekly' | 'daily' | 'one_time' }))}
                         className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                       >
-                        <option value="monthly">Monthly</option>
-                        <option value="weekly">Weekly</option>
-                        <option value="daily">Daily</option>
-                        <option value="one_time">One Time</option>
+                        <option value="monthly">{t("Monthly")}</option>
+                        <option value="weekly">{t("Weekly")}</option>
+                        <option value="daily">{t("Daily")}</option>
+                        <option value="one_time">{t("One Time")}</option>
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-                      <select
+                      <label className="block text-sm font-medium text-gray-700 mb-2">{t("Status")}</label>
+                      <select aria-label={t("Status")}
                         value={formData.status}
                         onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value }))}
                         className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                       >
-                        <option value="active">Active</option>
-                        <option value="inactive">Inactive</option>
-                        <option value="pending">Pending</option>
+                        <option value="active">{t("Active")}</option>
+                        <option value="inactive">{t("Inactive")}</option>
+                        <option value="pending">{t("Pending")}</option>
                       </select>
                     </div>
                   </div>
-
-                  <div className="grid grid-cols-2 gap-4">
+<div className="ph-form-grid dw-form-grid">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Effective Date</label>
-                      <input
+                      <label className="block text-sm font-medium text-gray-700 mb-2">{t("Effective Date")}</label>
+                      <input aria-label={t("Effective Date")}
                         type="date"
                         value={formData.effective_date}
                         onChange={(e) => setFormData(prev => ({ ...prev, effective_date: e.target.value }))}
@@ -1018,44 +653,15 @@ export function AllowancesPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">End Date (Optional)</label>
-                      <input
+                      <label className="block text-sm font-medium text-gray-700 mb-2">{t("End Date (Optional)")}</label>
+                      <input aria-label={t("End Date (Optional)")}
                         type="date"
                         value={formData.end_date}
                         onChange={(e) => setFormData(prev => ({ ...prev, end_date: e.target.value }))}
                         className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                       />
                     </div>
-                  </div>
-
-                  {/* Calculation Preview */}
-                  {formData.calculation_base === 'fixed' && formData.amount > 0 && (
-                    <div className="bg-emerald-50 rounded-lg p-4 border border-emerald-200">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-emerald-700">Total Allowance Amount</span>
-                        <span className="text-lg font-bold text-emerald-700">
-                          {formatCurrency(formData.amount)}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                  {formData.calculation_base !== 'fixed' && formData.percentage > 0 && selectedEmployee?.basic_salary && (
-                    <div className="bg-emerald-50 rounded-lg p-4 border border-emerald-200">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <span className="text-sm text-emerald-700">Calculated Amount</span>
-                          <p className="text-xs text-emerald-600 mt-0.5">
-                            {formData.percentage}% of {formatCurrency(selectedEmployee.basic_salary)}
-                          </p>
-                        </div>
-                        <span className="text-lg font-bold text-emerald-700">
-                          {formatCurrency(calculateAllowanceAmount())}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="flex flex-wrap items-center gap-6">
+                  </div></div></section><section className="ph-section dw-section"><h3>{t("Payroll treatment")}</h3><div className="dw-fields"><div className="dw-checks">
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="checkbox"
@@ -1063,7 +669,7 @@ export function AllowancesPage() {
                         onChange={(e) => setFormData(prev => ({ ...prev, is_taxable: e.target.checked }))}
                         className="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
                       />
-                      <span className="text-sm text-gray-700">Taxable (PPh 21)</span>
+                      <span className="text-sm text-gray-700">{t("Taxable (PPh 21)")}</span>
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
@@ -1072,7 +678,7 @@ export function AllowancesPage() {
                         onChange={(e) => setFormData(prev => ({ ...prev, is_bpjs_object: e.target.checked }))}
                         className="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
                       />
-                      <span className="text-sm text-gray-700">BPJS Object</span>
+                      <span className="text-sm text-gray-700">{t("BPJS Object")}</span>
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
@@ -1081,7 +687,7 @@ export function AllowancesPage() {
                         onChange={(e) => setFormData(prev => ({ ...prev, is_recurring: e.target.checked }))}
                         className="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
                       />
-                      <span className="text-sm text-gray-700">Recurring</span>
+                      <span className="text-sm text-gray-700">{t("Recurring")}</span>
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
@@ -1090,34 +696,53 @@ export function AllowancesPage() {
                         onChange={(e) => setFormData(prev => ({ ...prev, is_contract: e.target.checked }))}
                         className="w-4 h-4 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
                       />
-                      <span className="text-sm text-gray-700 font-medium">Contract / OL</span>
+                      <span className="text-sm text-gray-700 font-medium">{t("Contract / OL")}</span>
                     </label>
-                  </div>
-                </div>
+                  </div></div></section>{formData.calculation_base === 'fixed' && formData.amount > 0 && (
+                    <div className="dw-inline">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-emerald-700">{t("Total Allowance Amount")}</span>
+                        <span className="dw-money">
+                          {formatCurrency(formData.amount)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+{formData.calculation_base !== 'fixed' && formData.percentage > 0 && selectedEmployee?.basic_salary && (
+                    <div className="dw-inline">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="text-sm text-emerald-700">{t("Calculated Amount")}</span>
+                          <p className="text-xs text-emerald-600 mt-0.5">
+                            {payrollNumber(Number(formData.percentage))}{t("% of")} {formatCurrency(selectedEmployee.basic_salary)}
+                          </p>
+                        </div>
+                        <span className="dw-money">
+                          {formatCurrency(calculateAllowanceAmount())}
+                        </span>
+                      </div>
+                    </div>
+                  )}</div></div>
 
-                <div className="flex items-center gap-3 mt-6">
+                <div className="ph-form-actions dw-actions">
                   <button
                     type="button"
                     onClick={handleCloseModal}
                     disabled={submitting}
-                    className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
+                    className="ph-button"
+                  >{t("Cancel")} </button>
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="flex-1 px-4 py-2.5 bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                    className="ph-button ph-button-primary"
                   >
                     {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                    {editingAllowance ? 'Update' : 'Create'}
+                    {editingAllowance ? t("Update") : t("Create")}
                   </button>
                 </div>
               </form>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+      </CompensationDialog>}
+    {decisionDialog}
+</>
   );
 }

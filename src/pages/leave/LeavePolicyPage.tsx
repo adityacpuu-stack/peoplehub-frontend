@@ -1,25 +1,20 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { quantity } from '@/components/leave/presentation';
+import { ApplicationCopy } from '@/components/leave/ApplicationCopy';
+import type { ReactElement } from 'react';
+import { t, useLocale } from '@/i18n';
+import { useDomainConfirmation } from '@/pages/leave/useDomainConfirmation';
+import '@/pages/leave/domain-workflows.css';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useAuthStore } from '@/stores/auth.store';
+import { canAction } from '@/lib/actions';
 import toast from 'react-hot-toast';
-import {
-  FileText,
-  Plus,
-  Search,
-  Edit2,
-  Trash2,
-  X,
-  Download,
-  Loader2,
-  Calendar,
-  Clock,
-  Users,
-  Building,
-  ChevronLeft,
-  ChevronRight,
-  Settings,
-  Shield,
-  CalendarDays,
-  CheckCircle2,
-} from 'lucide-react';
+import { OperationalWorkspace, OperationalDialog } from '@/components/ui/OperationalWorkspace';
+import { collectPages } from '@/services/master-data';
+import api from '@/services/api';
+import type { PaginatedResponse } from '@/types';
+import './leave-workspace.css';
+import './leave-refresh.css';
+import { Plus, Search, Edit2, Trash2, Download, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { leaveService } from '../../services/leave.service';
 import { companyService } from '../../services/company.service';
 // LeaveType imported from service response
@@ -48,7 +43,7 @@ interface LeavePolicy {
   can_carry_forward?: boolean;
   max_carry_forward_days?: number;
   prorate_on_join?: boolean;
-  gender_specific?: string;
+  gender_specific?: string | null;
   requires_document?: boolean;
   description?: string;
   is_paid?: boolean;
@@ -56,6 +51,17 @@ interface LeavePolicy {
 }
 
 export function LeavePolicyPage() {
+  useLocale();
+  const { requestDecision, decisionDialog } = useDomainConfirmation('leave-refresh-dialog');
+  const user = useAuthStore(state => state.user);
+  const isSuperAdmin = user?.roles.includes('Super Admin') ?? false;
+  // Existing role ceiling AND the covered leave.manage_type action.
+  const canManage = isSuperAdmin || ((user?.roles.includes('HR Manager') ?? false) && canAction(user, 'leave.manage_type'));
+  const canEdit = (policy: LeavePolicy) => canManage && (policy.company_id == null ? isSuperAdmin : isSuperAdmin || !!user?.accessibleCompanyIds.includes(policy.company_id));
+  const [loadError, setLoadError] = useState(false);
+  const [optionError, setOptionError] = useState(false);
+  const [formError, setFormError] = useState<string | ReactElement>('');
+  const requestSequence = useRef(0);
   const [policies, setPolicies] = useState<LeavePolicy[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,7 +72,6 @@ export function LeavePolicyPage() {
   const [editingPolicy, setEditingPolicy] = useState<LeavePolicy | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const limit = 12;
 
   // max_days is held as a string, not a number: the API distinguishes "no cap"
@@ -89,25 +94,29 @@ export function LeavePolicyPage() {
 
   // Fetch leave types as policies
   const fetchPolicies = useCallback(async () => {
-    setLoading(true);
+    const sequence = ++requestSequence.current;
+    setLoading(true); setLoadError(false);
     try {
-      const types = await leaveService.getTypes();
-      setPolicies(types as LeavePolicy[]);
-      setTotalPages(Math.ceil(types.length / limit));
+      const types = await collectPages(async (page, limit) =>
+        (await api.get<PaginatedResponse<LeavePolicy>>('/leaves/types', { params: { page, limit } })).data);
+      if (sequence === requestSequence.current) setPolicies(types as LeavePolicy[]);
     } catch (error) {
+      if (sequence !== requestSequence.current) return;
+      setPolicies([]); setLoadError(true);
       console.error('Failed to fetch leave policies:', error);
-      toast.error('Failed to load leave policies', { id: 'api-error' });
+      toast.error(t("Failed to load leave policies"), { id: 'api-error' });
     } finally {
-      setLoading(false);
+      if (sequence === requestSequence.current) setLoading(false);
     }
   }, []);
 
   // Fetch companies
   const fetchCompanies = useCallback(async () => {
     try {
-      const response = await companyService.getAll({ limit: 100 });
-      setCompanies(response.data);
+      const rows = await collectPages((page, limit) => companyService.getAll({ page, limit }));
+      setCompanies(rows);
     } catch (error) {
+      setOptionError(true);
       console.error('Failed to fetch companies:', error);
     }
   }, []);
@@ -131,7 +140,7 @@ export function LeavePolicyPage() {
     }
 
     if (filterCompany !== 'all') {
-      result = result.filter(p => p.company_id === Number(filterCompany));
+      result = result.filter(p => p.company_id == null || p.company_id === Number(filterCompany));
     }
 
     if (filterStatus !== 'all') {
@@ -141,26 +150,19 @@ export function LeavePolicyPage() {
     return result;
   }, [policies, search, filterCompany, filterStatus]);
 
+  const totalPages = Math.max(1, Math.ceil(filteredPolicies.length / limit));
+  useEffect(() => { setPage(1); }, [search, filterCompany, filterStatus]);
+  useEffect(() => { setPage(current => Math.min(current, totalPages)); }, [totalPages]);
+
   // Paginate
   const paginatedPolicies = useMemo(() => {
     const start = (page - 1) * limit;
     return filteredPolicies.slice(start, start + limit);
   }, [filteredPolicies, page]);
 
-  // Stats
-  const stats = useMemo(() => {
-    const active = policies.filter(p => p.is_active !== false).length;
-    const withCarryForward = policies.filter(p => p.can_carry_forward).length;
-    const requiresDoc = policies.filter(p => p.requires_document).length;
-    return {
-      total: policies.length,
-      active,
-      withCarryForward,
-      requiresDoc,
-    };
-  }, [policies]);
-
   const handleOpenModal = (policy?: LeavePolicy) => {
+    if (!canManage || (policy && !canEdit(policy))) return;
+    setFormError('');
     if (policy) {
       setEditingPolicy(policy);
       setFormData({
@@ -192,7 +194,7 @@ export function LeavePolicyPage() {
         prorate_enabled: true,
         gender_specific: '',
         requires_document: false,
-        company_id: '',
+        company_id: isSuperAdmin ? '' : filterCompany !== 'all' ? filterCompany : String(companies[0]?.id ?? ''),
         is_active: true,
       });
     }
@@ -200,15 +202,19 @@ export function LeavePolicyPage() {
   };
 
   const handleCloseModal = () => {
+    if (submitting) return;
     setShowModal(false);
     setEditingPolicy(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError('');
+    if (!canManage || (editingPolicy && !canEdit(editingPolicy))) return;
+    if (!isSuperAdmin && !formData.company_id) { setFormError(<ApplicationCopy source="Select a company." />); return; }
 
     if (!formData.name || !formData.code) {
-      toast.error('Please fill in all required fields', { id: 'api-error' });
+      setFormError(<ApplicationCopy source="Please fill in all required fields." />);
       return;
     }
 
@@ -216,8 +222,8 @@ export function LeavePolicyPage() {
     // backend rejects every request longer than this value.
     const maxDaysInput = formData.max_days.trim();
     const maxDaysValue = maxDaysInput === '' ? null : Number(maxDaysInput);
-    if (maxDaysValue !== null && (!Number.isFinite(maxDaysValue) || maxDaysValue < 1)) {
-      toast.error('Max days must be at least 1, or empty for no limit', { id: 'api-error' });
+    if (maxDaysValue !== null && (!Number.isInteger(maxDaysValue) || maxDaysValue < 1)) {
+      setFormError(<ApplicationCopy source="Max days must be a whole number of at least 1, or empty for no limit." />);
       return;
     }
 
@@ -227,7 +233,7 @@ export function LeavePolicyPage() {
       const payload = {
         name: formData.name,
         code: formData.code,
-        description: formData.description || undefined,
+        description: formData.description,
         default_days: Number(formData.default_days) || 0,
         // formData keys are the UI-local short names; the API names are on the right.
         // null, not undefined: undefined is dropped from the PUT body and reads as
@@ -236,29 +242,30 @@ export function LeavePolicyPage() {
         can_carry_forward: !!formData.carry_forward,
         max_carry_forward_days: Number(formData.carry_forward_days) || 0,
         prorate_on_join: !!formData.prorate_enabled,
-        gender_specific: formData.gender_specific || undefined,
+        gender_specific: formData.gender_specific || null,
         // No minimum-tenure field here on purpose: LeaveType has no tenure column,
         // so the form no longer offers a control for a value nothing would store.
         requires_document: !!formData.requires_document,
-        company_id: formData.company_id !== '' ? Number(formData.company_id) : undefined,
+        ...(editingPolicy ? {} : { company_id: formData.company_id !== '' ? Number(formData.company_id) : undefined }),
         is_active: formData.is_active,
       };
 
       if (editingPolicy) {
         await leaveService.updateType(editingPolicy.id, payload);
-        toast.success('Policy updated successfully');
+        toast.success(t("Policy updated successfully"));
       } else {
         await leaveService.createType(payload);
-        toast.success('Policy created successfully');
+        toast.success(t("Policy created successfully"));
       }
-      handleCloseModal();
+      setShowModal(false); setEditingPolicy(null);
       fetchPolicies();
     } catch (error: unknown) {
+      setFormError((error as { response?: { data?: { message?: string } } }).response?.data?.message || <ApplicationCopy source="Unable to save this policy. Please try again." />);
       console.error('Failed to save policy:', error);
       const err = error as { response?: { data?: { message?: string } } };
       // Axios interceptor already toasts generic 4xx/5xx; only toast field-level here
       if (!err.response) {
-        toast.error('Failed to save policy', { id: 'api-error' });
+        toast.error(t("Failed to save policy"), { id: 'api-error' });
       }
     } finally {
       setSubmitting(false);
@@ -266,11 +273,11 @@ export function LeavePolicyPage() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this leave policy?')) return;
+    if (!(await requestDecision({ title: () => t('Delete leave policy'), message: () => t('Are you sure you want to delete this leave policy?'), confirmLabel: () => t('Delete') }))) return;
 
     try {
       await leaveService.deleteType(id);
-      toast.success('Policy deleted successfully');
+      toast.success(t("Policy deleted successfully"));
       fetchPolicies();
     } catch (error: unknown) {
       console.error('Failed to delete policy:', error);
@@ -280,22 +287,22 @@ export function LeavePolicyPage() {
 
   const handleExport = () => {
     if (filteredPolicies.length === 0) {
-      toast.error('No data to export', { id: 'api-error' });
+      toast.error(t("No data to export"), { id: 'api-error' });
       return;
     }
 
     const headers = [
-      'Name',
-      'Code',
-      'Default Days',
-      'Max Days',
-      'Carry Forward',
-      'Carry Forward Days',
-      'Prorate',
-      'Gender Specific',
-      'Requires Document',
-      'Company',
-      'Status',
+      t("Name"),
+      t("Code"),
+      t("Default Days"),
+      t("Max Days"),
+      t("Carry Forward"),
+      t("Carry Forward Days"),
+      t("Prorate"),
+      t("Gender Specific"),
+      t("Requires Document"),
+      t("Company"),
+      t("Status"),
     ];
 
     const rows = filteredPolicies.map(policy => [
@@ -304,17 +311,17 @@ export function LeavePolicyPage() {
       // ?? so an allocation of 0 exports as 0 rather than as a missing value,
       // and so an absent cap exports with the same wording the cards use.
       policy.default_days ?? '-',
-      policy.max_days_per_request ?? 'No limit',
-      policy.can_carry_forward ? 'Yes' : 'No',
+      policy.max_days_per_request ?? t("No limit"),
+      policy.can_carry_forward ? t("Yes") : t("No"),
       policy.max_carry_forward_days ?? 0,
-      policy.prorate_on_join ? 'Yes' : 'No',
-      policy.gender_specific || 'All',
-      policy.requires_document ? 'Yes' : 'No',
-      policy.company?.name || 'All Companies',
-      policy.is_active !== false ? 'Active' : 'Inactive',
+      policy.prorate_on_join ? t("Yes") : t("No"),
+      policy.gender_specific ? t(policy.gender_specific) : t("All"),
+      policy.requires_document ? t("Yes") : t("No"),
+      policy.company?.name || t("All Companies"),
+      policy.is_active !== false ? t("Active") : t("Inactive"),
     ]);
 
-    const csv = [headers.join(','), ...rows.map(row => row.map(cell => `"${cell}"`).join(','))].join('\n');
+    const csv = [headers.join(','), ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -324,534 +331,193 @@ export function LeavePolicyPage() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    toast.success('Export successful');
+    URL.revokeObjectURL(url);
+    toast.success(t("Export successful"));
   };
 
-  const getPolicyIcon = (name: string) => {
-    const nameLower = name.toLowerCase();
-    if (nameLower.includes('annual') || nameLower.includes('tahunan')) {
-      return <Calendar className="w-5 h-5" />;
-    }
-    if (nameLower.includes('sick') || nameLower.includes('sakit')) {
-      return <Shield className="w-5 h-5" />;
-    }
-    if (nameLower.includes('maternity') || nameLower.includes('paternity') || nameLower.includes('melahirkan')) {
-      return <Users className="w-5 h-5" />;
-    }
-    if (nameLower.includes('marriage') || nameLower.includes('nikah')) {
-      return <CalendarDays className="w-5 h-5" />;
-    }
-    return <FileText className="w-5 h-5" />;
-  };
-
-  const getPolicyColor = (name: string) => {
-    const nameLower = name.toLowerCase();
-    if (nameLower.includes('annual') || nameLower.includes('tahunan')) {
-      return 'from-violet-500 to-purple-600';
-    }
-    if (nameLower.includes('sick') || nameLower.includes('sakit')) {
-      return 'from-red-500 to-rose-600';
-    }
-    if (nameLower.includes('maternity') || nameLower.includes('melahirkan')) {
-      return 'from-pink-500 to-fuchsia-600';
-    }
-    if (nameLower.includes('paternity')) {
-      return 'from-blue-500 to-indigo-600';
-    }
-    if (nameLower.includes('marriage') || nameLower.includes('nikah')) {
-      return 'from-amber-500 to-orange-600';
-    }
-    return 'from-gray-500 to-gray-600';
-  };
-
-  return (
-    <div className="space-y-6">
-      {/* Header Banner */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 rounded-2xl shadow-lg">
-        <div className="absolute inset-0 bg-grid-white/10 [mask-image:linear-gradient(0deg,transparent,rgba(255,255,255,0.5))]"></div>
-        <div className="absolute -top-24 -right-24 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
-        <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-indigo-400/20 rounded-full blur-3xl"></div>
-
-        <div className="relative px-6 py-8 sm:px-8 sm:py-10">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-14 h-14 bg-white/20 backdrop-blur-xl rounded-2xl flex items-center justify-center shadow-lg">
-                  <Settings className="w-7 h-7 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-                    Leave Policy
-                  </h1>
-                  <p className="text-indigo-100 text-sm mt-1">
-                    Configure leave types and their rules
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleExport}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-white/20 backdrop-blur-xl text-white rounded-xl border border-white/30 hover:bg-white/30 transition-all duration-200 font-semibold"
-              >
-                <Download className="w-5 h-5" />
-                <span>Export</span>
-              </button>
-              <button
-                onClick={() => handleOpenModal()}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-indigo-600 rounded-xl hover:bg-indigo-50 transition-all duration-200 font-semibold shadow-lg"
-              >
-                <Plus className="w-5 h-5" />
-                <span>Add Policy</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-              <FileText className="w-6 h-6 text-white" />
-            </div>
-          </div>
-          <p className="text-3xl font-bold text-gray-900 mb-1">{stats.total}</p>
-          <p className="text-sm text-gray-500">Total Policies</p>
-        </div>
-
-        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg">
-              <CheckCircle2 className="w-6 h-6 text-white" />
-            </div>
-            <span className="inline-flex items-center px-2 py-1 bg-green-50 text-green-700 text-xs font-bold rounded-lg">
-              Active
-            </span>
-          </div>
-          <p className="text-3xl font-bold text-gray-900 mb-1">{stats.active}</p>
-          <p className="text-sm text-gray-500">Active Policies</p>
-        </div>
-
-        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl flex items-center justify-center shadow-lg">
-              <Clock className="w-6 h-6 text-white" />
-            </div>
-          </div>
-          <p className="text-3xl font-bold text-gray-900 mb-1">{stats.withCarryForward}</p>
-          <p className="text-sm text-gray-500">With Carry Forward</p>
-        </div>
-
-        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-red-500 to-rose-600 rounded-xl flex items-center justify-center shadow-lg">
-              <FileText className="w-6 h-6 text-white" />
-            </div>
-          </div>
-          <p className="text-3xl font-bold text-gray-900 mb-1">{stats.requiresDoc}</p>
-          <p className="text-sm text-gray-500">Requires Document</p>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-        {/* Filters */}
-        <div className="px-6 py-4 border-b border-gray-100">
-          <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search policies..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-              />
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-              >
-                <option value="all">All Status</option>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-              </select>
-
-              <select
-                value={filterCompany}
-                onChange={(e) => setFilterCompany(e.target.value)}
-                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-              >
-                <option value="all">All Companies</option>
-                {companies.map(company => (
-                  <option key={company.id} value={company.id}>{company.name}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Policy Cards Grid */}
-        <div className="p-6">
-          {loading ? (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
-            </div>
-          ) : paginatedPolicies.length === 0 ? (
-            <div className="text-center py-16">
-              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <FileText className="w-8 h-8 text-gray-400" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900">No leave policies found</h3>
-              <p className="mt-1 text-gray-500">Try adjusting your search or filters</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {paginatedPolicies.map(policy => (
-                <div
-                  key={policy.id}
-                  className={`relative overflow-hidden bg-white rounded-xl border p-5 transition-all hover:shadow-md ${
-                    policy.is_active !== false ? 'border-gray-200' : 'border-gray-100 bg-gray-50 opacity-75'
-                  }`}
-                >
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white shadow-lg bg-gradient-to-br ${getPolicyColor(policy.name)}`}>
-                        {getPolicyIcon(policy.name)}
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-gray-900">{policy.name}</h3>
-                        {policy.code && (
-                          <p className="text-xs text-gray-500">{policy.code}</p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => handleOpenModal(policy)}
-                        className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(policy.id)}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {policy.description && (
-                    <p className="text-sm text-gray-600 mb-4 line-clamp-2">{policy.description}</p>
-                  )}
-
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    <span className={`px-2 py-0.5 text-xs font-medium rounded ${
-                      policy.is_active !== false ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
-                    }`}>
-                      {policy.is_active !== false ? 'Active' : 'Inactive'}
-                    </span>
-                    {policy.can_carry_forward && (
-                      <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-medium rounded">
-                        Carry Forward
-                      </span>
-                    )}
-                    {policy.requires_document && (
-                      <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">
-                        Requires Doc
-                      </span>
-                    )}
-                    {policy.gender_specific && (
-                      <span className="px-2 py-0.5 bg-pink-100 text-pink-700 text-xs font-medium rounded">
-                        {policy.gender_specific}
-                      </span>
-                    )}
-                  </div>
-
-                  {policy.company?.name ? (
-                    <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-3">
-                      <Building className="w-3.5 h-3.5" />
-                      <span>{policy.company.name}</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-1.5 text-xs text-indigo-600 font-medium mb-3">
-                      <Building className="w-3.5 h-3.5" />
-                      <span>All Companies</span>
-                    </div>
-                  )}
-
-                  <div className="border-t border-gray-100 pt-3 mt-3">
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <p className="text-gray-500">Default Days</p>
-                        <p className="font-semibold text-gray-900">
-                          {/* A 0-day allocation is a real policy — || printed it as 12. */}
-                          {policy.default_days ?? 12} days
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-gray-500">Max Days</p>
-                        <p className="font-semibold text-gray-900">
-                          {/* No cap is a real, meaningful state — don't fake a "12". */}
-                          {policy.max_days_per_request != null
-                            ? `${policy.max_days_per_request} days`
-                            : 'No limit'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between">
-            <p className="text-sm text-gray-500">
-              Showing {paginatedPolicies.length} of {filteredPolicies.length} policies
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="p-2 text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-              <span className="text-sm text-gray-600">
-                Page {page} of {totalPages}
-              </span>
-              <button
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="p-2 text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Add/Edit Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex min-h-screen items-center justify-center p-4">
-            <div className="fixed inset-0 bg-black/50 transition-opacity" onClick={handleCloseModal} />
-
-            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
-              <div className="bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 px-6 py-5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-white/20 backdrop-blur-xl rounded-xl flex items-center justify-center">
-                      <Settings className="w-6 h-6 text-white" />
-                    </div>
+  return <OperationalWorkspace module="leave" title={t("Leave Policy")} description={t("Browse leave allowances, request limits and company-specific rules.")} className="lw-page"
+    actions={<><button className="ow-button" disabled={loading || loadError || !filteredPolicies.length} onClick={handleExport}><Download size={16} />{t("Export policies")}</button>{canManage && <button className="ow-button ow-primary" onClick={() => handleOpenModal()} disabled={optionError}><Plus size={16} />{t("Add Policy")}</button>}</>}
+    filters={<><label className="ow-field">{t("Company")}<select aria-label={t("Company filter")} value={filterCompany} onChange={e => setFilterCompany(e.target.value)}><option value="all">{t("All assigned companies")}</option>{companies.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}</select></label><label className="ow-field">{t("Status")}<select aria-label={t("Status filter")} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}><option value="all">{t("All statuses")}</option><option value="active">{t("Active")}</option><option value="inactive">{t("Inactive")}</option></select></label><button className="ow-button" onClick={() => { setFilterCompany('all'); setFilterStatus('all'); setSearch(''); }}>{t("Reset filters")}</button><details className="lw-help"><summary>{t("Policy scope")}</summary><p>{t("Company selections include global policies. Leave requests use full days; stored prorated balances are preserved.")}</p></details></>}>
+    {optionError && <p className="ow-feedback" role="alert">{t("Unable to load companies.")} <button onClick={() => { setOptionError(false); fetchCompanies(); }}>{t("Retry companies")}</button></p>}
+    <section className="ow-register"><div className="lw-register-tools"><p className="lw-note">{filteredPolicies.length}{' '}{t("policies in this selection")}</p><label className="lw-search"><Search size={17} /><input aria-label={t("Search policies")} placeholder={t("Search name, code or description…")} value={search} onChange={e => setSearch(e.target.value)} /></label></div>
+      {loading ? <div className="lw-empty" role="status"><Loader2 className="animate-spin" />{t("Loading policies…")}</div> : loadError ? <div className="lw-empty" role="alert">{t("Unable to load leave policies.")}<button className="ow-button" onClick={fetchPolicies}>{t("Retry policies")}</button></div> : !paginatedPolicies.length ? <div className="lw-empty"><h3>{t("No policies found")}</h3><p>{t("Adjust your filters to view available policies.")}</p></div> : <div className="lw-table-wrap"><table className="ow-table lw-records lw-policies"><thead><tr><th>{t("Policy")}</th><th>{t("Leave allowance")}</th><th>{t("Request limit")}</th><th>{t("Carry forward")}</th><th>{t("Status")}</th><th>{t("Actions")}</th></tr></thead><tbody>{paginatedPolicies.map(policy => <tr data-leave-policy key={policy.id}>
+        <td data-label={t("Policy")}><strong>{policy.name}</strong><span className="lw-sub">{policy.code || '—'} / {policy.company?.name || (policy.company_id ? t('Company #{id}', { id: policy.company_id! }) : t("Global policy"))}</span><details className="lw-policy-details"><summary>{t("Policy details")}</summary><p>{policy.description || t("No description provided.")}</p><dl><div><dt>{t("Joining allowance")}</dt><dd>{policy.prorate_on_join ? t("Prorated") : t("Full allowance")}</dd></div><div><dt>{t("Payment")}</dt><dd>{policy.is_paid === false ? t("Unpaid") : t("Paid leave")}</dd></div>{policy.requires_document && <div><dt>{t("Supporting document")}</dt><dd>{t("Required")}</dd></div>}{policy.gender_specific && <div><dt>{t("Eligibility")}</dt><dd>{t(policy.gender_specific)}{' '}{t("only")}</dd></div>}</dl></details></td>
+        <td data-label={t("Leave allowance")}><span className="lw-number">{quantity(policy.default_days ?? '—')}</span>{' '}{t("days")}</td>
+        <td data-label={t("Request limit")}>{policy.max_days_per_request == null ? t("No limit") : t('{count} days maximum', { count: policy.max_days_per_request })}</td>
+        <td data-label={t("Carry forward")}>{policy.can_carry_forward ? t('Up to {count} days', { count: policy.max_carry_forward_days ?? 0 }) : t("Not enabled")}</td>
+        <td data-label={t("Status")}><span className={`lw-status ${policy.is_active !== false ? 'lw-active' : ''}`}>{policy.is_active !== false ? t("Active") : t("Inactive")}</span></td>
+        <td data-label={t("Actions")}>{canEdit(policy) ? <div className="lw-actions"><button className="ow-button" title={t("Edit")} onClick={() => handleOpenModal(policy)}><Edit2 size={15} />{t("Edit")}</button><button className="ow-button" title={t("Delete")} aria-label={t('Delete {name}', { name: policy.name })} onClick={() => handleDelete(policy.id)}><Trash2 size={15} /></button></div> : <span className="lw-note">{t("Read only")}</span>}</td>
+      </tr>)}</tbody></table></div>}
+      {!loading && !loadError && <div className="ow-pagination"><span>{paginatedPolicies.length}{' '}{t("of")} {filteredPolicies.length}{' '}{t("policies")}</span><div className="lw-actions"><button className="ow-button" aria-label={t("Previous page")} disabled={page <= 1} onClick={() => setPage(p => p - 1)}><ChevronLeft size={16} /></button><span>{t("Page")} {page}{' '}{t("of")} {totalPages}</span><button className="ow-button" aria-label={t("Next page")} disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}><ChevronRight size={16} /></button></div></div>}
+    </section>
+    {showModal && <OperationalDialog title={editingPolicy ? t("Edit Leave Policy") : t("Add Leave Policy")} subtitle={t("Company ownership is fixed after creation.")} onClose={handleCloseModal} busy={submitting} className="lw-dialog leave-refresh-dialog leave-policy-editor">              <form onSubmit={handleSubmit} className="ph-workflow dw-form">
+                <div><div className="dw-form-content">{formError && <p className="ow-feedback" role="alert">{formError}</p>}<section className="ph-section dw-section"><h3>{t("Policy & company")}</h3><div className="dw-fields"><div className="ph-form-grid dw-form-grid">
                     <div>
-                      <h2 className="text-xl font-bold text-white">
-                        {editingPolicy ? 'Edit Leave Policy' : 'Add Leave Policy'}
-                      </h2>
-                      <p className="text-indigo-100 text-sm">
-                        {editingPolicy ? 'Update policy configuration' : 'Create new leave policy'}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={handleCloseModal}
-                    className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center text-white hover:bg-white/30 transition-colors"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-
-              <form onSubmit={handleSubmit} className="p-6 max-h-[70vh] overflow-y-auto">
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Policy Name <span className="text-red-500">*</span>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">{t("Policy Name")} <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
-                        value={formData.name}
+                        aria-label={t("Policy Name")}
+                      value={formData.name}
                         onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                        placeholder="e.g., Annual Leave"
+                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500"
+                        placeholder={t("e.g., Annual Leave")}
                         required
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Code <span className="text-red-500">*</span>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">{t("Code")} <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
-                        value={formData.code}
+                        aria-label={t("Code")}
+                      value={formData.code}
                         onChange={(e) => setFormData(prev => ({ ...prev, code: e.target.value.toUpperCase() }))}
-                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                        placeholder="e.g., AL"
+                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500"
+                        placeholder={t("e.g., AL")}
                         required
                       />
                     </div>
                   </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+<div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">{t("Description")}</label>
                     <textarea
+                      aria-label={t("Description")}
                       value={formData.description}
                       onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                      className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500"
                       rows={2}
-                      placeholder="Brief description of this leave type..."
+                      placeholder={t("Brief description of this leave type...")}
                     />
                   </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Company</label>
+<div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">{t("Company")}</label>
                     <select
+                      disabled={!!editingPolicy}
+                      aria-label={t("Company")}
                       value={formData.company_id}
                       onChange={(e) => setFormData(prev => ({ ...prev, company_id: e.target.value }))}
-                      className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500"
                     >
-                      <option value="">All Companies (Global)</option>
+                      {isSuperAdmin ? <option value="">{t("All Companies (Global)")}</option> : <option value="">{t("Select company")}</option>}
                       {companies.map(company => (
                         <option key={company.id} value={company.id}>{company.name}</option>
                       ))}
                     </select>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
+                  </div></div></section><section className="ph-section dw-section"><h3>{t("Entitlement & eligibility")}</h3><div className="dw-fields"><div className="ph-form-grid dw-form-grid">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Default Days</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">{t("Default Days")}</label>
                       <input
-                        type="number"
+                        type="number" step="any"
                         min="0"
-                        value={formData.default_days}
+                        aria-label={t("Default Days")}
+                      value={formData.default_days}
                         onChange={(e) => setFormData(prev => ({ ...prev, default_days: Number(e.target.value) }))}
-                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Max Days</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">{t("Max Days")}</label>
                       <input
                         type="number"
                         min="1"
-                        value={formData.max_days}
+                        aria-label={t("Max Days")}
+                      value={formData.max_days}
                         onChange={(e) => setFormData(prev => ({ ...prev, max_days: e.target.value }))}
-                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                        placeholder="No limit"
+                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500"
+                        placeholder={t("No limit")}
                       />
-                      <p className="mt-1 text-xs text-gray-500">
-                        Working days per request. Leave empty for no limit.
-                      </p>
+                      <p className="mt-1 text-xs text-gray-500">{t("Working days per request. Leave empty for no limit.")} </p>
                     </div>
                   </div>
-
-                  <div className="grid grid-cols-2 gap-4">
+<div className="ph-form-grid dw-form-grid">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Gender Specific</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">{t("Gender Specific")}</label>
                       <select
-                        value={formData.gender_specific}
+                        aria-label={t("Gender Specific")}
+                      value={formData.gender_specific}
                         onChange={(e) => setFormData(prev => ({ ...prev, gender_specific: e.target.value }))}
-                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500"
                       >
-                        <option value="">All Genders</option>
-                        <option value="male">Male Only</option>
-                        <option value="female">Female Only</option>
+                        <option value="">{t("All Genders")}</option>
+                        <option value="male">{t("Male Only")}</option>
+                        <option value="female">{t("Female Only")}</option>
                       </select>
                     </div>
-                  </div>
+                  </div></div></section><section className="ph-section dw-section"><h3>{t("Carry forward")}</h3><div className="dw-fields"><div className="dw-fields">
 
-                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                    <p className="text-sm font-medium text-gray-700 mb-3">Carry Forward Settings</p>
-                    <div className="flex items-center gap-4">
+                    <div className="dw-checks">
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input
                           type="checkbox"
                           checked={formData.carry_forward}
                           onChange={(e) => setFormData(prev => ({ ...prev, carry_forward: e.target.checked }))}
-                          className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                          className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
                         />
-                        <span className="text-sm text-gray-700">Enable Carry Forward</span>
+                        <span className="text-sm text-gray-700">{t("Enable Carry Forward")}</span>
                       </label>
                       {formData.carry_forward && (
                         <div className="flex items-center gap-2">
                           <input
-                            type="number"
+                            type="number" step="any"
                             min="0"
-                            value={formData.carry_forward_days}
+                            aria-label={t("Carry forward days")}
+                      value={formData.carry_forward_days}
                             onChange={(e) => setFormData(prev => ({ ...prev, carry_forward_days: Number(e.target.value) }))}
-                            className="w-20 px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                            className="w-20 px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500"
                           />
-                          <span className="text-sm text-gray-500">max days</span>
+                          <span className="text-sm text-gray-500">{t("max days")}</span>
                         </div>
                       )}
                     </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-6">
+                  </div></div></section><section className="ph-section dw-section"><h3>{t("Policy options")}</h3><div className="dw-fields"><div className="dw-checks">
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={formData.prorate_enabled}
                         onChange={(e) => setFormData(prev => ({ ...prev, prorate_enabled: e.target.checked }))}
-                        className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                        className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
                       />
-                      <span className="text-sm text-gray-700">Enable Prorate</span>
+                      <span className="text-sm text-gray-700">{t("Enable Prorate")}</span>
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={formData.requires_document}
                         onChange={(e) => setFormData(prev => ({ ...prev, requires_document: e.target.checked }))}
-                        className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                        className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
                       />
-                      <span className="text-sm text-gray-700">Requires Document</span>
+                      <span className="text-sm text-gray-700">{t("Requires Document")}</span>
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={formData.is_active}
                         onChange={(e) => setFormData(prev => ({ ...prev, is_active: e.target.checked }))}
-                        className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                        className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
                       />
-                      <span className="text-sm text-gray-700">Active</span>
+                      <span className="text-sm text-gray-700">{t("Active")}</span>
                     </label>
-                  </div>
-                </div>
+                  </div></div></section></div></div>
 
-                <div className="flex items-center gap-3 mt-6">
+                <div className="ph-form-actions dw-actions">
                   <button
                     type="button"
                     onClick={handleCloseModal}
                     disabled={submitting}
-                    className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
+                    className="ph-button"
+                  >{t("Cancel")} </button>
                   <button
                     type="submit"
-                    disabled={submitting}
-                    className="flex-1 px-4 py-2.5 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                    // Re-checked on every render: access may change while the dialog is open.
+                    disabled={submitting || !canManage || (!!editingPolicy && !canEdit(editingPolicy))}
+                    className="ph-button ph-button-primary"
                   >
                     {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                    {editingPolicy ? 'Update Policy' : 'Create Policy'}
+                    {editingPolicy ? t("Update Policy") : t("Create Policy")}
                   </button>
                 </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+              </form></OperationalDialog>}
+  {decisionDialog}
+</OperationalWorkspace>;
 }

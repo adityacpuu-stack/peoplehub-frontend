@@ -43,12 +43,15 @@ export interface CompanyFeatures {
 }
 
 export interface User {
+  language?: 'id' | 'en';
   id: number;
   email: string;
   is_active: boolean;
   force_password_change: boolean;
   roles: string[];  // Array of role names from backend
-  permissions: string[];  // Array of permission names
+  permissions: string[];  // Stored permission names (not an authorization decision)
+  /** Covered action keys resolved by the server; see lib/actions.ts. Absent on older servers. */
+  effectiveActions?: string[];
   accessibleCompanyIds: number[];
   companyFeatures?: CompanyFeatures;
   employee?: {
@@ -214,6 +217,8 @@ export interface Employee {
   updated_at: string;
 }
 
+export type UpdateEmployeeRequest = { [K in keyof CreateEmployeeRequest]?: CreateEmployeeRequest[K] | null };
+
 export interface CreateEmployeeRequest {
   name: string;
   employee_id?: string;
@@ -341,7 +346,7 @@ export interface Position {
 // ATTENDANCE TYPES
 // ==========================================
 
-export type AttendanceStatus = 'present' | 'absent' | 'late' | 'early_leave' | 'half_day' | 'on_leave';
+export type AttendanceStatus = 'present' | 'absent' | 'late' | 'early_leave' | 'half_day' | 'on_leave' | 'holiday' | 'work_from_home';
 
 export interface Attendance {
   id: number;
@@ -355,7 +360,12 @@ export interface Attendance {
   check_out_longitude?: number;
   status: AttendanceStatus;
   work_hours?: number;
-  overtime_hours?: number;
+  total_hours?: Decimalish | null;
+  overtime_hours?: Decimalish | null;
+  break_start?: string | null;
+  break_end?: string | null;
+  shift_type?: string | null;
+  workLocation?: { id: number; name: string } | null;
   notes?: string;
   employee?: Employee;
   created_at: string;

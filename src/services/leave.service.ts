@@ -70,6 +70,12 @@ export const leaveService = {
   // SELF-SERVICE ROUTES
   // ==========================================
 
+  // Active policies for the employee's own company, independent of HR assignments.
+  getMyTypes: async (): Promise<LeaveType[]> => {
+    const response = await api.get<ApiResponse<LeaveType[]>>('/leaves/me/types');
+    return response.data.data;
+  },
+
   // Get my leaves
   getMyLeaves: async (params?: PaginationParams): Promise<PaginatedResponse<LeaveRequest>> => {
     const response = await api.get<PaginatedResponse<LeaveRequest>>('/leaves/me', { params });
@@ -110,6 +116,12 @@ export const leaveService = {
   // ==========================================
   // MANAGER ROUTES
   // ==========================================
+
+  // Personal approval inbox/history. Server limits rows to assigned employees.
+  getMyApprovals: async (): Promise<LeaveRequest[]> => {
+    const response = await api.get<ApiResponse<LeaveRequest[]>>('/leaves/my-approvals');
+    return response.data.data;
+  },
 
   // Get pending approvals (or all team leaves with status filter)
   getPendingApprovals: async (status?: string): Promise<LeaveRequest[]> => {
@@ -184,7 +196,20 @@ export const leaveService = {
     return response.data.data || [];
   },
 
-  // Allocate leave to employee
+  // Excel workbook of every matching employee (all pages, all leave types) for one year.
+  // Read-only on the server; the caller names and saves the file.
+  exportBalances: async (params: LeaveBalanceExportParams): Promise<Blob> => {
+    const response = await api.get<Blob>('/leaves/balances/export', { params, responseType: 'blob' });
+    return response.data;
+  },
+
+  // Use the same insert-only calculator as the nightly allocation job.
+  allocateDefaults: async (data: LeaveAllocationRequest): Promise<LeaveAllocationResult> => {
+    const response = await api.post<ApiResponse<LeaveAllocationResult>>('/leaves/balances/allocate-defaults', data);
+    return response.data.data;
+  },
+
+  // Explicit legacy allocation override; default allocation UI uses allocateDefaults.
   allocateLeave: async (data: {
     employee_id: number;
     leave_type_id: number;
@@ -209,3 +234,42 @@ export const leaveService = {
     return response.data.data;
   },
 };
+
+export interface LeaveBalanceExportParams {
+  year: number;
+  employment_status: 'all' | 'active';
+  locale: 'en' | 'id';
+  company_id?: number;
+  department_id?: number;
+  search?: string;
+}
+
+export interface LeaveAllocationRequest {
+  year?: number;
+  dry_run: boolean;
+  company_id?: number;
+  department_id?: number;
+  employee_id?: number;
+  leave_type_ids?: number[];
+  search?: string;
+}
+
+export interface LeaveAllocationResult {
+  year: number;
+  dryRun: boolean;
+  employeesConsidered: number;
+  created: number;
+  skippedBalanceExists: number;
+  skippedHasLeaveHistory: number;
+  skippedNotEntitledThisYear: number;
+  totalDaysGranted: number;
+  leaveTypes: Array<{ id: number; name: string; code: string | null; default_days: number | null }>;
+  lines: Array<{
+    employee_id: number;
+    leave_type_id: number;
+    leave_type: string;
+    probation_end_date: string;
+    days: number;
+    outcome: 'created' | 'skipped_balance_exists' | 'skipped_has_leave_history' | 'skipped_not_entitled_this_year';
+  }>;
+}

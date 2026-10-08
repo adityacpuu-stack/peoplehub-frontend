@@ -5,13 +5,14 @@ interface DepartmentListParams extends PaginationParams {
   company_id?: number;
   parent_id?: number;
   is_active?: boolean;
+  status?: string;
 }
 
 interface CreateDepartmentRequest {
   name: string;
   code?: string;
   description?: string;
-  company_id?: number; // Optional - departments are now global
+  company_id?: number | null; // Null denotes shared/global data
   parent_id?: number;
   head_id?: number;
 }

@@ -1,25 +1,20 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { payrollNumber } from '@/components/payroll/localization';
+import { t, useLocale, intlLocale } from '@/i18n';
+import { useAuthStore } from '@/stores/auth.store';
+import { useDomainConfirmation } from '@/pages/leave/useDomainConfirmation';
+import '@/pages/leave/domain-workflows.css';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
-import {
-  Timer,
-  Plus,
-  Search,
-  Eye,
-  Check,
-  X,
-  Clock,
-  Loader2,
-  RefreshCw,
-  User,
-  Calculator,
-  Calendar,
-} from 'lucide-react';
+import { isAxiosError } from 'axios';
+import { Plus, Eye, Check, X, Loader2, RefreshCw, Calendar } from 'lucide-react';
 import { overtimeService } from '../../services/overtime.service';
 import type { Overtime, OvertimeListQuery } from '../../services/overtime.service';
 import { companyService } from '../../services/company.service';
 import { employeeService } from '../../services/employee.service';
 import { payrollSettingService } from '../../services/payroll-setting.service';
-import { SearchableSelect } from '../../components/ui/SearchableSelect';
+import { CompensationWorkspace, CompensationStatus, CompensationEmpty, CompensationDialog, CompensationEmployeeSelect } from '@/components/compensation/CompensationWorkspace';
+import { collectPages } from '@/services/master-data';
+import './overtime.css';
 
 /**
  * Bounds for the Total Hours field, which takes a monthly accumulated figure
@@ -63,7 +58,7 @@ const generatePeriodOptions = (): { value: string; label: string }[] => {
   for (let i = 0; i < 12; i++) {
     const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-    const label = date.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+    const label = date.toLocaleDateString(intlLocale(), { month: 'long', year: 'numeric' });
     options.push({ value, label });
   }
 
@@ -88,7 +83,20 @@ interface Employee {
 }
 
 export function OvertimePage() {
+  useLocale();
+  const { requestDecision, decisionDialog } = useDomainConfirmation('compensation-refresh-dialog ot-decision');
+  const user = useAuthStore(state => state.user);
+  // Match backend requireHRStaffOrHigher / requireManagerOrHigher.
+  const canManage = user?.roles.some(role => ['Super Admin', 'Group CEO', 'CEO', 'HR Manager', 'Finance Manager', 'Tax Manager', 'HR Staff'].includes(role)) ?? false;
+  const canApprove = canManage || (user?.roles.some(role => ['Tax Staff', 'Manager'].includes(role)) ?? false);
   // Data state
+  const dataRequest = useRef(0);
+  const employeeRequest = useRef(0);
+  const cutoffRequest = useRef(0);
+  const [loadError, setLoadError] = useState(false);
+  const [companiesError, setCompaniesError] = useState(false);
+  const [employeesError, setEmployeesError] = useState(false);
+  useEffect(() => () => { dataRequest.current++; employeeRequest.current++; cutoffRequest.current++; }, []);
   const [requests, setRequests] = useState<Overtime[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -112,7 +120,7 @@ export function OvertimePage() {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
   const [cutoffDate, setCutoffDate] = useState<number>(20);
-  const periodOptions = useMemo(() => generatePeriodOptions(), []);
+  const periodOptions = generatePeriodOptions();
 
   // Modal state
   const [selectedRequest, setSelectedRequest] = useState<Overtime | null>(null);
@@ -134,16 +142,19 @@ export function OvertimePage() {
 
   // Fetch cutoff date when company changes
   const fetchCutoffDate = useCallback(async (companyId: number) => {
+    const request = ++cutoffRequest.current;
     try {
       const settings = await payrollSettingService.getByCompany(companyId);
-      setCutoffDate(settings.payroll_cutoff_date || 20);
+      if (request === cutoffRequest.current) setCutoffDate(settings.payroll_cutoff_date || 20);
     } catch {
-      setCutoffDate(20); // Default to 20 if no settings
+      if (request === cutoffRequest.current) setCutoffDate(20); // Default to 20 if no settings
     }
   }, []);
 
   // Fetch data
   const fetchOvertimes = useCallback(async () => {
+    const request = ++dataRequest.current;
+    setLoadError(false);
     try {
       setLoading(true);
 
@@ -164,45 +175,52 @@ export function OvertimePage() {
       if (filterCompany !== 'all') query.company_id = Number(filterCompany);
 
       const response = await overtimeService.list(query);
+      if (request !== dataRequest.current) return;
       setRequests(response.data);
       setTotalPages(response.pagination.totalPages);
       setTotal(response.pagination.total);
-    } catch (error: any) {
+    } catch (error) {
+      if (request !== dataRequest.current) return;
+      setLoadError(true);
+      setRequests([]);
       console.error('Failed to fetch overtimes:', error);
-      toast.error('Failed to load overtime data');
     } finally {
-      setLoading(false);
+      if (request === dataRequest.current) setLoading(false);
     }
   }, [page, filterStatus, filterType, filterCompany, filterPeriod, cutoffDate]);
 
   const fetchCompanies = useCallback(async () => {
     try {
-      const response = await companyService.getAll({ limit: 100 });
-      setCompanies(response.data);
+      setCompaniesError(false);
+      const rows = await collectPages((page, limit) => companyService.getAll({ page, limit }));
+      setCompanies(rows);
     } catch (error) {
       console.error('Failed to fetch companies:', error);
+      setCompaniesError(true);
     }
   }, []);
 
   const fetchEmployees = useCallback(async (companyId?: number) => {
+    const request = ++employeeRequest.current;
+    setEmployeesError(false);
+    setEmployees([]);
     if (!companyId) {
+      if (request === employeeRequest.current) setEmployeesLoading(false);
       setEmployees([]);
       return;
     }
     setEmployeesLoading(true);
     try {
-      const response = await employeeService.getAll({
-        page: 1,
-        company_id: companyId,
-        limit: 500,
-        employment_status: 'all',
-      });
-      setEmployees(response.data.filter(emp => emp.employment_status === 'active' || emp.employment_status === 'resigned') as Employee[]);
+      const rows = await collectPages((page, limit) => employeeService.getAll({ page, limit, company_id: companyId, employment_status: 'all' }));
+      if (request !== employeeRequest.current) return;
+      setEmployees(rows.filter(emp => emp.employment_status === 'active' || emp.employment_status === 'resigned') as Employee[]);
     } catch (error) {
+      if (request !== employeeRequest.current) return;
+      setEmployeesError(true);
       console.error('Failed to fetch employees:', error);
       setEmployees([]);
     } finally {
-      setEmployeesLoading(false);
+      if (request === employeeRequest.current) setEmployeesLoading(false);
     }
   }, []);
 
@@ -219,6 +237,7 @@ export function OvertimePage() {
     if (filterCompany !== 'all') {
       fetchCutoffDate(Number(filterCompany));
     } else {
+      cutoffRequest.current++;
       setCutoffDate(20); // Reset to default when "All Companies"
     }
   }, [filterCompany, fetchCutoffDate]);
@@ -242,7 +261,7 @@ export function OvertimePage() {
       pending: requests.filter(r => r.status === 'pending').length,
       approved: requests.filter(r => r.status === 'approved').length,
       totalHours: requests.filter(r => r.status === 'approved').reduce((acc, r) => acc + Number(r.hours || 0), 0),
-      totalAmount: requests.filter(r => r.status === 'approved').reduce((acc, r) => acc + (r.total_amount || 0), 0),
+      totalAmount: requests.filter(r => r.status === 'approved').reduce((acc, r) => acc + Number(r.total_amount || 0), 0),
     };
   }, [requests, total]);
 
@@ -250,45 +269,45 @@ export function OvertimePage() {
     try {
       setActionLoading(id);
       await overtimeService.approve(id);
-      toast.success('Overtime request approved');
+      toast.success(t("Overtime request approved"));
       fetchOvertimes();
       setShowDetailModal(false);
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to approve', { id: 'api-error' });
+    } catch (error) {
+      toast.error((isAxiosError(error) ? error.response?.data?.message : undefined) || t('Failed to approve'), { id: 'api-error', ...(showDetailModal ? { toasterId: 'compensation-dialog' } : {}) });
     } finally {
       setActionLoading(null);
     }
   };
 
   const handleReject = async (id: number) => {
-    const reason = prompt('Please enter rejection reason:');
+    const reason = (await requestDecision({ title: () => t('Reject overtime'), message: () => t('The reason will be recorded with this rejection.'), confirmLabel: () => t('Reject'), reasonLabel: () => t('Please enter rejection reason:') }));
     if (!reason) return;
 
     try {
       setActionLoading(id);
       await overtimeService.reject(id, { rejection_reason: reason });
-      toast.success('Overtime request rejected');
+      toast.success(t("Overtime request rejected"));
       fetchOvertimes();
       setShowDetailModal(false);
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to reject', { id: 'api-error' });
+    } catch (error) {
+      toast.error((isAxiosError(error) ? error.response?.data?.message : undefined) || t('Failed to reject'), { id: 'api-error', ...(showDetailModal ? { toasterId: 'compensation-dialog' } : {}) });
     } finally {
       setActionLoading(null);
     }
   };
 
-  // Calculate overtime amount (same formula as Laravel: floor(basic_salary / 173) * hours * multiplier)
+  // Match createForEmployee: retain the fractional hourly rate and round only the total.
   const calculateOvertimeAmount = useCallback(() => {
     if (!selectedEmployee?.basic_salary || !formData.hours) return 0;
-    const hourlyRate = Math.floor(selectedEmployee.basic_salary / 173);
+    const hourlyRate = selectedEmployee.basic_salary / 173;
     const hours = parseFloat(formData.hours) || 0;
     const multiplier = parseFloat(formData.rate_multiplier) || 1;
-    return hourlyRate * hours * multiplier;
+    return Math.round(hours * hourlyRate * multiplier * 100) / 100;
   }, [selectedEmployee, formData.hours, formData.rate_multiplier]);
 
   const getHourlyRate = useCallback(() => {
     if (!selectedEmployee?.basic_salary) return 0;
-    return Math.floor(selectedEmployee.basic_salary / 173);
+    return selectedEmployee.basic_salary / 173;
   }, [selectedEmployee]);
 
   const handleCompanyChange = (companyId: string) => {
@@ -311,13 +330,13 @@ export function OvertimePage() {
     e.preventDefault();
 
     if (!formData.employee_id || !formData.date || !formData.hours || !formData.reason) {
-      toast.error('Please fill in required fields');
+      toast.error(t("Please fill in required fields"), { id: 'api-error', toasterId: 'compensation-dialog' });
       return;
     }
 
     const hours = parseFloat(formData.hours);
     if (hours < MIN_OVERTIME_HOURS || hours > MAX_OVERTIME_HOURS) {
-      toast.error(`Hours must be between ${MIN_OVERTIME_HOURS} and ${MAX_OVERTIME_HOURS}`);
+      toast.error(t("Hours must be between {value0} and {value1}", { value0: payrollNumber(MIN_OVERTIME_HOURS), value1: payrollNumber(MAX_OVERTIME_HOURS) }), { id: 'api-error', toasterId: 'compensation-dialog' });
       return;
     }
 
@@ -332,7 +351,7 @@ export function OvertimePage() {
         task_description: formData.description,
         overtime_type: formData.rate_multiplier === '2.0' ? 'weekend' : formData.rate_multiplier === '3.0' ? 'holiday' : 'regular',
       });
-      toast.success('Overtime created and auto-approved');
+      toast.success(t("Overtime submitted. Approval is required before payroll."));
       setShowAddModal(false);
       setFormData({
         company_id: '',
@@ -346,45 +365,10 @@ export function OvertimePage() {
       setSelectedEmployee(null);
       setEmployees([]);
       fetchOvertimes();
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to create overtime', { id: 'api-error' });
+    } catch (error) {
+      toast.error((isAxiosError(error) ? error.response?.data?.message : undefined) || t('Failed to create overtime'), { id: 'api-error', toasterId: 'compensation-dialog' });
     } finally {
       setFormLoading(false);
-    }
-  };
-
-  const getStatusBadge = (status: Overtime['status']) => {
-    switch (status) {
-      case 'pending':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-            Pending
-          </span>
-        );
-      case 'approved':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
-            <Check className="w-3 h-3" />
-            Approved
-          </span>
-        );
-      case 'rejected':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
-            <X className="w-3 h-3" />
-            Rejected
-          </span>
-        );
-      case 'cancelled':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
-            <X className="w-3 h-3" />
-            Cancelled
-          </span>
-        );
-      default:
-        return null;
     }
   };
 
@@ -395,26 +379,27 @@ export function OvertimePage() {
     const multiplier = Number(rateMultiplier ?? overtimeService.getMultiplier(type));
     switch (type) {
       case 'regular':
-        return <span className="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs font-medium rounded">Weekday ({multiplier}x)</span>;
+        return <span className="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs font-medium rounded">{t("Weekday (")}{multiplier.toLocaleString(intlLocale())}{t("x)")}</span>;
       case 'weekend':
-        return <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-medium rounded">Weekend ({multiplier}x)</span>;
+        return <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-medium rounded">{t("Weekend (")}{payrollNumber(Number(multiplier))}{t("x)")}</span>;
       case 'holiday':
-        return <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-medium rounded">Holiday ({multiplier}x)</span>;
+        return <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-medium rounded">{t("Holiday (")}{payrollNumber(Number(multiplier))}{t("x)")}</span>;
       default:
         return <span className="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs font-medium rounded">{type}</span>;
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('id-ID', {
+  const formatCurrency = (amount: number, maximumFractionDigits = 0) => {
+    return new Intl.NumberFormat(intlLocale(), {
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0,
+      maximumFractionDigits,
     }).format(amount);
   };
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('id-ID', {
+    return new Date(dateStr).toLocaleDateString(intlLocale(), {
       weekday: 'short',
       day: 'numeric',
       month: 'short',
@@ -426,544 +411,166 @@ export function OvertimePage() {
     if (!timeStr) return '-';
     // Handle both ISO datetime and time-only formats
     if (timeStr.includes('T')) {
-      return new Date(timeStr).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+      return new Date(timeStr).toLocaleTimeString(intlLocale(), { hour: '2-digit', minute: '2-digit' });
     }
     return timeStr;
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header Banner */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-orange-500 via-amber-500 to-yellow-500 rounded-2xl shadow-lg">
-        <div className="absolute inset-0 bg-grid-white/10 [mask-image:linear-gradient(0deg,transparent,rgba(255,255,255,0.5))]"></div>
-        <div className="absolute -top-24 -right-24 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
-        <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-orange-400/20 rounded-full blur-3xl"></div>
+    <div className="ot-page">
+      <CompensationWorkspace title={t("Overtime")} description={t("Pantau lembur karyawan dan status persetujuan per periode payroll.")}
+        actions={<><button className="cp-button" disabled={loading} onClick={fetchOvertimes}><RefreshCw size={16} />{t("Refresh")}</button>{canManage && <button className="cp-button cp-primary" onClick={() => setShowAddModal(true)}><Plus size={17} />{t("Add Overtime")}</button>}</>}
+        filters={<>
+          <label className="cp-field">{t("company")}<select aria-label={t("Filter company")} value={filterCompany} onChange={event => { setFilterCompany(event.target.value); setPage(1); }}><option value="all">{t("Semua company")}</option>{companies.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}</select></label>
+            {companiesError && <p className="cp-filter-error" role="alert">{t("Daftar company gagal dimuat.")} <button onClick={fetchCompanies}>{t("Coba lagi")}</button></p>}
+          <label className="cp-field">{t("periode")}<select aria-label={t("Filter periode")} value={filterPeriod} onChange={event => { setFilterPeriod(event.target.value); setPage(1); }}>{periodOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+          <label className="cp-field">{t("status")}<select aria-label={t("Filter status")} value={filterStatus} onChange={event => { setFilterStatus(event.target.value); setPage(1); }}><option value="all">{t("Semua status")}</option><option value="pending">{t("Pending")}</option><option value="approved">{t("Approved")}</option><option value="rejected">{t("Rejected")}</option><option value="cancelled">{t("Cancelled")}</option></select></label>
+          <label className="cp-field">{t("tipe")}<select aria-label={t("Filter tipe")} value={filterType} onChange={event => { setFilterType(event.target.value); setPage(1); }}><option value="all">{t("Semua tipe")}</option><option value="regular">{t("Weekday")}</option><option value="weekend">{t("Weekend")}</option><option value="holiday">{t("Holiday")}</option></select></label>
+          <button className="cp-reset" onClick={() => { setSearch(''); setFilterCompany('all'); setFilterStatus('all'); setFilterType('all'); setFilterPeriod(periodOptions[0].value); setPage(1); }}>{t("Reset filter")}</button>
+          <div className="cp-period"><Calendar size={17} /><strong>{t("Rentang periode")}</strong><span>{formatDate(calculatePeriodDates(filterPeriod, cutoffDate).start)}{' '}{t("s.d.")} {formatDate(calculatePeriodDates(filterPeriod, cutoffDate).end)}</span><small>{t("Cutoff tanggal")} {payrollNumber(Number(cutoffDate))}</small></div>
+        </>}
+        metrics={[
+          { label: t('Pengajuan ditemukan'), value: payrollNumber(total), note: t('Sesuai periode dan filter') },
+          { label: t('Menunggu persetujuan'), value: payrollNumber(stats.pending), note: t('Pada halaman ini') },
+          { label: t('Lembur disetujui'), value: formatCurrency(stats.totalAmount), note: t("{value0} jam pada halaman ini", { value0: Number(stats.totalHours.toFixed(1)).toLocaleString(intlLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 }) }) },
+        ]}
+        search={search} onSearch={setSearch} searchLabel={t("Cari karyawan pada halaman ini…")}
+        loading={loading} error={loadError} onRetry={fetchOvertimes}
+        page={page} totalPages={totalPages} onPage={setPage} count={t("{value0} ditampilkan · {value1} pengajuan", { value0: payrollNumber(filteredRequests.length), value1: payrollNumber(total) })}>
+        {!filteredRequests.length ? <CompensationEmpty /> : <table className="cp-table"><thead><tr><th>{t("Karyawan")}</th><th>{t("Tanggal / Jenis")}</th><th>{t("Duration")}</th><th className="cp-money">{t("Total Amount")}</th><th>{t("Status")}</th><th>{t("Aksi")}</th></tr></thead>
+          <tbody>{filteredRequests.map(request => <tr key={request.id}>
+            <td><div className="ot-identity"><strong>{request.employee?.name || t('Karyawan')}</strong><small>{request.employee?.employee_id}</small><small>{request.employee?.department?.name || '—'}{request.company?.name && <> · {request.company.name}</>}</small></div></td>
+            <td data-label={t("Tanggal / Jenis")}><strong>{formatDate(request.date)}</strong><small>{formatTime(request.start_time)} – {formatTime(request.end_time)}</small><div className="cp-type">{getTypeBadge(request.overtime_type, request.rate_multiplier)}</div></td>
+            <td data-label={t("Duration")} className="ot-hours"><strong>{Number(request.hours || 0).toLocaleString(intlLocale(), { maximumFractionDigits: 2 })} {t("hours")}</strong><small>{t("Multiplier")}: {Number(request.rate_multiplier ?? 1).toLocaleString(intlLocale())}×</small></td>
+            <td data-label={t("Total Amount")} className="cp-money"><strong>{formatCurrency(Number(request.total_amount || 0))}</strong><small>{t("Hourly Rate")}: {formatCurrency(Number(request.rate_per_hour || 0))}</small></td>
+            <td data-label={t("Status")}><CompensationStatus status={request.status} /></td>
+            <td className="cp-row-actions"><div className="ot-row-actions"><button className="cp-icon-button" aria-label={t("Detail overtime {value0}", { value0: request.id })} onClick={() => { setSelectedRequest(request); setShowDetailModal(true); }}><Eye size={17} /></button>
+              {canApprove && request.status === 'pending' && <><button className="cp-icon-button" aria-label={t("Approve overtime {value0}", { value0: request.id })} disabled={actionLoading === request.id} onClick={() => handleApprove(request.id)}><Check size={17} /></button><button className="cp-icon-button cp-danger" aria-label={t("Reject overtime {value0}", { value0: request.id })} disabled={actionLoading === request.id} onClick={() => handleReject(request.id)}><X size={17} /></button></>}</div></td>
+          </tr>)}</tbody></table>}
+      </CompensationWorkspace>
+      {showDetailModal && selectedRequest && <CompensationDialog title={t("Overtime Detail")} subtitle={selectedRequest.employee?.name} busy={actionLoading != null} onClose={() => setShowDetailModal(false)}>
+        <div className="cp-detail ph-workflow dw-detail dw-fields ot-detail">
+                <dl className="ph-kv dw-detail-grid">
+                  <div>
+                    <dt>{t("Employee ID")}</dt>
+                    <dd>{selectedRequest.employee?.employee_id}</dd>
+                  </div>
+                  <div>
+                    <dt>{t("Department")}</dt>
+                    <dd>{selectedRequest.employee?.department?.name || '-'}</dd>
+                  </div>
+                  <div>
+                    <dt>{t("Company")}</dt>
+                    <dd>{selectedRequest.company?.name || '-'}</dd>
+                  </div>
+                  <div>
+                    <dt>{t("Status")}</dt>
+                    <dd><CompensationStatus status={selectedRequest.status} /></dd>
+                  </div>
+                </dl>
 
-        <div className="relative px-6 py-8 sm:px-8 sm:py-10">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-14 h-14 bg-white/20 backdrop-blur-xl rounded-2xl flex items-center justify-center shadow-lg">
-                  <Timer className="w-7 h-7 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-                    Overtime Management
-                  </h1>
-                  <p className="text-orange-100 text-sm mt-1">
-                    Manage and approve employee overtime requests
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => fetchOvertimes()}
-                disabled={loading}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-white/20 backdrop-blur-xl text-white rounded-xl border border-white/30 hover:bg-white/30 transition-all duration-200 font-semibold"
-              >
-                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCw className="w-5 h-5" />}
-                <span>Refresh</span>
-              </button>
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-orange-600 rounded-xl hover:bg-orange-50 transition-all duration-200 font-semibold shadow-lg"
-              >
-                <Plus className="w-5 h-5" />
-                <span>Add Overtime</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Period Info Banner */}
-      {(() => {
-        const { start, end } = calculatePeriodDates(filterPeriod, cutoffDate);
-        const startDate = new Date(start);
-        const endDate = new Date(end);
-        const formatPeriodDate = (d: Date) => d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
-        return (
-          <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Calendar className="w-5 h-5 text-blue-600" />
-              <div>
-                <p className="text-sm font-medium text-blue-900">
-                  Period: <span className="font-bold">{periodOptions.find(p => p.value === filterPeriod)?.label}</span>
-                </p>
-                <p className="text-xs text-blue-700">
-                  Date Range: {formatPeriodDate(startDate)} - {formatPeriodDate(endDate)} (Cut-off: {cutoffDate})
-                </p>
-              </div>
-            </div>
-            <p className="text-xs text-blue-600">
-              Only showing overtime within this period
-            </p>
-          </div>
-        );
-      })()}
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-gray-500 to-gray-600 rounded-xl flex items-center justify-center shadow-lg">
-              <Timer className="w-6 h-6 text-white" />
-            </div>
-          </div>
-          <p className="text-3xl font-bold text-gray-900 mb-1">{stats.total}</p>
-          <p className="text-sm text-gray-500">Total Requests</p>
-        </div>
-
-        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl flex items-center justify-center shadow-lg">
-              <Clock className="w-6 h-6 text-white" />
-            </div>
-            <span className="inline-flex items-center px-2 py-1 bg-amber-50 text-amber-700 text-xs font-bold rounded-lg">
-              Pending
-            </span>
-          </div>
-          <p className="text-3xl font-bold text-gray-900 mb-1">{stats.pending}</p>
-          <p className="text-sm text-gray-500">Awaiting Approval</p>
-        </div>
-
-        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center shadow-lg">
-              <Check className="w-6 h-6 text-white" />
-            </div>
-            <span className="inline-flex items-center px-2 py-1 bg-green-50 text-green-700 text-xs font-bold rounded-lg">
-              Approved
-            </span>
-          </div>
-          <p className="text-3xl font-bold text-gray-900 mb-1">{stats.approved}</p>
-          <p className="text-sm text-gray-500">Approved Requests</p>
-        </div>
-
-        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
-              <Timer className="w-6 h-6 text-white" />
-            </div>
-          </div>
-          <p className="text-3xl font-bold text-gray-900 mb-1">{stats.totalHours.toFixed(1)}</p>
-          <p className="text-sm text-gray-500">Total Hours</p>
-        </div>
-
-        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center shadow-lg">
-              <Timer className="w-6 h-6 text-white" />
-            </div>
-          </div>
-          <p className="text-2xl font-bold text-gray-900 mb-1">{formatCurrency(stats.totalAmount)}</p>
-          <p className="text-sm text-gray-500">Total Amount</p>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-        {/* Filters */}
-        <div className="px-6 py-4 border-b border-gray-100">
-          <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search employee..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
-              />
-            </div>
-
-            <div className="flex items-center gap-3 flex-wrap">
-              {/* Period Filter */}
-              <div className="flex items-center gap-2 px-3 py-2 bg-orange-50 border border-orange-200 rounded-lg">
-                <Calendar className="w-4 h-4 text-orange-600" />
-                <select
-                  value={filterPeriod}
-                  onChange={(e) => { setFilterPeriod(e.target.value); setPage(1); }}
-                  className="bg-transparent text-sm font-medium text-orange-700 focus:outline-none cursor-pointer"
-                >
-                  {periodOptions.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <select
-                value={filterCompany}
-                onChange={(e) => { setFilterCompany(e.target.value); setPage(1); }}
-                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
-              >
-                <option value="all">All Companies</option>
-                {companies.map(company => (
-                  <option key={company.id} value={company.id}>{company.name}</option>
-                ))}
-              </select>
-
-              <select
-                value={filterStatus}
-                onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }}
-                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
-              >
-                <option value="all">All Status</option>
-                <option value="pending">Pending</option>
-                <option value="approved">Approved</option>
-                <option value="rejected">Rejected</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
-
-              <select
-                value={filterType}
-                onChange={(e) => { setFilterType(e.target.value); setPage(1); }}
-                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
-              >
-                <option value="all">All Types</option>
-                <option value="regular">Weekday</option>
-                <option value="weekend">Weekend</option>
-                <option value="holiday">Holiday</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Table */}
-        <div className="overflow-x-auto">
-          {loading ? (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
-            </div>
-          ) : filteredRequests.length === 0 ? (
-            <div className="text-center py-16">
-              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Timer className="w-8 h-8 text-gray-400" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900">No overtime requests found</h3>
-              <p className="mt-1 text-gray-500">Try adjusting your search or filters</p>
-            </div>
-          ) : (
-            <table className="w-full">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-100">
-                  <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Employee</th>
-                  <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Date & Time</th>
-                  <th className="text-center px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Hours</th>
-                  <th className="text-center px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Type</th>
-                  <th className="text-right px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Amount</th>
-                  <th className="text-center px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="text-center px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filteredRequests.map(request => (
-                  <tr key={request.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-semibold text-sm shadow-sm bg-gradient-to-br from-orange-500 to-amber-600">
-                          {request.employee?.name?.charAt(0) || '?'}
-                        </div>
-                        <div>
-                          <p className="font-semibold text-gray-900">{request.employee?.name || 'Unknown'}</p>
-                          <p className="text-xs text-gray-500">
-                            {request.employee?.employee_id} • {request.employee?.department?.name || '-'}
-                          </p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <p className="font-medium text-gray-900">{formatDate(request.date)}</p>
-                      <p className="text-xs text-gray-500">
-                        {formatTime(request.start_time)} - {formatTime(request.end_time)}
-                      </p>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className="text-lg font-bold text-gray-900">{parseFloat(Number(request.hours || 0).toFixed(2))}</span>
-                      <span className="text-sm text-gray-500"> hrs</span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      {getTypeBadge(request.overtime_type, request.rate_multiplier)}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <p className="font-semibold text-gray-900">{formatCurrency(request.total_amount || 0)}</p>
-                      <p className="text-xs text-gray-500">
-                        {formatCurrency(request.rate_per_hour || 0)}/hr × {request.rate_multiplier || 1}
-                      </p>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      {getStatusBadge(request.status)}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-center gap-2">
-                        <button
-                          onClick={() => {
-                            setSelectedRequest(request);
-                            setShowDetailModal(true);
-                          }}
-                          className="p-2 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
-                          title="View Details"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                        {request.status === 'pending' && (
-                          <>
-                            <button
-                              onClick={() => handleApprove(request.id)}
-                              disabled={actionLoading === request.id}
-                              className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50"
-                              title="Approve"
-                            >
-                              {actionLoading === request.id ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                              ) : (
-                                <Check className="w-4 h-4" />
-                              )}
-                            </button>
-                            <button
-                              onClick={() => handleReject(request.id)}
-                              disabled={actionLoading === request.id}
-                              className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-                              title="Reject"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between">
-            <p className="text-sm text-gray-500">
-              Showing {((page - 1) * limit) + 1} to {Math.min(page * limit, total)} of {total} results
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm disabled:opacity-50 hover:bg-gray-50"
-              >
-                Previous
-              </button>
-              <span className="px-3 py-1.5 text-sm text-gray-700">
-                Page {page} of {totalPages}
-              </span>
-              <button
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm disabled:opacity-50 hover:bg-gray-50"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Detail Modal */}
-      {showDetailModal && selectedRequest && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex min-h-screen items-center justify-center p-4">
-            <div className="fixed inset-0 bg-black/50 transition-opacity" onClick={() => setShowDetailModal(false)} />
-
-            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden">
-              <div className="bg-gradient-to-br from-orange-500 via-amber-500 to-yellow-500 px-6 py-5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-white/20 backdrop-blur-xl rounded-xl flex items-center justify-center">
-                      <Timer className="w-6 h-6 text-white" />
+                <div className="dw-section">
+                  <dl className="ph-kv dw-detail-grid">
+                    <div>
+                      <dt>{t("Date")}</dt>
+                      <dd>{formatDate(selectedRequest.date)}</dd>
                     </div>
                     <div>
-                      <h2 className="text-xl font-bold text-white">Overtime Detail</h2>
-                      <p className="text-orange-100 text-sm">{selectedRequest.employee?.name}</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setShowDetailModal(false)}
-                    className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center text-white hover:bg-white/30 transition-colors"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="p-6 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1">Employee ID</p>
-                    <p className="font-medium text-gray-900">{selectedRequest.employee?.employee_id}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1">Department</p>
-                    <p className="font-medium text-gray-900">{selectedRequest.employee?.department?.name || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1">Company</p>
-                    <p className="font-medium text-gray-900">{selectedRequest.company?.name || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1">Status</p>
-                    {getStatusBadge(selectedRequest.status)}
-                  </div>
-                </div>
-
-                <div className="border-t border-gray-100 pt-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-xs text-gray-500 mb-1">Date</p>
-                      <p className="font-medium text-gray-900">{formatDate(selectedRequest.date)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500 mb-1">Time</p>
-                      <p className="font-medium text-gray-900">
+                      <dt>{t("Time")}</dt>
+                      <dd>
                         {formatTime(selectedRequest.start_time)} - {formatTime(selectedRequest.end_time)}
-                      </p>
+                      </dd>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500 mb-1">Duration</p>
-                      <p className="font-medium text-gray-900">{parseFloat(Number(selectedRequest.hours || 0).toFixed(2))} hours</p>
+                      <dt>{t("Duration")}</dt>
+                      <dd>{parseFloat(Number(selectedRequest.hours || 0).toFixed(2)).toLocaleString(intlLocale(), { maximumFractionDigits: 2 })}{' '}{t("hours")}</dd>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500 mb-1">Type</p>
-                      {getTypeBadge(selectedRequest.overtime_type, selectedRequest.rate_multiplier)}
+                      <dt>{t("Type")}</dt>
+                      <dd>{getTypeBadge(selectedRequest.overtime_type, selectedRequest.rate_multiplier)}</dd>
                     </div>
-                  </div>
+                  </dl>
                 </div>
 
-                <div className="border-t border-gray-100 pt-4">
-                  <p className="text-xs text-gray-500 mb-1">Reason</p>
-                  <p className="text-gray-900">{selectedRequest.reason}</p>
+                <div className="dw-section">
+                  <p className="text-xs text-gray-500 mb-1">{t("Reason")}</p>
+                  <p className="ot-notes">{selectedRequest.reason}</p>
                 </div>
 
-                <div className="bg-orange-50 rounded-xl p-4">
-                  <p className="text-xs text-gray-500 mb-2">Calculation</p>
+                {selectedRequest.task_description && <div className="dw-section"><p className="text-xs text-gray-500 mb-1">{t("Additional Details (Optional)")}</p><p className="ot-notes">{selectedRequest.task_description}</p></div>}
+
+                <div className="dw-section ot-calculation">
+                  <h3>{t("Calculation")}</h3>
                   <div className="space-y-1 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Hourly Rate</span>
+                      <span className="text-gray-600">{t("Hourly Rate")}</span>
                       <span className="font-medium">{formatCurrency(selectedRequest.rate_per_hour || 0)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Hours × Multiplier</span>
-                      <span className="font-medium">{parseFloat(Number(selectedRequest.hours || 0).toFixed(2))} × {selectedRequest.rate_multiplier}</span>
+                      <span className="text-gray-600">{t("Hours × Multiplier")}</span>
+                      <span className="font-medium">{parseFloat(Number(selectedRequest.hours || 0).toFixed(2)).toLocaleString(intlLocale(), { maximumFractionDigits: 2 })}{' '}{t("×")} {Number(selectedRequest.rate_multiplier).toLocaleString(intlLocale())}</span>
                     </div>
-                    <div className="flex justify-between pt-2 border-t border-orange-200">
-                      <span className="font-semibold text-gray-900">Total Amount</span>
-                      <span className="font-bold text-orange-600">{formatCurrency(selectedRequest.total_amount || 0)}</span>
+                    <div className="flex justify-between pt-2 border-t border-gray-200">
+                      <span className="font-semibold text-gray-900">{t("Total Amount")}</span>
+                      <span className="font-bold text-green-800">{formatCurrency(selectedRequest.total_amount || 0)}</span>
                     </div>
                   </div>
                 </div>
 
                 {selectedRequest.approver && (
-                  <div className="border-t border-gray-100 pt-4">
-                    <p className="text-xs text-gray-500 mb-1">Approved By</p>
+                  <div className="dw-section">
+                    <p className="text-xs text-gray-500 mb-1">{t("Approved By")}</p>
                     <p className="font-medium text-gray-900">{selectedRequest.approver.name}</p>
                     {selectedRequest.approved_at && (
-                      <p className="text-xs text-gray-500">{new Date(selectedRequest.approved_at).toLocaleString()}</p>
+                      <p className="text-xs text-gray-500">{new Date(selectedRequest.approved_at).toLocaleString(intlLocale())}</p>
                     )}
                   </div>
                 )}
 
                 {selectedRequest.rejection_reason && (
-                  <div className="border-t border-gray-100 pt-4">
-                    <p className="text-xs text-gray-500 mb-1">Rejection Reason</p>
+                  <div className="dw-section">
+                    <p className="text-xs text-gray-500 mb-1">{t("Rejection Reason")}</p>
                     <p className="text-red-600">{selectedRequest.rejection_reason}</p>
                   </div>
                 )}
 
-                {selectedRequest.status === 'pending' && (
-                  <div className="flex items-center gap-3 pt-4">
+                {canApprove && selectedRequest.status === 'pending' && (
+                  <div className="ph-form-actions dw-actions">
                     <button
                       onClick={() => handleReject(selectedRequest.id)}
                       disabled={actionLoading === selectedRequest.id}
-                      className="flex-1 px-4 py-2.5 border border-red-300 text-red-600 font-medium rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50"
-                    >
-                      Reject
-                    </button>
+                      className="ph-button"
+                    >{t("Reject")} </button>
                     <button
                       onClick={() => handleApprove(selectedRequest.id)}
                       disabled={actionLoading === selectedRequest.id}
-                      className="flex-1 px-4 py-2.5 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                      className="ph-button ph-button-primary"
                     >
-                      {actionLoading === selectedRequest.id ? 'Processing...' : 'Approve'}
+                      {actionLoading === selectedRequest.id ? t("Processing...") : t("Approve")}
                     </button>
                   </div>
                 )}
               </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex min-h-screen items-center justify-center p-4">
-            <div className="fixed inset-0 bg-black/50 transition-opacity" onClick={() => setShowAddModal(false)} />
-
-            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden">
-              <div className="bg-gradient-to-br from-orange-500 via-amber-500 to-yellow-500 px-6 py-5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-white/20 backdrop-blur-xl rounded-xl flex items-center justify-center">
-                      <Timer className="w-6 h-6 text-white" />
-                    </div>
-                    <div>
-                      <h2 className="text-xl font-bold text-white">Add Overtime Record</h2>
-                      <p className="text-orange-100 text-sm">Input overtime hours - automatically approved for payroll</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setShowAddModal(false)}
-                    className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center text-white hover:bg-white/30 transition-colors"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Info Box */}
-              <div className="mx-6 mt-6 p-4 bg-blue-50 border border-blue-200 rounded-xl">
-                <div className="flex items-start gap-3">
-                  <Calculator className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                  <div className="text-sm text-blue-800">
-                    <p className="font-medium mb-1">How Overtime Calculation Works:</p>
-                    <p className="text-blue-700">Total = Hours × (Basic Salary ÷ 173) × Multiplier</p>
-                  </div>
-                </div>
-              </div>
-
-              <form onSubmit={handleSubmit} className="p-6 space-y-5">
-                {/* Employee Selection Section */}
-                <div className="bg-gray-50 rounded-xl p-5 space-y-4">
+      </CompensationDialog>}
+      {showAddModal && canManage && <CompensationDialog title={t("Add Overtime Record")} subtitle={t("Pengajuan perlu disetujui sebelum masuk payroll.")} busy={formLoading} onClose={() => setShowAddModal(false)}>
+        {employeesError && <p className="cp-form-error" role="alert">{t("Daftar karyawan gagal dimuat.")} <button type="button" onClick={() => fetchEmployees(formData.company_id ? Number(formData.company_id) : undefined)}>{t("Coba lagi")}</button></p>}
+        <form onSubmit={handleSubmit} className="ph-workflow dw-form ot-form"><div className="dw-form-content"><section className="ph-section dw-section">
                   <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <User className="w-5 h-5 text-blue-600" />
-                    </div>
-                    <h3 className="font-semibold text-gray-900">Select Employee</h3>
+
+                    <h3 className="font-semibold text-gray-900">{t("Select Employee")}</h3>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="ph-form-grid dw-form-grid">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Company <span className="text-red-500">*</span>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">{t("Company")} <span className="text-red-500">*</span>
                       </label>
-                      <select
+                      <select aria-label={t("Company *")}
                         value={formData.company_id}
                         onChange={(e) => handleCompanyChange(e.target.value)}
-                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-700/20 focus:border-green-700"
                         required
                       >
-                        <option value="">Choose Company</option>
+                        <option value="">{t("Choose Company")}</option>
                         {companies.map(company => (
                           <option key={company.id} value={company.id}>{company.name}</option>
                         ))}
@@ -971,10 +578,9 @@ export function OvertimePage() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Employee <span className="text-red-500">*</span>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">{t("Employee")} <span className="text-red-500">*</span>
                       </label>
-                      <SearchableSelect
+                      <CompensationEmployeeSelect
                         options={employees.map(emp => ({
                           value: emp.id,
                           label: emp.name,
@@ -982,135 +588,121 @@ export function OvertimePage() {
                         }))}
                         value={formData.employee_id ? Number(formData.employee_id) : ''}
                         onChange={(val) => handleEmployeeChange(String(val))}
-                        placeholder={!formData.company_id ? 'Select company first' : 'Search employee...'}
-                        searchPlaceholder="Type name or ID..."
+                        placeholder={!formData.company_id ? t("Select company first") : t("Search employee...")}
+                        searchPlaceholder={t("Type name or ID...")}
                         disabled={!formData.company_id || employeesLoading}
                         loading={employeesLoading}
-                        emptyMessage="No employees found"
+                        emptyMessage={t("No employees found")}
                       />
                     </div>
                   </div>
 
                   {/* Employee Info Display */}
                   {selectedEmployee && (
-                    <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                    <div className="dw-context">
                       <div className="flex items-start gap-3">
                         <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
                         <div>
-                          <p className="text-sm font-medium text-green-900">Employee Selected</p>
+                          <p className="text-sm font-medium text-green-900">{t("Employee Selected")}</p>
                           <p className="text-xs text-green-700 mt-1">
-                            <strong>{selectedEmployee.name}</strong> -
-                            Basic Salary: {formatCurrency(selectedEmployee.basic_salary || 0)} -
-                            Hourly Rate: {formatCurrency(getHourlyRate())}
+                            <strong>{selectedEmployee.name}</strong>{' '}{t("- Basic Salary:")} {formatCurrency(selectedEmployee.basic_salary || 0)}{' '}{t("- Hourly Rate:")} {formatCurrency(getHourlyRate(), 2)}
                           </p>
                         </div>
                       </div>
                     </div>
                   )}
-                </div>
-
-                {/* Overtime Details Section */}
-                <div className="bg-gray-50 rounded-xl p-5 space-y-4">
+                </section>
+<section className="ph-section dw-section">
                   <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                      <Clock className="w-5 h-5 text-green-600" />
-                    </div>
-                    <h3 className="font-semibold text-gray-900">Overtime Details</h3>
+
+                    <h3 className="font-semibold text-gray-900">{t("Overtime Details")}</h3>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="ph-form-grid dw-form-grid">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Date <span className="text-red-500">*</span>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">{t("Date")} <span className="text-red-500">*</span>
                       </label>
-                      <input
+                      <input aria-label={t("Date *")}
                         type="date"
                         value={formData.date}
                         onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
-                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-700/20 focus:border-green-700"
                         required
                       />
-                      <p className="text-xs text-gray-500 mt-1">Select date within payroll period</p>
+                      <p className="text-xs text-gray-500 mt-1">{t("Select date within payroll period")}</p>
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Total Hours <span className="text-red-500">*</span>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">{t("Total Hours")} <span className="text-red-500">*</span>
                       </label>
-                      <input
+                      <input aria-label={t("Total Hours *")}
                         type="number"
                         step="0.01"
                         min={MIN_OVERTIME_HOURS}
                         max={MAX_OVERTIME_HOURS}
                         value={formData.hours}
                         onChange={(e) => setFormData(prev => ({ ...prev, hours: e.target.value }))}
-                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
-                        placeholder="e.g., 54"
+                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-700/20 focus:border-green-700"
+                        placeholder={t("e.g., 54")}
                         required
                       />
-                      <p className="text-xs text-gray-500 mt-1">Monthly total or accumulated hours</p>
+                      <p className="text-xs text-gray-500 mt-1">{t("Monthly total or accumulated hours")}</p>
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Multiplier</label>
-                      <select
+                      <label className="block text-sm font-medium text-gray-700 mb-2">{t("Multiplier")}</label>
+                      <select aria-label={t("Multiplier")}
                         value={formData.rate_multiplier}
                         onChange={(e) => setFormData(prev => ({ ...prev, rate_multiplier: e.target.value }))}
-                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-700/20 focus:border-green-700"
                       >
-                        <option value="1.0">1.0x (Normal)</option>
-                        <option value="1.5">1.5x (Weekday)</option>
-                        <option value="2.0">2.0x (Weekend)</option>
-                        <option value="3.0">3.0x (Holiday)</option>
+                        <option value="1.0">{t("1.0x (Normal)")}</option>
+                        <option value="1.5">{t("1.5x (Weekday)")}</option>
+                        <option value="2.0">{t("2.0x (Weekend)")}</option>
+                        <option value="3.0">{t("3.0x (Holiday)")}</option>
                       </select>
-                      <p className="text-xs text-gray-500 mt-1">Default: 1.0x (normal rate)</p>
+                      <p className="text-xs text-gray-500 mt-1">{t("Default: 1.0x (normal rate)")}</p>
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Estimated Total</label>
-                      <div className="px-4 py-2.5 bg-orange-50 border border-orange-200 rounded-lg">
-                        <span className="text-lg font-bold text-orange-600">
-                          {formatCurrency(calculateOvertimeAmount())}
+                      <label className="block text-sm font-medium text-gray-700 mb-2">{t("Estimated Total")}</label>
+                      <div className="dw-inline ot-estimate">
+                        <span className="dw-money">
+                          {formatCurrency(calculateOvertimeAmount(), 2)}
                         </span>
                       </div>
-                      <p className="text-xs text-gray-500 mt-1">Auto-calculated</p>
+                      <p className="text-xs text-gray-500 mt-1">{t("Auto-calculated")}</p>
                     </div>
                   </div>
-                </div>
-
-                {/* Reason Section */}
-                <div className="space-y-4">
+                </section>
+<section className="ph-section dw-section"><h3>{t("Reason & notes")}</h3><div className="dw-fields"><div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Reason <span className="text-red-500">*</span>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">{t("Reason")} <span className="text-red-500">*</span>
                     </label>
-                    <textarea
+                    <textarea aria-label={t("Reason *")}
                       value={formData.reason}
                       onChange={(e) => setFormData(prev => ({ ...prev, reason: e.target.value }))}
-                      className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-700/20 focus:border-green-700"
                       rows={2}
-                      placeholder="e.g., Project deadline completion"
+                      placeholder={t("e.g., Project deadline completion")}
                       required
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Additional Details (Optional)
-                    </label>
-                    <textarea
+                    <label className="block text-sm font-medium text-gray-700 mb-2">{t("Additional Details (Optional)")} </label>
+                    <textarea aria-label={t("Additional Details (Optional)")}
                       value={formData.description}
                       onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                      className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-700/20 focus:border-green-700"
                       rows={2}
-                      placeholder="Add any additional information if needed"
+                      placeholder={t("Add any additional information if needed")}
                     />
                   </div>
-                </div>
-
-                <div className="flex items-center gap-3 pt-4 border-t border-gray-200">
+                </div></div></section></div><div className="ph-form-actions dw-actions">
                   <button
                     type="button"
+                    disabled={formLoading}
                     onClick={() => {
                       setShowAddModal(false);
                       setSelectedEmployee(null);
@@ -1125,33 +717,24 @@ export function OvertimePage() {
                         description: '',
                       });
                     }}
-                    className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    Cancel
-                  </button>
+                    className="ph-button"
+                  >{t("Cancel")} </button>
                   <button
                     type="submit"
                     disabled={formLoading || !selectedEmployee}
-                    className="flex-1 px-4 py-2.5 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                    className="ph-button ph-button-primary"
                   >
                     {formLoading ? (
                       <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Creating...
-                      </>
+                        <Loader2 className="w-4 h-4 animate-spin" />{t("Creating...")} </>
                     ) : (
                       <>
-                        <Check className="w-4 h-4" />
-                        Save & Auto Approve
-                      </>
+                        <Check className="w-4 h-4" />{t("Submit for Approval")} </>
                     )}
                   </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+                </div></form>
+      </CompensationDialog>}
+    {decisionDialog}
+</div>
   );
 }

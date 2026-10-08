@@ -1,5 +1,7 @@
+import { t, useLocale } from '@/i18n';
 import { useState } from 'react';
-import { createPortal } from 'react-dom';
+import { Modal } from '@/components/ui/Modal';
+import './onboarding.css';
 import { Lock, Eye, EyeOff, CheckCircle, AlertCircle } from 'lucide-react';
 import { authService } from '@/services/auth.service';
 import toast from 'react-hot-toast';
@@ -22,6 +24,7 @@ const PASSWORD_REQUIREMENTS: PasswordRequirement[] = [
 ];
 
 export function PasswordChangeModal({ isOpen, onComplete }: PasswordChangeModalProps) {
+  useLocale();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -73,10 +76,10 @@ export function PasswordChangeModal({ isOpen, onComplete }: PasswordChangeModalP
         currentPassword,
         newPassword,
       });
-      toast.success('Password berhasil diubah!');
+      toast.success(t("Password berhasil diubah!"));
       onComplete();
     } catch (error: any) {
-      const message = error.response?.data?.message || 'Gagal mengubah password';
+      const message = error.response?.data?.message || t('Gagal mengubah password');
       if (message.includes('incorrect') || message.includes('salah')) {
         setErrors({ currentPassword: 'Password saat ini tidak benar' });
       } else {
@@ -89,207 +92,38 @@ export function PasswordChangeModal({ isOpen, onComplete }: PasswordChangeModalP
 
   if (!isOpen) return null;
 
-  return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
-      {/* Backdrop - Non-dismissable */}
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" aria-hidden="true" />
-
-      {/* Modal — alertdialog because it's blocking + non-dismissable */}
-      <div
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="password-change-title"
-        aria-describedby="password-change-desc"
-        className="relative z-50 w-full max-w-md bg-white rounded-xl sm:rounded-2xl shadow-2xl overflow-hidden"
-      >
-        {/* Header */}
-        <div className="bg-gradient-to-r from-slate-700 to-slate-800 px-4 py-4 sm:px-6 sm:py-6 text-white">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0" aria-hidden="true">
-              <Lock className="w-5 h-5 sm:w-6 sm:h-6" />
-            </div>
-            <div className="min-w-0">
-              <h2 id="password-change-title" className="text-lg sm:text-xl font-bold">Ubah Password</h2>
-              <p id="password-change-desc" className="text-xs sm:text-sm text-slate-300">
-                Demi keamanan, silakan ubah password Anda
-              </p>
-            </div>
+  return <Modal role="alertdialog" busy={isLoading} isOpen={isOpen} onClose={keepPasswordFlowOpen} showCloseButton={false}
+    title={t("Ubah Password")} description={t("Demi keamanan, silakan ubah password Anda")}>
+    <div className="ph-onboarding ph-workflow" aria-busy={isLoading}>
+      <fieldset disabled={isLoading} className="ph-onboarding-password-fields">
+        <legend className="sr-only">{t("Ubah Password")}</legend>
+        {([
+          { key: 'currentPassword', label: 'Password Saat Ini', placeholder: 'Masukkan password saat ini', value: currentPassword, setValue: setCurrentPassword, visible: showCurrentPassword, setVisible: setShowCurrentPassword, autocomplete: 'current-password' },
+          { key: 'newPassword', label: 'Password Baru', placeholder: 'Masukkan password baru', value: newPassword, setValue: setNewPassword, visible: showNewPassword, setVisible: setShowNewPassword, autocomplete: 'new-password' },
+          { key: 'confirmPassword', label: 'Konfirmasi Password Baru', placeholder: 'Konfirmasi password baru', value: confirmPassword, setValue: setConfirmPassword, visible: showConfirmPassword, setVisible: setShowConfirmPassword, autocomplete: 'new-password' },
+        ] as const).map(field => <div key={field.key} className="ph-field">
+          <label htmlFor={`force-${field.key}`} className="ph-onboarding-label">{t(field.label)} <span aria-hidden="true">*</span></label>
+          <div className="ph-onboarding-password">
+            <input id={`force-${field.key}`} type={field.visible ? 'text' : 'password'} autoComplete={field.autocomplete}
+              value={field.value} placeholder={t(field.placeholder)} className="ph-onboarding-input" aria-invalid={!!errors[field.key]}
+              aria-describedby={errors[field.key] ? `force-error-${field.key}` : field.key === 'newPassword' ? 'force-requirements' : undefined}
+              onChange={event => { field.setValue(event.target.value); if (errors[field.key]) setErrors(previous => ({ ...previous, [field.key]: '' })); }} />
+            <button type="button" onClick={() => field.setVisible(!field.visible)} aria-label={t(field.visible ? 'Sembunyikan {field}' : 'Tampilkan {field}', { field: t(field.label) })} aria-pressed={field.visible}>
+              {field.visible ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
           </div>
-        </div>
-
-        {/* Body */}
-        <div className="px-4 py-4 sm:px-6 sm:py-6 space-y-4">
-          {/* Current Password */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Password Saat Ini <span className="text-red-500">*</span>
-            </label>
-            <div className="relative">
-              <input
-                type={showCurrentPassword ? 'text' : 'password'}
-                value={currentPassword}
-                onChange={(e) => {
-                  setCurrentPassword(e.target.value);
-                  if (errors.currentPassword) {
-                    setErrors((prev) => ({ ...prev, currentPassword: '' }));
-                  }
-                }}
-                placeholder="Masukkan password saat ini"
-                className={`w-full px-3 py-2.5 pr-10 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500/20 focus:border-slate-500 ${
-                  errors.currentPassword ? 'border-red-500' : 'border-gray-300'
-                }`}
-              />
-              <button
-                type="button"
-                onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
-                {showCurrentPassword ? (
-                  <EyeOff className="w-4 h-4" />
-                ) : (
-                  <Eye className="w-4 h-4" />
-                )}
-              </button>
-            </div>
-            {errors.currentPassword && (
-              <p className="mt-1 text-xs text-red-500">{errors.currentPassword}</p>
-            )}
-          </div>
-
-          {/* New Password */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Password Baru <span className="text-red-500">*</span>
-            </label>
-            <div className="relative">
-              <input
-                type={showNewPassword ? 'text' : 'password'}
-                value={newPassword}
-                onChange={(e) => {
-                  setNewPassword(e.target.value);
-                  if (errors.newPassword) {
-                    setErrors((prev) => ({ ...prev, newPassword: '' }));
-                  }
-                }}
-                placeholder="Masukkan password baru"
-                className={`w-full px-3 py-2.5 pr-10 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500/20 focus:border-slate-500 ${
-                  errors.newPassword ? 'border-red-500' : 'border-gray-300'
-                }`}
-              />
-              <button
-                type="button"
-                onClick={() => setShowNewPassword(!showNewPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
-                {showNewPassword ? (
-                  <EyeOff className="w-4 h-4" />
-                ) : (
-                  <Eye className="w-4 h-4" />
-                )}
-              </button>
-            </div>
-            {errors.newPassword && (
-              <p className="mt-1 text-xs text-red-500">{errors.newPassword}</p>
-            )}
-
-            {/* Password Requirements */}
-            <div className="mt-3 space-y-1.5">
-              {PASSWORD_REQUIREMENTS.map((req, index) => {
-                const isValid = req.test(newPassword);
-                return (
-                  <div
-                    key={index}
-                    className={`flex items-center gap-2 text-xs ${
-                      newPassword
-                        ? isValid
-                          ? 'text-green-600'
-                          : 'text-red-500'
-                        : 'text-gray-400'
-                    }`}
-                  >
-                    {newPassword ? (
-                      isValid ? (
-                        <CheckCircle className="w-3.5 h-3.5" />
-                      ) : (
-                        <AlertCircle className="w-3.5 h-3.5" />
-                      )
-                    ) : (
-                      <div className="w-3.5 h-3.5 rounded-full border border-gray-300" />
-                    )}
-                    <span>{req.label}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Confirm Password */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Konfirmasi Password Baru <span className="text-red-500">*</span>
-            </label>
-            <div className="relative">
-              <input
-                type={showConfirmPassword ? 'text' : 'password'}
-                value={confirmPassword}
-                onChange={(e) => {
-                  setConfirmPassword(e.target.value);
-                  if (errors.confirmPassword) {
-                    setErrors((prev) => ({ ...prev, confirmPassword: '' }));
-                  }
-                }}
-                placeholder="Konfirmasi password baru"
-                className={`w-full px-3 py-2.5 pr-10 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500/20 focus:border-slate-500 ${
-                  errors.confirmPassword ? 'border-red-500' : 'border-gray-300'
-                }`}
-              />
-              <button
-                type="button"
-                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
-                {showConfirmPassword ? (
-                  <EyeOff className="w-4 h-4" />
-                ) : (
-                  <Eye className="w-4 h-4" />
-                )}
-              </button>
-            </div>
-            {errors.confirmPassword && (
-              <p className="mt-1 text-xs text-red-500">{errors.confirmPassword}</p>
-            )}
-            {confirmPassword && newPassword === confirmPassword && (
-              <p className="mt-1 text-xs text-green-600 flex items-center gap-1">
-                <CheckCircle className="w-3.5 h-3.5" />
-                Password cocok
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-end px-4 py-3 sm:px-6 sm:py-4 bg-gray-50 border-t border-gray-200">
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={isLoading}
-            className="inline-flex items-center justify-center gap-2 px-6 py-2.5 text-sm font-medium text-white bg-slate-700 rounded-lg hover:bg-slate-800 transition-colors disabled:opacity-50 w-full sm:w-auto"
-          >
-            {isLoading ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Menyimpan...
-              </>
-            ) : (
-              <>
-                <Lock className="w-4 h-4" />
-                Ubah Password
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body
-  );
+          {errors[field.key] && <p id={`force-error-${field.key}`} role="alert" className="ph-onboarding-error">{t(errors[field.key])}</p>}
+          {field.key === 'newPassword' && <ul id="force-requirements" className="ph-onboarding-requirements">
+            {PASSWORD_REQUIREMENTS.map((req, index) => <li key={index} data-valid={newPassword ? req.test(newPassword) : undefined}>
+              {req.test(newPassword) ? <CheckCircle size={14} /> : <AlertCircle size={14} />}{t(req.label)}
+            </li>)}
+          </ul>}
+        </div>)}
+        {confirmPassword && newPassword === confirmPassword && <p className="ph-onboarding-match"><CheckCircle size={14} />{t("Password cocok")}</p>}
+      </fieldset>
+      <footer className="ph-onboarding-footer ph-dialog-footer"><button type="button" onClick={handleSubmit} disabled={isLoading} className="ph-button ph-button-primary"><Lock size={16} />{isLoading ? t("Menyimpan...") : t("Ubah Password")}</button></footer>
+    </div>
+  </Modal>;
 }
+
+function keepPasswordFlowOpen() {}

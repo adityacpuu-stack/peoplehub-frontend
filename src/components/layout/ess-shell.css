@@ -1,0 +1,50 @@
+/* Employee, HR and Manager workspaces share brand styling; controls retain their handlers and accessibility. */
+.ph-shell:is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) { --sidebar-width: 240px; --toolbar-height: 76px; background: #f5f7f5; }
+:is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell).is-sidebar-compact { --sidebar-width: 76px; }
+:is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-sidebar { background: #096345; border-right: 0; color: #fff; }
+:is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-sidebar-brand { background: #fff; padding-left: 16px; border-right: 1px solid #e2e9e4; }
+:is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-sidebar-brand > a { width: 156px; overflow: hidden; }
+:is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-sidebar-brand img { width: 190px; max-width: none; height: 64px; margin-left: -20px; }
+.ess-sidebar-workspace { padding: 26px 24px 18px; display: grid; gap: 5px; }
+.ess-sidebar-workspace strong { color: #fff; font-size: 15px; font-weight: 600; }
+.ess-sidebar-workspace span { color: #bed9cb; font-size: 11px; }
+:is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-sidebar-submenu { border-color: #ffffff30; }
+:is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-sidebar-submenu a { color: #d5e7dc; }
+:is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-sidebar-submenu a:hover { color: #fff; background: #ffffff12; }
+:is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-sidebar-submenu a[aria-current='page'] { color: #204c34; background: #e6efd7; }
+:is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-sidebar-nav { padding: 8px 14px 24px; }
+:is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-sidebar-label { color: #b5d4c5; margin: 18px 0 7px; padding-left: 12px; }
+:is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-sidebar-link { color: #e4f0e8; min-height: 43px; padding: 10px 12px; border-radius: 6px; }
+:is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-sidebar-link > svg { color: #bad7c6; }
+:is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-sidebar-link:hover { background: #ffffff12; color: #fff; }
+:is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-sidebar-link.is-active { background: #e6efd7; color: #204c34; font-weight: 600; }
+:is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-sidebar-link.is-active > svg { color: #256448; }
+:is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-sidebar-footer { background: #07583d; border-color: #ffffff14; }
+:is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-sidebar-settings, :is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-sidebar-logout { color: #d5e7dc; }
+:is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-sidebar-settings:hover, :is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-sidebar-logout:hover { color: #fff; background: #ffffff12; }
+:is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-sidebar :is(a, button):focus-visible { outline-color: #d3e56c; }
+:is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-sidebar-brand :is(a, button):focus-visible { outline-color: #187451; }
+:is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-sidebar-close { color: #446453; }
+:is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-sidebar.is-compact .ph-sidebar-brand img { margin: 0; }
+:is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-sidebar.is-compact .ph-sidebar-nav { padding-inline: 14px; }
+:is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-sidebar.is-compact .ph-sidebar-link { padding: 10px; }
+:is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-navbar { background: #fff; padding-inline: 32px; gap: 20px; }
+.ess-navbar-title { display: block; font-size: 14px; font-weight: 600; color: #254534; margin-bottom: 4px; }
+:is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-navbar-search { height: 38px; flex-basis: 280px; background: #f5f7f5; border: 1px solid #e3e9e4; border-radius: 7px; }
+:is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-navbar-account { border-left: 1px solid #e4eae5; margin-left: 10px; padding-left: 16px; }
+:is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-navbar-avatar { background: #e7eedb; color: #355834; }
+:is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-shell-content { max-width: 1600px; margin-inline: auto; padding: 34px 36px; }
+:is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-shell-content { max-width: none; }
+@media (max-width: 1199px) { :is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-navbar { padding-inline: 24px; gap: 14px; } :is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-shell-content { padding: 28px 24px; } }
+@media (max-width: 1023px) {
+ .ph-shell:is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell), :is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell).is-sidebar-compact { --sidebar-width: 0px; --toolbar-height: 68px; }
+ :is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-sidebar { width: min(300px, calc(100vw - 44px)); }
+ :is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-navbar { padding-inline: 18px; }
+}
+@media (max-width: 599px) {
+ :is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-shell-content { padding: 24px 16px; }
+ :is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-navbar { padding-inline: 12px; gap: 10px; }
+ .ess-navbar-title { font-size: 12px; }
+ :is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-navbar-search { min-width: 34px; flex-basis: 34px; border: 0; padding: 7px; }
+ :is(.ess-shell, .hr-shell, .manager-shell, .executive-shell, .admin-shell) .ph-navbar-account { border-left: 0; margin-left: 0; padding-left: 0; }
+}

@@ -1,22 +1,9 @@
+import { t, useLocale, intlLocale } from '@/i18n';
+import { ReportSection, ReportPage, ReportHeader } from '@/pages/dashboard/ReportingLayout';
+import './admin-workflows.css';
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import {
-  Building2,
-  Search,
-  Settings,
-  Users,
-  Clock,
-  CalendarDays,
-  Wallet,
-  Target,
-  Loader2,
-  ToggleLeft,
-  ToggleRight,
-  Eye,
-  EyeOff,
-  Save,
-  RotateCcw,
-} from 'lucide-react';
+import { Building2, Search, Users, Clock, CalendarDays, Wallet, Target, Loader2, ToggleLeft, ToggleRight, Eye, EyeOff, Save, RotateCcw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Card, CardContent, Badge } from '@/components/ui';
 import { companyService, type CompanyWithFeatures } from '@/services/company.service';
@@ -38,6 +25,7 @@ const FEATURES: { key: FeatureKey; label: string; icon: React.ReactNode }[] = [
 ];
 
 function CompanyFeaturesTab() {
+  useLocale();
   const [companies, setCompanies] = useState<CompanyWithFeatures[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -55,7 +43,7 @@ function CompanyFeaturesTab() {
       setCompanies(data);
       if (data.length > 0) setActiveCompanyId(data[0].id);
     } catch {
-      toast.error('Gagal memuat data perusahaan');
+      toast.error(t("Gagal memuat data perusahaan"));
     } finally {
       setIsLoading(false);
     }
@@ -81,9 +69,9 @@ function CompanyFeaturesTab() {
         payroll_enabled: 'Payroll',
         performance_enabled: 'Performance',
       };
-      toast.success(`${featureNames[feature]} ${newValue ? 'diaktifkan' : 'dinonaktifkan'} untuk ${company.name}`);
+      toast.success(t(newValue ? "{feature} diaktifkan untuk {company}" : "{feature} dinonaktifkan untuk {company}", { feature: t(featureNames[feature]), company: company.name }));
     } catch (error: any) {
-      toast.error(error.response?.data?.error?.message || 'Gagal mengubah pengaturan fitur', { id: 'api-error' });
+      toast.error(error.response?.data?.error?.message || t('Gagal mengubah pengaturan fitur'), { id: 'api-error' });
     } finally {
       setUpdatingIds((prev) => {
         const next = new Set(prev);
@@ -115,61 +103,57 @@ function CompanyFeaturesTab() {
   return (
     <div className="space-y-6">
       {/* Description */}
-      <p className="text-sm text-gray-500">
-        Atur fitur yang aktif per perusahaan. Perubahan langsung tersimpan ke database.
-      </p>
+      <p className="text-sm text-gray-500">{t("Atur fitur yang aktif per perusahaan. Perubahan langsung tersimpan ke database.")} </p>
 
       {/* Company Tabs */}
       <div className="space-y-3">
         {/* Search */}
-        <div className="relative w-72">
+        <div className="relative w-72 report-search">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
-            placeholder="Cari perusahaan..."
+            placeholder={t("Cari perusahaan...")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="h-9 w-full rounded-xl border border-gray-200 bg-gray-50 pl-9 pr-4 text-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400/20 focus:bg-white transition-all"
+            className="h-9 w-full rounded-md border border-gray-200 bg-gray-50 pl-9 pr-4 text-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400/20 focus:bg-white transition-all"
           />
         </div>
 
         {/* Pills */}
-        <div className="flex gap-2 flex-wrap">
+        <div className="ph-tabs">
           {filteredCompanies.map((company) => {
             const enabledCount = FEATURES.filter((f) => company[f.key]).length;
             const isActive = company.id === activeCompanyId;
             return (
-              <button
+              <button aria-selected={activeCompanyId === company.id}
                 key={company.id}
                 onClick={() => setActiveCompanyId(company.id)}
                 className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                   isActive
-                    ? 'bg-slate-800 text-white shadow'
-                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                    ? "bg-slate-800 text-white"
+                    : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
                 }`}
               >
                 {company.name}
                 <span className={`ml-2 text-xs px-1.5 py-0.5 rounded-full ${
-                  isActive ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'
+                  isActive ? "bg-white/20 text-white" : "bg-gray-100 text-gray-500"
                 }`}>
-                  {enabledCount}/{FEATURES.length}
+                  {(enabledCount).toLocaleString(intlLocale())}/{(FEATURES.length).toLocaleString(intlLocale())}
                 </span>
               </button>
             );
           })}
           {filteredCompanies.length === 0 && (
-            <p className="text-sm text-gray-400">Tidak ada perusahaan ditemukan</p>
+            <p className="text-sm text-gray-400">{t("Tidak ada perusahaan ditemukan")}</p>
           )}
         </div>
       </div>
 
       {/* Feature Panel */}
       {activeCompany && (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-          {/* Panel Header */}
-          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <ReportSection  className="overflow-hidden">{/* Panel Header */}<div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center flex-shrink-0">
+              <div className="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0 report-avatar">
                 {activeCompany.logo ? (
                   <img src={activeCompany.logo} alt={activeCompany.name} className="w-7 h-7 rounded-lg object-cover" />
                 ) : (
@@ -183,37 +167,34 @@ function CompanyFeaturesTab() {
                   <span className="text-gray-300">·</span>
                   <div className="flex items-center gap-1 text-xs text-gray-400">
                     <Users className="h-3 w-3" />
-                    <span>{activeCompany._count?.employees || 0} karyawan</span>
+                    <span>{activeCompany._count?.employees || 0}{' '}{t("karyawan")}</span>
                   </div>
                 </div>
               </div>
             </div>
-            <p className="text-xs text-gray-500">{activeEnabledCount} dari {FEATURES.length} fitur aktif</p>
-          </div>
-
-          {/* Features Grid */}
-          <div className="p-6">
-            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Fitur</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+            <p className="text-xs text-gray-500">{(activeEnabledCount).toLocaleString(intlLocale())}{' '}{t("dari")} {(FEATURES.length).toLocaleString(intlLocale())}{' '}{t("fitur aktif")}</p>
+          </div>{/* Features Grid */}<div className="p-6">
+            <h3 className="text-xs font-semibold text-gray-400 mb-3">{t("Fitur")}</h3>
+            <div className="admin-feature-options">
               {FEATURES.map((feature) => {
                 const enabled = activeCompany[feature.key];
                 const isUpdating = updatingIds.has(`${activeCompany.id}-${feature.key}`);
                 return (
                   <button
                     key={feature.key}
-                    onClick={() => handleToggle(activeCompany.id, feature.key)}
+                    aria-pressed={enabled} onClick={() => handleToggle(activeCompany.id, feature.key)}
                     disabled={isUpdating}
                     className={`flex items-center justify-between px-4 py-3 rounded-xl border text-sm font-medium transition-all disabled:opacity-60 ${
                       enabled
-                        ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                        : 'bg-gray-50 border-gray-200 text-gray-400'
+                        ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                        : "bg-gray-50 border-gray-200 text-gray-400"
                     }`}
                   >
                     <div className="flex items-center gap-2">
-                      <span className={enabled ? 'text-emerald-600' : 'text-gray-400'}>
+                      <span className={enabled ? "text-emerald-600" : "text-gray-400"}>
                         {feature.icon}
                       </span>
-                      <span>{feature.label}</span>
+                      <span>{t(feature.label)}</span>
                     </div>
                     {isUpdating ? (
                       <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
@@ -226,8 +207,7 @@ function CompanyFeaturesTab() {
                 );
               })}
             </div>
-          </div>
-        </div>
+          </div></ReportSection>
       )}
     </div>
   );
@@ -249,6 +229,7 @@ function buildDefault(): Record<string, Record<string, boolean>> {
 const DEFAULT_CONFIG = buildDefault();
 
 function MenuRoleConfigTab() {
+  useLocale();
   const [config, setConfig] = useState<Record<string, Record<string, boolean>>>(() => getSidebarConfig());
   const [isDirty, setIsDirty] = useState(false);
   const [activeRole, setActiveRole] = useState<string>('HR Staff');
@@ -271,7 +252,7 @@ function MenuRoleConfigTab() {
   const handleSave = () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
     setIsDirty(false);
-    toast.success('Konfigurasi menu disimpan');
+    toast.success(t("Konfigurasi menu disimpan"));
   };
 
   const handleReset = () => {
@@ -287,46 +268,37 @@ function MenuRoleConfigTab() {
     <div className="space-y-6">
       {/* Actions */}
       <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-500">Atur menu sidebar yang tampil per role pengguna</p>
+        <p className="text-sm text-gray-500">{t("Atur menu sidebar yang tampil per role pengguna. Konfigurasi ini disimpan di browser ini.")}</p>
         <div className="flex items-center gap-2">
           <button
             onClick={handleReset}
             className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
           >
-            <RotateCcw className="w-4 h-4" />
-            Reset Default
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={!isDirty}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            <Save className="w-4 h-4" />
-            Simpan
-          </button>
+            <RotateCcw className="w-4 h-4" />{t("Reset Default")} </button>
+          <button onClick={handleSave} disabled={!isDirty} className="ph-button ph-button-primary flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"><Save className="w-4 h-4" />{t("Simpan")} </button>
         </div>
       </div>
 
       {/* Role Tabs */}
-      <div className="flex gap-2 flex-wrap">
+      <div className="ph-tabs">
         {roles.map(role => {
           const total = ROLE_MENUS[role].length;
           const enabled = ROLE_MENUS[role].filter(i => config[role]?.[i.key]).length;
           return (
-            <button
+            <button aria-selected={activeRole === role}
               key={role}
               onClick={() => setActiveRole(role)}
               className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                 activeRole === role
-                  ? 'bg-slate-800 text-white shadow'
-                  : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                  ? "bg-slate-800 text-white"
+                  : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
               }`}
             >
-              {role}
+              {t(role)}
               <span className={`ml-2 text-xs px-1.5 py-0.5 rounded-full ${
-                activeRole === role ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'
+                activeRole === role ? "bg-white/20 text-white" : "bg-gray-100 text-gray-500"
               }`}>
-                {enabled}/{total}
+                {(enabled).toLocaleString(intlLocale())}/{(total).toLocaleString(intlLocale())}
               </span>
             </button>
           );
@@ -334,46 +306,39 @@ function MenuRoleConfigTab() {
       </div>
 
       {/* Menu Config Panel */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+      <ReportSection  className="overflow-hidden"><div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
           <div>
-            <h2 className="font-semibold text-gray-900">{activeRole}</h2>
-            <p className="text-xs text-gray-500 mt-0.5">{enabledCount} dari {menuItems.length} menu aktif</p>
+            <h2 className="font-semibold text-gray-900">{t(activeRole)}</h2>
+            <p className="text-xs text-gray-500 mt-0.5">{(enabledCount).toLocaleString(intlLocale())}{' '}{t("dari")} {(menuItems.length).toLocaleString(intlLocale())}{' '}{t("menu aktif")}</p>
           </div>
           <div className="flex gap-2">
             <button
               onClick={() => toggleAll(activeRole, true)}
               className="text-xs px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg hover:bg-emerald-100 transition-colors"
-            >
-              Aktifkan Semua
-            </button>
+            >{t("Aktifkan Semua")} </button>
             <button
               onClick={() => toggleAll(activeRole, false)}
               className="text-xs px-3 py-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
-            >
-              Matikan Semua
-            </button>
+            >{t("Matikan Semua")} </button>
           </div>
-        </div>
-
-        <div className="p-6 space-y-6">
+        </div><div className="p-6 space-y-6">
           {sections.map(section => (
-            <div key={section}>
-              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">{section}</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            <div key={section} className="admin-permission-group">
+              <h3 className="text-xs font-semibold text-gray-400 mb-3">{t(section)}</h3>
+              <div className="admin-permission-options">
                 {menuItems.filter(i => i.section === section).map(item => {
                   const enabled = config[activeRole]?.[item.key] ?? true;
                   return (
                     <button
                       key={item.key}
-                      onClick={() => toggle(activeRole, item.key)}
+                      aria-pressed={enabled} onClick={() => toggle(activeRole, item.key)}
                       className={`flex items-center justify-between px-4 py-3 rounded-xl border text-sm font-medium transition-all ${
                         enabled
-                          ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                          : 'bg-gray-50 border-gray-200 text-gray-400'
+                          ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                          : "bg-gray-50 border-gray-200 text-gray-400"
                       }`}
                     >
-                      <span>{item.label}</span>
+                      <span>{t(item.label)}</span>
                       {enabled
                         ? <Eye className="w-4 h-4 text-emerald-500" />
                         : <EyeOff className="w-4 h-4 text-gray-400" />
@@ -384,11 +349,10 @@ function MenuRoleConfigTab() {
               </div>
             </div>
           ))}
-        </div>
-      </div>
+        </div></ReportSection>
 
       {isDirty && (
-        <p className="text-xs text-amber-600 text-center">Ada perubahan yang belum disimpan</p>
+        <p className="text-xs text-amber-600 text-center">{t("Ada perubahan yang belum disimpan")}</p>
       )}
     </div>
   );
@@ -399,8 +363,9 @@ function MenuRoleConfigTab() {
 type Tab = 'company-features' | 'menu-config';
 
 export function SystemConfigPage() {
+  useLocale();
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = (searchParams.get('tab') as Tab) || 'company-features';
+  const activeTab: Tab = searchParams.get('tab') === 'menu-config' ? 'menu-config' : 'company-features';
 
   const setActiveTab = (tab: Tab) => setSearchParams({ tab }, { replace: true });
 
@@ -410,39 +375,24 @@ export function SystemConfigPage() {
   ];
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-purple-700 rounded-xl flex items-center justify-center shadow">
-          <Settings className="w-5 h-5 text-white" />
-        </div>
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">System Configuration</h1>
-          <p className="text-sm text-gray-500">Kelola fitur perusahaan, tampilan menu, dan akses karyawan</p>
-        </div>
-      </div>
+    <ReportPage  className="ph-admin-page">{/* Header */}<ReportHeader>
+<div className="report-heading"><h1 className="text-xl font-bold text-gray-900">{t("System Configuration")}</h1><p className="text-sm text-gray-500">{t("Kelola fitur perusahaan, tampilan menu, dan akses karyawan")}</p></div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 p-1 bg-gray-100 rounded-xl w-fit">
+</ReportHeader>{/* Tabs */}<div className="ph-tabs">
         {tabs.map(tab => (
-          <button
+          <button aria-selected={activeTab === tab.id}
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all ${
               activeTab === tab.id
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
+                ? "bg-white text-gray-900"
+                : "text-gray-500 hover:text-gray-700"
             }`}
           >
             {tab.icon}
-            {tab.label}
+            {t(tab.label)}
           </button>
         ))}
-      </div>
-
-      {/* Tab Content */}
-      {activeTab === 'company-features' && <CompanyFeaturesTab />}
-      {activeTab === 'menu-config' && <MenuRoleConfigTab />}
-    </div>
+      </div>{/* Tab Content */}{activeTab === 'company-features' && <CompanyFeaturesTab />}{activeTab === 'menu-config' && <MenuRoleConfigTab />}</ReportPage>
   );
 }

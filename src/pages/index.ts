@@ -27,7 +27,6 @@ export {
   CEOSuccessionPlanningPage,
   CEOPerformanceSummaryPage,
   CEOTalentOverviewPage,
-  CEOAnnouncementsPage,
   CEOPayrollReportPage,
 } from './ceo';
 
@@ -82,13 +81,9 @@ export { TeamAttendancePage } from './manager/TeamAttendancePage';
 export { TeamOvertimePage } from './manager/TeamOvertimePage';
 export { LeaveApprovalPage } from './manager/LeaveApprovalPage';
 export { MyLeavePage } from './manager/MyLeavePage';
-export { TeamTemplatesPage } from './manager/TeamTemplatesPage';
-export { TeamAnnouncementsPage } from './manager/TeamAnnouncementsPage';
 export { ManagerDocumentsPage } from './manager/ManagerDocumentsPage';
 
 // Employee
-export { EmployeeTemplatesPage } from './employee/EmployeeTemplatesPage';
-export { EmployeeAnnouncementsPage } from './employee/EmployeeAnnouncementsPage';
 export { EmployeeDocumentsPage } from './employee/EmployeeDocumentsPage';
 
 // Companies (HR)

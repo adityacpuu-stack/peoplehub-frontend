@@ -8,7 +8,7 @@ interface CardProps extends HTMLAttributes<HTMLDivElement> {
 export function Card({ className, children, ...props }: CardProps) {
   return (
     <div
-      className={cn('rounded-lg border border-gray-200 bg-white shadow-sm', className)}
+      className={cn('rounded-md border border-[var(--ph-line)] bg-white', className)}
       {...props}
     >
       {children}
@@ -18,7 +18,7 @@ export function Card({ className, children, ...props }: CardProps) {
 
 export function CardHeader({ className, children, ...props }: CardProps) {
   return (
-    <div className={cn('border-b border-gray-200 px-6 py-4', className)} {...props}>
+    <div className={cn('border-b border-[var(--ph-line)] px-6 py-4', className)} {...props}>
       {children}
     </div>
   );
@@ -26,7 +26,7 @@ export function CardHeader({ className, children, ...props }: CardProps) {
 
 export function CardTitle({ className, children, ...props }: CardProps) {
   return (
-    <h3 className={cn('text-lg font-semibold text-gray-900', className)} {...props}>
+    <h3 className={cn('text-lg font-semibold text-[var(--ph-ink)]', className)} {...props}>
       {children}
     </h3>
   );
@@ -34,7 +34,7 @@ export function CardTitle({ className, children, ...props }: CardProps) {
 
 export function CardDescription({ className, children, ...props }: CardProps) {
   return (
-    <p className={cn('text-sm text-gray-500', className)} {...props}>
+    <p className={cn('text-sm text-[var(--ph-muted)]', className)} {...props}>
       {children}
     </p>
   );
@@ -50,7 +50,7 @@ export function CardContent({ className, children, ...props }: CardProps) {
 
 export function CardFooter({ className, children, ...props }: CardProps) {
   return (
-    <div className={cn('border-t border-gray-200 px-6 py-4', className)} {...props}>
+    <div className={cn('border-t border-[var(--ph-line)] px-6 py-4', className)} {...props}>
       {children}
     </div>
   );

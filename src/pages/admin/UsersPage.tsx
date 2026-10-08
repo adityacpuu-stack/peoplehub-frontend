@@ -1,30 +1,15 @@
+import { roleLabel } from './localization';
+import { t, useLocale, intlLocale } from '@/i18n';
+import { Modal } from '@/components/ui/Modal';
+import { ReportPage, ReportHeader, ReportSummary, ReportSection } from '@/pages/dashboard/ReportingLayout';
+import './admin-workflows.css';
 import { useEffect, useState, useCallback, useRef } from 'react';
-import {
-  UserCog,
-  Search,
-  Plus,
-  Edit,
-  Trash2,
-  Shield,
-  CheckCircle,
-  XCircle,
-  Clock,
-  Mail,
-  AlertCircle,
-  X,
-  Eye,
-  EyeOff,
-  RefreshCw,
-  ChevronLeft,
-  ChevronRight,
-  Send,
-  Loader2,
-} from 'lucide-react';
+import { UserCog, Search, Plus, Edit, Trash2, Shield, CheckCircle, XCircle, Clock, Mail, AlertCircle, Eye, EyeOff, RefreshCw, ChevronLeft, ChevronRight, Send, Loader2 } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 import { toast } from 'react-hot-toast';
 import { userService, type User, type UserStats, type CreateUserDTO, type UpdateUserDTO } from '@/services/user.service';
 import { rbacService } from '@/services/rbac.service';
-import { employeeService } from '@/services/employee.service';
+import { useAuthStore } from '@/stores/auth.store';
 
 interface Role {
   id: number;
@@ -32,11 +17,6 @@ interface Role {
   level: number;
 }
 
-interface UnlinkedEmployee {
-  id: number;
-  employee_id?: string | null;
-  name: string;
-}
 
 const INPUT = 'w-full px-3 py-2 text-sm rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:border-slate-400 focus:outline-none transition-all';
 
@@ -52,6 +32,8 @@ const ROLE_COLORS: Record<string, string> = {
 const getRoleColor = (name: string) => ROLE_COLORS[name] ?? 'bg-gray-100 text-gray-600';
 
 export function UsersPage() {
+  useLocale();
+  const isSuperAdmin = useAuthStore(state => state.user?.roles.includes('Super Admin'));
   const [users, setUsers] = useState<User[]>([]);
   const [stats, setStats] = useState<UserStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -62,7 +44,6 @@ export function UsersPage() {
   const limit = 10;
 
   const [roles, setRoles] = useState<Role[]>([]);
-  const [unlinkedEmployees, setUnlinkedEmployees] = useState<UnlinkedEmployee[]>([]);
 
   const [deleteModal, setDeleteModal] = useState<{ open: boolean; user: User | null }>({ open: false, user: null });
   const [formModal, setFormModal] = useState<{ open: boolean; user: User | null }>({ open: false, user: null });
@@ -70,6 +51,9 @@ export function UsersPage() {
   const [credentialUsername, setCredentialUsername] = useState('');
   const [credentialLicenseSkuId, setCredentialLicenseSkuId] = useState('');
   const [m365Licenses, setM365Licenses] = useState<{ available: boolean; licenses: import('@/services/user.service').M365License[] }>({ available: false, licenses: [] });
+  const [licenseStatus, setLicenseStatus] = useState<'loading' | 'ready' | 'unconfigured' | 'error'>('loading');
+  const [licenseRevision, setLicenseRevision] = useState(0);
+  const credentialRequest = useRef(0);
   const [m365UserStatus, setM365UserStatus] = useState<import('@/services/user.service').M365UserStatus>({ available: false, exists: false, licenses: [] });
   const [m365UsernameStatus, setM365UsernameStatus] = useState<{ checking: boolean; exists: boolean | null; licenses: import('@/services/user.service').M365UserLicense[] }>({ checking: false, exists: null, licenses: [] });
   const [isSendingCredentials, setIsSendingCredentials] = useState(false);
@@ -95,7 +79,7 @@ export function UsersPage() {
       setTotalPages(response.pagination.totalPages);
       setTotal(response.pagination.total);
     } catch (error: any) {
-      toast.error(error.response?.data?.error?.message || error.response?.data?.message ||'Gagal memuat data users', { id: 'api-error' });
+      toast.error(error.response?.data?.error?.message || error.response?.data?.message ||t('Gagal memuat data users'), { id: 'api-error' });
     } finally {
       setIsLoading(false);
     }
@@ -121,14 +105,6 @@ export function UsersPage() {
     }
   };
 
-  const fetchUnlinkedEmployees = async () => {
-    try {
-      const response = await employeeService.getAll({ page: 1, limit: 100 });
-      setUnlinkedEmployees(response.data || []);
-    } catch (error) {
-      console.error('Failed to fetch employees:', error);
-    }
-  };
 
   useEffect(() => { fetchUsers(); fetchStats(); }, [page]);
 
@@ -141,7 +117,22 @@ export function UsersPage() {
   }, [search]);
 
   useEffect(() => {
+    if (!credentialModal.open) return;
+    let current = true;
+    setLicenseStatus('loading');
+    setCredentialLicenseSkuId('');
+    userService.getM365Licenses().then(result => {
+      if (!current) return;
+      setM365Licenses(result);
+      setLicenseStatus(result.available ? 'ready' : 'unconfigured');
+    }).catch(() => { if (current) setLicenseStatus('error'); });
+    return () => { current = false; };
+  }, [credentialModal.open, credentialModal.user?.id, licenseRevision]);
+
+  useEffect(() => {
+    let current = true;
     const emailDomain = credentialModal.user?.employee?.company?.email_domain;
+    setCredentialLicenseSkuId('');
     if (!credentialUsername || !emailDomain) {
       setM365UsernameStatus({ checking: false, exists: null, licenses: [] });
       return;
@@ -151,17 +142,18 @@ export function UsersPage() {
       try {
         const email = `${credentialUsername}@${emailDomain}`;
         const status = await userService.getM365UserStatus(email);
-        setM365UsernameStatus({ checking: false, exists: status.exists, licenses: status.licenses || [] });
+        if (current) setM365UsernameStatus({ checking: false, exists: status.available ? status.exists : null, licenses: status.available ? status.licenses || [] : [] });
       } catch {
-        setM365UsernameStatus({ checking: false, exists: null, licenses: [] });
+        if (current) setM365UsernameStatus({ checking: false, exists: null, licenses: [] });
       }
     }, 600);
-    return () => clearTimeout(timer);
-  }, [credentialUsername, credentialModal.user]);
+    return () => { current = false; clearTimeout(timer); };
+  }, [credentialUsername, credentialModal.user, licenseRevision]);
 
   const handleOpenCreateModal = async () => {
+    if (!isSuperAdmin) { toast.error(t("Tambahkan karyawan melalui menu Employees. Akun dibuat bersama profil karyawan.")); return; }
     setFormData({ email: '', password: '', employee_id: null, role_ids: [], is_active: true });
-    await Promise.all([fetchRoles(), fetchUnlinkedEmployees()]);
+    await fetchRoles();
     setFormModal({ open: true, user: null });
   };
 
@@ -182,26 +174,25 @@ export function UsersPage() {
   };
 
   const handleSubmit = async () => {
-    if (!formData.email) { toast.error('Email harus diisi'); return; }
-    if (!formModal.user && !formData.password) { toast.error('Password harus diisi'); return; }
+    if (!formData.email) { toast.error(t("Email harus diisi")); return; }
     try {
       setIsSubmitting(true);
       if (formModal.user) {
         const updateData: UpdateUserDTO = { email: formData.email, is_active: formData.is_active, role_ids: formData.role_ids };
         if (formData.password) updateData.password = formData.password;
         await userService.update(formModal.user.id, updateData);
-        toast.success('User berhasil diupdate');
+        toast.success(t("User berhasil diupdate"));
       } else {
-        const createData: CreateUserDTO = { email: formData.email, password: formData.password, is_active: formData.is_active, role_ids: formData.role_ids };
-        if (formData.employee_id) createData.employee_id = formData.employee_id;
-        await userService.create(createData);
-        toast.success('User berhasil dibuat');
+        const createData: CreateUserDTO = { email: formData.email, is_active: formData.is_active, role_ids: formData.role_ids };
+        const created = await userService.create(createData);
+        toast.success(t("User berhasil dibuat"));
+        if (created.credentials_sent === false) toast.error(t("Email kredensial belum terkirim. Gunakan Kirim Kredensial untuk mencoba lagi."));
       }
       setFormModal({ open: false, user: null });
       fetchUsers();
       fetchStats();
     } catch (error: any) {
-      toast.error(error.response?.data?.error?.message || error.response?.data?.message ||'Gagal menyimpan user', { id: 'api-error' });
+      toast.error(error.response?.data?.error?.message || error.response?.data?.message ||t('Gagal menyimpan user'), { id: 'api-error' });
     } finally {
       setIsSubmitting(false);
     }
@@ -211,27 +202,29 @@ export function UsersPage() {
     if (!deleteModal.user) return;
     try {
       await userService.delete(deleteModal.user.id);
-      toast.success('User berhasil dihapus');
+      toast.success(t("User berhasil dihapus"));
       setDeleteModal({ open: false, user: null });
       fetchUsers();
       fetchStats();
     } catch (error: any) {
-      toast.error(error.response?.data?.error?.message || error.response?.data?.message ||'Gagal menghapus user', { id: 'api-error' });
+      toast.error(error.response?.data?.error?.message || error.response?.data?.message ||t('Gagal menghapus user'), { id: 'api-error' });
     }
   };
 
   const handleToggleStatus = async (user: User) => {
     try {
       await userService.toggleStatus(user.id);
-      toast.success('Status user berhasil diubah');
+      toast.success(t("Status user berhasil diubah"));
       fetchUsers();
       fetchStats();
     } catch (error: any) {
-      toast.error(error.response?.data?.error?.message || error.response?.data?.message ||'Gagal mengubah status', { id: 'api-error' });
+      toast.error(error.response?.data?.error?.message || error.response?.data?.message ||t('Gagal mengubah status'), { id: 'api-error' });
     }
   };
 
   const handleOpenCredentialModal = async (user: User) => {
+    const request = ++credentialRequest.current;
+    setLicenseStatus('loading');
     const emailDomain = user.employee?.company?.email_domain;
     const currentEmail = user.email;
     let autoUsername = '';
@@ -246,110 +239,76 @@ export function UsersPage() {
     const emailToCheck = autoUsername && emailDomain ? `${autoUsername}@${emailDomain}` : currentEmail;
     const validEmail = emailToCheck && !emailToCheck.endsWith('@temp.local') ? emailToCheck : null;
     try {
-      const [licensesResult, userStatusResult] = await Promise.all([
-        userService.getM365Licenses().catch(() => ({ available: false, licenses: [] as import('@/services/user.service').M365License[] })),
-        validEmail
+      const userStatusResult = await (validEmail
           ? userService.getM365UserStatus(validEmail).catch(() => ({ available: false, exists: false, licenses: [] as import('@/services/user.service').M365UserLicense[] }))
-          : Promise.resolve({ available: false, exists: false, licenses: [] as import('@/services/user.service').M365UserLicense[] }),
-      ]);
-      setM365Licenses(licensesResult);
-      setM365UserStatus(userStatusResult);
+          : Promise.resolve({ available: false, exists: false, licenses: [] as import('@/services/user.service').M365UserLicense[] }));
+      if (request === credentialRequest.current) setM365UserStatus(userStatusResult);
     } catch {
-      setM365Licenses({ available: false, licenses: [] });
-      setM365UserStatus({ available: false, exists: false, licenses: [] });
+      if (request === credentialRequest.current) setM365UserStatus({ available: false, exists: false, licenses: [] });
     }
   };
 
   const handleSendCredentials = async () => {
     if (!credentialModal.user) return;
+    if (credentialUsername && (licenseStatus !== 'ready' || m365UsernameStatus.checking || m365UsernameStatus.exists === null)) return;
     try {
       setIsSendingCredentials(true);
       const result = await userService.sendCredentials(credentialModal.user.id, credentialUsername || undefined, credentialLicenseSkuId || undefined);
-      toast.success(`Credentials sent to ${result.sentTo}`);
+      toast.success(t("Credentials sent to {email}", { email: result.sentTo }));
       setCredentialModal({ open: false, user: null });
       setCredentialUsername('');
       fetchUsers();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Gagal mengirim credentials', { id: 'api-error' });
+      toast.error(error.response?.data?.message || t('Gagal mengirim credentials'), { id: 'api-error' });
     } finally {
       setIsSendingCredentials(false);
     }
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-slate-700 to-slate-800 rounded-xl flex items-center justify-center shadow">
-            <UserCog className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">User Management</h1>
-            <p className="text-sm text-gray-500">Kelola akun dan hak akses sistem</p>
-          </div>
-        </div>
-        <button
+    <ReportPage  className="ph-admin-page">{/* Header */}<ReportHeader>
+<div className="report-heading"><h1 className="text-xl font-bold text-gray-900">{t("User Management")}</h1><p className="text-sm text-gray-500">{t("Kelola akun dan hak akses sistem")}</p></div>
+<div className="report-header-context"><button
           onClick={handleOpenCreateModal}
-          className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-xl hover:bg-slate-700 transition-colors"
+          className="ph-button ph-button-primary inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md transition-colors"
         >
-          <Plus className="w-4 h-4" />
-          Tambah User
-        </button>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
+          <Plus className="w-4 h-4" />{t("Tambah User")} </button></div>
+</ReportHeader>{/* Stats */}<ReportSummary>{[
           { label: 'Total Users', value: stats?.total ?? 0, icon: UserCog, color: 'text-slate-600' },
           { label: 'Aktif', value: stats?.active ?? 0, icon: CheckCircle, color: 'text-emerald-600' },
           { label: 'Nonaktif', value: stats?.inactive ?? 0, icon: XCircle, color: 'text-red-500' },
           { label: 'Login (7 hari)', value: stats?.recentLogins ?? 0, icon: Shield, color: 'text-purple-600' },
         ].map(({ label, value, icon: Icon, color }) => (
-          <div key={label} className="bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-center gap-3">
-            <Icon className={`w-5 h-5 shrink-0 ${color}`} />
-            <div>
-              <p className="text-xs text-gray-500">{label}</p>
-              <p className="text-xl font-bold text-gray-900">{value}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Table Panel */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-        {/* Toolbar */}
-        <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-3">
-          <div className="relative flex-1 max-w-sm">
+          <div key={label} className="report-metric"><Icon className={`w-5 h-5 shrink-0 ${color}`} /><div>
+              <p className="report-metric-label">{t(label)}</p>
+              <p className="report-metric-value">{(value).toLocaleString(intlLocale())}</p>
+            </div></div>
+        ))}</ReportSummary>{/* Table Panel */}<ReportSection  className="overflow-hidden">{/* Toolbar */}<div className="report-toolbar">
+          <div className="relative flex-1 max-w-sm report-search">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
             <input
               type="text"
-              placeholder="Cari email, nama, atau role..."
+              placeholder={t("Cari email, nama, atau role...")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-8 pr-3 py-2 text-sm rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:border-slate-400 focus:outline-none transition-all"
+              className="w-full pl-8 pr-3 py-2 text-sm rounded-md border border-gray-200 bg-gray-50 focus:bg-white focus:border-slate-400 focus:outline-none transition-all"
             />
           </div>
           <button
             onClick={() => { fetchUsers(); fetchStats(); }}
             className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-            title="Refresh"
+            title={t("Refresh")}
           >
             <RefreshCw className="w-4 h-4 text-gray-500" />
           </button>
           <span className="text-xs text-gray-400 ml-auto hidden sm:block">
-            {users.length} dari {total} user
-          </span>
-        </div>
-
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full">
+            {(users.length).toLocaleString(intlLocale())}{' '}{t("dari")} {(total).toLocaleString(intlLocale())}{' '}{t("user")} </span>
+        </div>{/* Table */}<div  className="ph-table-scroll overflow-x-auto"><table className="w-full">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100">
                 {['User', 'Karyawan', 'Role', 'Status', 'Last Login', ''].map((h) => (
-                  <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider last:text-center last:w-28">
-                    {h}
+                  <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 last:text-center last:w-28">
+                    {t(h)}
                   </th>
                 ))}
               </tr>
@@ -365,7 +324,7 @@ export function UsersPage() {
                 <tr>
                   <td colSpan={6} className="py-16 text-center">
                     <UserCog className="w-8 h-8 text-gray-200 mx-auto mb-2" />
-                    <p className="text-sm text-gray-400">Tidak ada user ditemukan</p>
+                    <p className="text-sm text-gray-400">{t("Tidak ada user ditemukan")}</p>
                   </td>
                 </tr>
               ) : (
@@ -374,19 +333,19 @@ export function UsersPage() {
                     {/* User */}
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold text-white ${user.email.endsWith('@temp.local') ? 'bg-amber-400' : 'bg-gradient-to-br from-slate-600 to-slate-700'}`}>
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold text-[#65716b] ${user.email.endsWith("@temp.local") ? "bg-amber-400" : "bg-[#f5f6f7] text-[#24302b]"}`}>
                           {user.email.endsWith('@temp.local') ? '?' : user.email.charAt(0).toUpperCase()}
                         </div>
                         <div className="min-w-0">
                           {user.email.endsWith('@temp.local') ? (
-                            <p className="text-xs text-amber-600 italic">No email — kirim credentials</p>
+                            <p className="text-xs text-amber-600 italic">{t("No email — kirim credentials")}</p>
                           ) : (
                             <div className="flex items-center gap-1.5">
                               <Mail className="w-3 h-3 text-gray-400 shrink-0" />
                               <p className="text-sm text-gray-900 truncate">{user.email}</p>
                             </div>
                           )}
-                          <p className="text-xs text-gray-400 mt-0.5">Dibuat {formatDate(user.created_at)}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">{t("Dibuat")} {formatDate(user.created_at)}</p>
                         </div>
                       </div>
                     </td>
@@ -408,7 +367,7 @@ export function UsersPage() {
                           <span className="text-xs text-gray-400">—</span>
                         ) : user.roles.map((role) => (
                           <span key={role.id} className={`px-2 py-0.5 rounded-full text-xs font-medium ${getRoleColor(role.name)}`}>
-                            {role.name}
+                            {roleLabel(role.name)}
                           </span>
                         ))}
                       </div>
@@ -419,18 +378,18 @@ export function UsersPage() {
                         onClick={() => handleToggleStatus(user)}
                         className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${
                           user.is_active
-                            ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                            ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                            : "bg-gray-100 text-gray-500 hover:bg-gray-200"
                         }`}
                       >
-                        {user.is_active ? 'Aktif' : 'Nonaktif'}
+                        {user.is_active ? t("Aktif") : t("Nonaktif")}
                       </button>
                     </td>
                     {/* Last Login */}
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-1.5 text-xs text-gray-500">
                         <Clock className="w-3 h-3 text-gray-400" />
-                        {user.last_login_at ? formatDate(user.last_login_at) : 'Belum pernah'}
+                        {user.last_login_at ? formatDate(user.last_login_at) : t("Belum pernah")}
                       </div>
                     </td>
                     {/* Actions */}
@@ -438,21 +397,21 @@ export function UsersPage() {
                       <div className="flex items-center justify-center gap-1">
                         <button
                           onClick={() => handleOpenCredentialModal(user)}
-                          title="Kirim Credentials"
+                          title={t("Kirim Credentials")}
                           className="p-1.5 rounded-lg hover:bg-blue-50 transition-colors group"
                         >
                           <Send className="w-3.5 h-3.5 text-gray-400 group-hover:text-blue-600" />
                         </button>
                         <button
                           onClick={() => handleOpenEditModal(user)}
-                          title="Edit"
+                          title={t("Edit")}
                           className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors group"
                         >
                           <Edit className="w-3.5 h-3.5 text-gray-400 group-hover:text-slate-700" />
                         </button>
                         <button
                           onClick={() => setDeleteModal({ open: true, user })}
-                          title="Hapus"
+                          title={t("Hapus")}
                           className="p-1.5 rounded-lg hover:bg-red-50 transition-colors group"
                         >
                           <Trash2 className="w-3.5 h-3.5 text-gray-400 group-hover:text-red-600" />
@@ -463,13 +422,9 @@ export function UsersPage() {
                 ))
               )}
             </tbody>
-          </table>
-        </div>
-
-        {/* Pagination */}
-        {totalPages > 1 && (
+          </table></div>{/* Pagination */}{totalPages > 1 && (
           <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between">
-            <span className="text-xs text-gray-500">Halaman {page} dari {totalPages}</span>
+            <span className="text-xs text-gray-500">{t("Halaman")} {(page).toLocaleString(intlLocale())}{' '}{t("dari")} {(totalPages).toLocaleString(intlLocale())}</span>
             <div className="flex items-center gap-1.5">
               <button
                 onClick={() => setPage(Math.max(1, page - 1))}
@@ -487,87 +442,54 @@ export function UsersPage() {
               </button>
             </div>
           </div>
-        )}
-      </div>
+        )}</ReportSection>{/* Create / Edit Modal */}{formModal.open && (
+        <Modal isOpen onClose={() => setFormModal({ open: false, user: null })} title={formModal.user ? t("Edit User") : t("Tambah User")} description={formModal.user ? t("Editing {email}", { email: formModal.user.email }) : t("Buat akun user baru")} size="lg" busy={isSubmitting} className="admin-workflow-dialog admin-refreshed-dialog">
 
-      {/* Create / Edit Modal */}
-      {formModal.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setFormModal({ open: false, user: null })} />
-          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden">
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <div>
-                <h3 className="font-semibold text-gray-900">{formModal.user ? 'Edit User' : 'Tambah User'}</h3>
-                <p className="text-xs text-gray-400 mt-0.5">{formModal.user ? `Editing ${formModal.user.email}` : 'Buat akun user baru'}</p>
-              </div>
-              <button onClick={() => setFormModal({ open: false, user: null })} className="p-1.5 hover:bg-gray-100 rounded-lg">
-                <X className="w-4 h-4 text-gray-500" />
-              </button>
-            </div>
 
             {/* Body */}
-            <div className="p-5 space-y-4">
-              {/* Email */}
+            <div className="admin-dialog-content">
+              <section className="ph-section"><h3>{t("Informasi akun")}</h3><div className="ph-form-grid">{/* Email */}
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Email</label>
+                <label className="block text-xs font-semibold text-gray-500 mb-1.5" htmlFor="admin-user-email">{t("Email")}</label>
                 <input
-                  type="email"
+                  id="admin-user-email" type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className={INPUT}
-                  placeholder="user@example.com"
+                  placeholder={"user@example.com"}
                 />
               </div>
 
-              {/* Password */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-                  Password {formModal.user && <span className="normal-case text-gray-400 font-normal">(kosongkan jika tidak diubah)</span>}
+              {/* Password reset is only shown for an existing account. */}
+              {formModal.user && <div>
+                <label htmlFor="admin-user-password" className="block text-xs font-semibold text-gray-500 mb-1.5">{t("Password")} {formModal.user && <span className="normal-case text-gray-400 font-normal">{t("(kosongkan jika tidak diubah)")}</span>}
                 </label>
                 <div className="relative">
                   <input
-                    type={showPassword ? 'text' : 'password'}
+                    id="admin-user-password" type={showPassword ? 'text' : 'password'}
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className={INPUT + ' pr-9'}
+                    className={INPUT + " pr-9"}
                     placeholder="••••••••"
                   />
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? t("Sembunyikan password") : t("Tampilkan password")} onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
-              </div>
+              </div>}
 
-              {/* Employee (create only) */}
-              {!formModal.user && (
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-                    Link Karyawan <span className="normal-case font-normal text-gray-400">(opsional)</span>
-                  </label>
-                  <select
-                    value={formData.employee_id || ''}
-                    onChange={(e) => setFormData({ ...formData, employee_id: e.target.value ? parseInt(e.target.value) : null })}
-                    className={INPUT}
-                  >
-                    <option value="">Tidak ada</option>
-                    {unlinkedEmployees.map((emp) => (
-                      <option key={emp.id} value={emp.id}>{emp.name} ({emp.employee_id})</option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              {!formModal.user && <p className="text-sm text-gray-500">{t("Password sementara dibuat otomatis dan dikirim melalui email. Akun karyawan dibuat dari menu Employees.")} </p>}
 
-              {/* Roles */}
+              </div></section><section className="ph-section"><h3>{t("Akses dan status")}</h3>{/* Roles */}
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Roles</label>
-                <div className="space-y-1.5 max-h-40 overflow-y-auto border border-gray-200 rounded-xl p-3 bg-gray-50">
+                <label className="block text-xs font-semibold text-gray-500 mb-1.5">{t("Roles")}</label>
+                <div className="admin-choices">
                   {(roles ?? []).length === 0 && (
-                    <p className="text-xs text-gray-400">Memuat roles…</p>
+                    <p className="text-xs text-gray-400">{t("Memuat roles…")}</p>
                   )}
                   {(roles ?? []).map((role) => (
                     <label key={role.id} className="flex items-center gap-2.5 cursor-pointer">
@@ -580,7 +502,7 @@ export function UsersPage() {
                         }}
                         className="w-3.5 h-3.5 rounded accent-slate-700"
                       />
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getRoleColor(role.name)}`}>{role.name}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getRoleColor(role.name)}`}>{roleLabel(role.name)}</span>
                     </label>
                   ))}
                 </div>
@@ -594,55 +516,25 @@ export function UsersPage() {
                   onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
                   className="w-3.5 h-3.5 rounded accent-slate-700"
                 />
-                <span className="text-sm text-gray-700">Aktifkan akun</span>
-              </label>
+                <span className="text-sm text-gray-700">{t("Aktifkan akun")}</span>
+              </label></section>
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-100 bg-gray-50">
+            <div className="ph-dialog-footer">
               <button
-                onClick={() => setFormModal({ open: false, user: null })}
-                className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-200 rounded-xl transition-colors"
-              >
-                Batal
-              </button>
-              <button
-                onClick={handleSubmit}
-                disabled={isSubmitting}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-xl hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSubmitting ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Menyimpan...</> : formModal.user ? 'Update' : 'Buat User'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Send Credentials Modal */}
-      {credentialModal.open && credentialModal.user && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-            onClick={() => !isSendingCredentials && setCredentialModal({ open: false, user: null })}
-          />
-          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden">
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center">
-                  <Send className="w-4 h-4 text-blue-600" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900">Kirim Credentials</h3>
-                  <p className="text-xs text-gray-400 mt-0.5">{credentialModal.user.employee?.name || credentialModal.user.email}</p>
-                </div>
-              </div>
-              <button onClick={() => { setCredentialModal({ open: false, user: null }); setCredentialUsername(''); setCredentialLicenseSkuId(''); }} className="p-1.5 hover:bg-gray-100 rounded-lg">
-                <X className="w-4 h-4 text-gray-500" />
-              </button>
+                disabled={isSubmitting} onClick={() => setFormModal({ open: false, user: null })}
+                className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-200 rounded-md transition-colors"
+              >{t("Batal")} </button>
+              <button onClick={handleSubmit} disabled={isSubmitting} className="ph-button ph-button-primary inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed">{isSubmitting ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />{t("Menyimpan...")}</> : formModal.user ? t("Update") : t("Buat User")}</button>
             </div>
 
-            <div className="p-5 space-y-4">
+</Modal>
+      )}{/* Send Credentials Modal */}{credentialModal.open && credentialModal.user && (
+        <Modal isOpen onClose={() => { setCredentialModal({ open: false, user: null }); setCredentialUsername(''); setCredentialLicenseSkuId(''); }} title={t("Kirim Credentials")} description={credentialModal.user.employee?.name || credentialModal.user.email} size="lg" busy={isSendingCredentials} className="admin-workflow-dialog admin-refreshed-dialog">
+
+
+            <div className="admin-dialog-content">
               {(() => {
                 const emailDomain = credentialModal.user.employee?.company?.email_domain || '';
                 const currentEmail = credentialModal.user.email;
@@ -655,8 +547,8 @@ export function UsersPage() {
                     {/* Office Email Section */}
                     {hasOfficeEmail && (
                       <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Office Email</label>
-                        <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-xl">
+                        <label className="block text-xs font-semibold text-gray-500 mb-1.5">{t("Office Email")}</label>
+                        <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-md">
                           <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
                           <span className="font-mono text-sm text-emerald-800">{currentEmail}</span>
                         </div>
@@ -667,23 +559,23 @@ export function UsersPage() {
                             ))}
                           </div>
                         ) : m365UserStatus.exists ? (
-                          <p className="text-xs text-amber-600 mt-1">M365 account ada tapi tidak ada lisensi</p>
+                          <p className="text-xs text-amber-600 mt-1">{t("M365 account ada tapi tidak ada lisensi")}</p>
                         ) : !m365UserStatus.available ? (
-                          <p className="text-xs text-gray-400 mt-1">M365 integration belum dikonfigurasi</p>
+                          <p className="text-xs text-gray-400 mt-1">{t("M365 integration belum dikonfigurasi")}</p>
                         ) : (
-                          <p className="text-xs text-red-500 mt-1">M365 account tidak ditemukan — akan dibuat saat kirim credentials</p>
+                          <p className="text-xs text-red-500 mt-1">{t("M365 account tidak ditemukan — akan dibuat saat kirim credentials")}</p>
                         )}
                       </div>
                     )}
 
                     {hasNoOfficeEmail && (
                       <div>
-                        <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl mb-3">
+                        <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-md mb-3">
                           <AlertCircle className="w-4 h-4 text-gray-400 shrink-0" />
                           <div>
-                            <span className="text-sm text-gray-600">Tidak ada office email</span>
+                            <span className="text-sm text-gray-600">{t("Tidak ada office email")}</span>
                             {personalEmail && (
-                              <p className="text-xs text-gray-400">Login via personal: <span className="font-mono">{personalEmail}</span></p>
+                              <p className="text-xs text-gray-400">{t("Login via personal:")} <span className="font-mono">{personalEmail}</span></p>
                             )}
                           </div>
                         </div>
@@ -695,7 +587,7 @@ export function UsersPage() {
                               className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
                             >
                               <Plus className="w-3.5 h-3.5" />
-                              {credentialUsername ? 'Batal setup M365' : 'Setup office email & M365'}
+                              {credentialUsername ? t("Batal setup M365") : t("Setup office email & M365")}
                             </button>
                             {credentialUsername && (
                               <div className="mt-2">
@@ -704,19 +596,19 @@ export function UsersPage() {
                                     type="text"
                                     value={credentialUsername}
                                     onChange={(e) => setCredentialUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''))}
-                                    placeholder="username"
+                                    placeholder={t("username")}
                                     className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-l-xl bg-gray-50 focus:bg-white focus:border-slate-400 focus:outline-none transition-all"
                                   />
                                   <span className="px-3 py-2 bg-gray-100 border border-l-0 border-gray-200 rounded-r-xl text-sm text-gray-500">@{emailDomain}</span>
                                 </div>
                                 {m365UsernameStatus.checking ? (
-                                  <p className="text-xs text-gray-400 mt-1">Memeriksa M365...</p>
+                                  <p className="text-xs text-gray-400 mt-1">{t("Memeriksa M365...")}</p>
                                 ) : m365UsernameStatus.exists === true ? (
-                                  <p className="text-xs text-amber-600 mt-1">⚠ Email sudah ada di M365 — akan dihubungkan ke akun existing</p>
+                                  <p className="text-xs text-amber-600 mt-1">{t("⚠ Email sudah ada di M365 — akan dihubungkan ke akun existing")}</p>
                                 ) : m365UsernameStatus.exists === false ? (
-                                  <p className="text-xs text-emerald-600 mt-1">✓ Tersedia — akun M365 baru akan dibuat</p>
+                                  <p className="text-xs text-emerald-600 mt-1">{t("✓ Tersedia — akun M365 baru akan dibuat")}</p>
                                 ) : (
-                                  <p className="text-xs text-gray-400 mt-1">Akan membuat mailbox M365 dan set sebagai email login</p>
+                                  <p className="text-xs text-amber-700 mt-1">{t("Alamat belum berhasil diverifikasi di M365.")}</p>
                                 )}
                               </div>
                             )}
@@ -726,19 +618,22 @@ export function UsersPage() {
                     )}
 
                     {/* M365 License */}
-                    {m365Licenses.available && credentialModal.user.employee?.company?.email_domain && (credentialUsername || (credentialModal.user.email && !credentialModal.user.email.endsWith('@temp.local') && credentialModal.user.email.endsWith(`@${credentialModal.user.employee.company.email_domain}`))) && (
+                    {emailDomain && (credentialUsername || hasOfficeEmail) && (
                       <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">M365 License</label>
-                        {credentialUsername && m365UsernameStatus.exists && m365UsernameStatus.licenses.length > 0 ? (
-                          <div className="px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl">
-                            <p className="text-xs font-medium text-blue-700">Sudah berlisensi:</p>
+                        <label htmlFor="credential-license" className="block text-xs font-semibold text-gray-500 mb-1.5">{t("M365 License")}</label>
+                        {licenseStatus === 'loading' ? <p role="status" className="text-sm text-gray-500">{t("Memuat paket lisensi M365...")}</p>
+                        : licenseStatus === 'unconfigured' ? <p role="alert" className="text-sm text-amber-700">{t("Integrasi M365 belum dikonfigurasi di server ini. Paket lisensi dan pembuatan akun belum tersedia.")}</p>
+                        : licenseStatus === 'error' ? <div role="alert"><p className="text-sm text-red-600">{t("Gagal memuat paket lisensi M365. Periksa koneksi dan izin integrasi Microsoft.")}</p><button type="button" className="text-sm text-blue-600" onClick={() => setLicenseRevision(v => v + 1)}>{t("Coba lagi")}</button></div>
+                        : credentialUsername && m365UsernameStatus.exists && m365UsernameStatus.licenses.length > 0 ? (
+                          <div className="px-3 py-2 bg-blue-50 border border-blue-200 rounded-md">
+                            <p className="text-xs font-medium text-blue-700">{t("Sudah berlisensi:")}</p>
                             {m365UsernameStatus.licenses.map((lic) => (
                               <p key={lic.skuId} className="text-sm text-blue-600">{lic.displayName}</p>
                             ))}
                           </div>
-                        ) : m365UserStatus.licenses.length > 0 ? (
-                          <div className="px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl">
-                            <p className="text-xs font-medium text-blue-700">Sudah berlisensi:</p>
+                        ) : !credentialUsername && m365UserStatus.licenses.length > 0 ? (
+                          <div className="px-3 py-2 bg-blue-50 border border-blue-200 rounded-md">
+                            <p className="text-xs font-medium text-blue-700">{t("Sudah berlisensi:")}</p>
                             {m365UserStatus.licenses.map((lic) => (
                               <p key={lic.skuId} className="text-sm text-blue-600">{lic.displayName}</p>
                             ))}
@@ -746,26 +641,27 @@ export function UsersPage() {
                         ) : m365Licenses.licenses.length > 0 ? (
                           <>
                             <select
+                              id="credential-license"
                               value={credentialLicenseSkuId}
                               onChange={(e) => setCredentialLicenseSkuId(e.target.value)}
                               className={INPUT}
                             >
-                              <option value="">Tanpa lisensi</option>
+                              <option value="">{t("Tanpa lisensi")}</option>
                               {m365Licenses.licenses.map((lic) => (
                                 <option key={lic.skuId} value={lic.skuId} disabled={lic.availableUnits <= 0}>
-                                  {lic.displayName} ({lic.availableUnits}/{lic.totalUnits} tersedia)
-                                </option>
+                                  {lic.displayName} ({(lic.availableUnits).toLocaleString(intlLocale())}/{(lic.totalUnits).toLocaleString(intlLocale())}{' '}{t("tersedia)")} </option>
                               ))}
                             </select>
-                            <p className="text-xs text-gray-400 mt-1">Assign lisensi Microsoft 365</p>
+                            <p className="text-xs text-gray-400 mt-1">{t("Assign lisensi Microsoft 365")}</p>
                           </>
-                        ) : null}
+                        ) : <p className="text-sm text-amber-700">{t("Tidak ada paket lisensi aktif yang dikembalikan M365 untuk tenant ini.")}</p>}
                       </div>
                     )}
 
                     {/* Summary */}
                     {(() => {
-                      const isM365Licensed = m365UserStatus.exists && m365UserStatus.licenses.length > 0;
+                      const targetStatus = credentialUsername ? m365UsernameStatus : m365UserStatus;
+                      const isM365Licensed = targetStatus.exists && targetStatus.licenses.length > 0;
                       const isNoOfficeEmailMode = !hasOfficeEmail && !credentialUsername;
                       const isPeopleHubOnly = isM365Licensed || isNoOfficeEmailMode;
                       let sendToEmail: string | null = null;
@@ -777,61 +673,54 @@ export function UsersPage() {
                         sendToEmail = personalEmail || null;
                         sendToLabel = 'personal email';
                       }
-                      const canSend = !!sendToEmail && !sendToEmail.endsWith('@temp.local');
+                      const hasRecipient = !!sendToEmail && !sendToEmail.endsWith('@temp.local');
+                      const canSend = hasRecipient && (!credentialUsername || (licenseStatus === 'ready' && !m365UsernameStatus.checking && m365UsernameStatus.exists !== null));
 
                       return (
                         <>
-                          <div className="bg-gray-50 rounded-xl p-3 space-y-1.5 text-sm">
+                          <div className="admin-delivery-summary ph-section">
                             <div className="flex items-center justify-between">
-                              <span className="text-gray-500 text-xs">Login saat ini</span>
+                              <span className="text-gray-500 text-xs">{t("Login saat ini")}</span>
                               {currentEmail.endsWith('@temp.local') ? (
-                                <span className="text-amber-600 italic text-xs">Belum diset</span>
+                                <span className="text-amber-600 italic text-xs">{t("Belum diset")}</span>
                               ) : (
                                 <span className="font-mono text-gray-700 text-xs">{currentEmail}</span>
                               )}
                             </div>
                             {credentialUsername && emailDomain && currentEmail !== `${credentialUsername}@${emailDomain}` && (
                               <div className="flex items-center justify-between">
-                                <span className="text-gray-500 text-xs">Login baru</span>
+                                <span className="text-gray-500 text-xs">{t("Login baru")}</span>
                                 <span className="font-mono text-blue-600 text-xs font-medium">{credentialUsername}@{emailDomain}</span>
                               </div>
                             )}
                             <div className="flex items-center justify-between">
-                              <span className="text-gray-500 text-xs">Kirim ke</span>
-                              {canSend ? (
-                                <span className="font-mono text-emerald-700 text-xs">{sendToEmail} <span className="text-gray-400">({sendToLabel})</span></span>
+                              <span className="text-gray-500 text-xs">{t("Kirim ke")}</span>
+                              {hasRecipient ? (
+                                <span className="font-mono text-emerald-700 text-xs">{sendToEmail} <span className="text-gray-400">({t(sendToLabel)})</span></span>
                               ) : (
-                                <span className="text-red-500 text-xs">Tidak ada email</span>
+                                <span className="text-red-500 text-xs">{t("Tidak ada email")}</span>
                               )}
                             </div>
                           </div>
 
                           {isPeopleHubOnly && isNoOfficeEmailMode && (
-                            <p className="text-xs text-blue-600 bg-blue-50 px-3 py-2 rounded-xl">PeopleHub credential saja. Akan dikirim ke personal email.</p>
+                            <p className="text-xs text-blue-600 bg-blue-50 px-3 py-2 rounded-md">{t("PeopleHub credential saja. Akan dikirim ke personal email.")}</p>
                           )}
                           {isPeopleHubOnly && isM365Licensed && hasOfficeEmail && (
-                            <p className="text-xs text-blue-600 bg-blue-50 px-3 py-2 rounded-xl">PeopleHub credential saja. M365 sudah dikonfigurasi.</p>
+                            <p className="text-xs text-blue-600 bg-blue-50 px-3 py-2 rounded-md">{t("PeopleHub credential saja. M365 sudah dikonfigurasi.")}</p>
                           )}
                           {!canSend && !personalEmail && (
-                            <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-xl">Tidak ada email tersedia. Update personal email karyawan terlebih dahulu.</p>
+                            <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-md">{t("Tidak ada email tersedia. Update personal email karyawan terlebih dahulu.")}</p>
                           )}
-                          <p className="text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-xl">Password sementara baru akan digenerate. User harus menggantinya saat login pertama.</p>
+                          <p className="text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-md">{t("Password sementara baru akan digenerate. User harus menggantinya saat login pertama.")}</p>
 
-                          <div className="flex items-center justify-end gap-2 pt-1">
+                          <div className="ph-dialog-footer">
                             <button
                               onClick={() => { setCredentialModal({ open: false, user: null }); setCredentialUsername(''); setCredentialLicenseSkuId(''); }}
                               disabled={isSendingCredentials}
-                              className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-xl transition-colors disabled:opacity-50"
-                            >
-                              Batal
-                            </button>
-                            <button
-                              onClick={handleSendCredentials}
-                              disabled={isSendingCredentials || !canSend}
-                              className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-xl hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              {isSendingCredentials ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Mengirim...</> : isPeopleHubOnly ? 'Kirim PeopleHub Credential' : 'Kirim Credentials'}
-                            </button>
+                              className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-md transition-colors disabled:opacity-50"
+                            >{t("Batal")} </button>
+                            <button onClick={handleSendCredentials} disabled={isSendingCredentials || !canSend} className="ph-button ph-button-primary inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed">{isSendingCredentials ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />{t("Mengirim...")}</> : isPeopleHubOnly ? t("Kirim PeopleHub Credential") : t("Kirim Credentials")}</button>
                           </div>
                         </>
                       );
@@ -840,34 +729,18 @@ export function UsersPage() {
                 );
               })()}
             </div>
-          </div>
-        </div>
-      )}
 
-      {/* Delete Modal */}
-      {deleteModal.open && deleteModal.user && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setDeleteModal({ open: false, user: null })} />
-          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-red-50 rounded-xl flex items-center justify-center shrink-0">
-                <AlertCircle className="w-5 h-5 text-red-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-gray-900">Hapus User</h3>
-                <p className="text-xs text-gray-400">Tindakan ini tidak dapat dibatalkan</p>
-              </div>
+</Modal>
+      )}{/* Delete Modal */}{deleteModal.open && deleteModal.user && (
+        <Modal isOpen onClose={() => setDeleteModal({ open: false, user: null })} title={t("Hapus User")} description={t("Tindakan ini tidak dapat dibatalkan")} size="sm" role="alertdialog" className="admin-workflow-dialog admin-refreshed-dialog">
+
+            <p className="text-sm text-gray-600 mb-5">{t("Yakin hapus")} <span className="font-semibold text-gray-900">{deleteModal.user.email}</span>{t("? Semua akses akan dicabut.")} </p>
+            <div className="ph-dialog-footer">
+              <button onClick={() => setDeleteModal({ open: false, user: null })} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-md transition-colors">{t("Batal")}</button>
+              <button onClick={handleDelete} className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-md hover:bg-red-700 transition-colors">{t("Hapus")}</button>
             </div>
-            <p className="text-sm text-gray-600 mb-5">
-              Yakin hapus <span className="font-semibold text-gray-900">{deleteModal.user.email}</span>? Semua akses akan dicabut.
-            </p>
-            <div className="flex items-center justify-end gap-2">
-              <button onClick={() => setDeleteModal({ open: false, user: null })} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-xl transition-colors">Batal</button>
-              <button onClick={handleDelete} className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-xl hover:bg-red-700 transition-colors">Hapus</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+
+</Modal>
+      )}</ReportPage>
   );
 }

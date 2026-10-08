@@ -1,10 +1,8 @@
+import { insightEnum, insightNumber } from '@/pages/ceo/insight-display';
+import { t, useLocale } from '@/i18n';
+import { ReportPage, ReportHeader, ReportSummary, ReportSection } from '@/pages/dashboard/ReportingLayout';
 import { useState } from 'react';
-import {
-  Users,
-  TrendingUp,
-  Award,
-  ChevronRight,
-} from 'lucide-react';
+import { Users, Award, ChevronRight } from 'lucide-react';
 import { PreviewBanner } from '@/components/ui';
 
 // Mock succession data
@@ -67,6 +65,7 @@ const readinessColors: Record<string, string> = {
 };
 
 export function CEOSuccessionPlanningPage() {
+  useLocale();
   const [expandedPlan, setExpandedPlan] = useState<number | null>(null);
 
   const stats = {
@@ -78,65 +77,12 @@ export function CEOSuccessionPlanningPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <PreviewBanner message="Succession planning belum terintegrasi dengan data real. Data adalah contoh untuk preview UI." />
-      {/* Header */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-900 to-slate-900 rounded-2xl shadow-xl overflow-hidden">
-        <div className="px-4 md:px-8 py-6 md:py-8 relative">
-          <div className="absolute inset-0 opacity-5">
-            <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
-              <defs>
-                <pattern id="succession-pattern" width="60" height="60" patternUnits="userSpaceOnUse">
-                  <path d="M 60 0 L 0 0 0 60" fill="none" stroke="white" strokeWidth="1"/>
-                </pattern>
-              </defs>
-              <rect width="100%" height="100%" fill="url(#succession-pattern)" />
-            </svg>
-          </div>
+    <ReportPage><PreviewBanner message={t("Succession planning belum terintegrasi dengan data real. Data adalah contoh untuk preview UI.")} />{/* Header */}<ReportHeader>
+<div className="report-heading"><h1 className="text-xl md:text-2xl font-bold">{t("Succession Planning")}</h1><p className="text-xs md:text-sm mt-1">{t("Leadership pipeline & readiness")}</p></div>
 
-          <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 md:w-14 md:h-14 bg-gradient-to-br from-purple-400 to-violet-600 rounded-2xl flex items-center justify-center shadow-lg">
-                <TrendingUp className="h-6 w-6 md:h-7 md:w-7 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl md:text-2xl font-bold text-white">Succession Planning</h1>
-                <p className="text-slate-400 text-xs md:text-sm mt-1">Leadership pipeline & readiness</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4">
-          <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
-          <p className="text-xs text-gray-500">Critical Positions</p>
-        </div>
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4">
-          <p className="text-2xl font-bold text-green-600">{stats.lowRisk}</p>
-          <p className="text-xs text-gray-500">Low Risk</p>
-        </div>
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4">
-          <p className="text-2xl font-bold text-amber-600">{stats.mediumRisk}</p>
-          <p className="text-xs text-gray-500">Medium Risk</p>
-        </div>
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4">
-          <p className="text-2xl font-bold text-red-600">{stats.highRisk}</p>
-          <p className="text-xs text-gray-500">High Risk</p>
-        </div>
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 col-span-2 md:col-span-1">
-          <p className="text-2xl font-bold text-indigo-600">{stats.avgReadiness}%</p>
-          <p className="text-xs text-gray-500">Avg Readiness</p>
-        </div>
-      </div>
-
-      {/* Succession Plans */}
-      <div className="space-y-4">
+</ReportHeader>{/* Stats */}<ReportSummary><div className="report-metric"><p className="report-metric-value">{insightNumber(stats.total)}</p><p className="report-metric-label">{t("Critical Positions")}</p></div><div className="report-metric"><p className="report-metric-value">{insightNumber(stats.lowRisk)}</p><p className="report-metric-label">{t("Low Risk")}</p></div><div className="report-metric"><p className="report-metric-value">{insightNumber(stats.mediumRisk)}</p><p className="report-metric-label">{t("Medium Risk")}</p></div><div className="report-metric"><p className="report-metric-value">{insightNumber(stats.highRisk)}</p><p className="report-metric-label">{t("High Risk")}</p></div><div className="report-metric"><p className="report-metric-value">{insightNumber(stats.avgReadiness)}%</p><p className="report-metric-label">{t("Avg Readiness")}</p></div></ReportSummary>{/* Succession Plans */}<div className="space-y-4">
         {mockSuccessionPlans.map((plan) => (
-          <div key={plan.id} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-            <div
+          <ReportSection key={plan.id} className="overflow-hidden"><div
               className="p-4 md:p-6 cursor-pointer hover:bg-gray-50 transition-colors"
               onClick={() => setExpandedPlan(expandedPlan === plan.id ? null : plan.id)}
             >
@@ -146,24 +92,21 @@ export function CEOSuccessionPlanningPage() {
                     <h3 className="text-lg font-bold text-gray-900">{plan.position}</h3>
                     <div className="flex items-center gap-2">
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold ${riskColors[plan.riskLevel]}`}>
-                        {plan.riskLevel.charAt(0).toUpperCase() + plan.riskLevel.slice(1)} Risk
-                      </span>
+                        {insightEnum(plan.riskLevel)}{' '}{t("Risk")} </span>
                     </div>
                   </div>
                   <div className="flex items-center gap-4 text-sm text-gray-600">
                     <span className="flex items-center gap-1.5">
-                      <Users className="h-4 w-4" />
-                      Incumbent: {plan.incumbent}
+                      <Users className="h-4 w-4" />{t("Incumbent:")} {plan.incumbent}
                     </span>
                     <span className="flex items-center gap-1.5">
                       <Award className="h-4 w-4" />
-                      {plan.successors.length} Successors
-                    </span>
+                      {insightNumber(plan.successors.length)}{' '}{t("Successors")} </span>
                   </div>
                   <div className="mt-3">
                     <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="text-gray-500">Readiness Score</span>
-                      <span className="font-medium text-gray-700">{plan.readinessScore}%</span>
+                      <span className="text-gray-500">{t("Readiness Score")}</span>
+                      <span className="font-medium text-gray-700">{insightNumber(plan.readinessScore)}%</span>
                     </div>
                     <div className="w-full bg-gray-100 rounded-full h-2">
                       <div
@@ -176,25 +119,22 @@ export function CEOSuccessionPlanningPage() {
                     </div>
                   </div>
                 </div>
-                <ChevronRight className={`h-5 w-5 text-gray-400 transition-transform ${expandedPlan === plan.id ? 'rotate-90' : ''}`} />
+                <ChevronRight className={`h-5 w-5 text-gray-400 transition-transform ${expandedPlan === plan.id ? "rotate-90" : ""}`} />
               </div>
-            </div>
-
-            {expandedPlan === plan.id && (
+            </div>{expandedPlan === plan.id && (
               <div className="border-t border-gray-100 bg-gray-50 p-4 md:p-6">
-                <h4 className="text-sm font-semibold text-gray-700 mb-4">Successor Pipeline</h4>
+                <h4 className="text-sm font-semibold text-gray-700 mb-4">{t("Successor Pipeline")}</h4>
                 <div className="space-y-4">
                   {plan.successors.map((successor, index) => (
-                    <div key={index} className="bg-white rounded-xl p-4 border border-gray-200">
-                      <div className="flex items-start gap-4">
-                        <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">
+                    <ReportSection key={index}><div className="flex items-start gap-4">
+                        <div className="w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm report-avatar">
                           {successor.name.split(' ').map(n => n[0]).join('')}
                         </div>
                         <div className="flex-1">
                           <div className="flex items-center justify-between mb-2">
                             <h5 className="font-semibold text-gray-900">{successor.name}</h5>
                             <span className={`inline-flex items-center px-2 py-1 rounded-lg text-xs font-semibold ${readinessColors[successor.readiness]}`}>
-                              {successor.readiness}
+                              {t(successor.readiness)}
                             </span>
                           </div>
                           <div className="flex flex-wrap gap-2">
@@ -205,15 +145,12 @@ export function CEOSuccessionPlanningPage() {
                             ))}
                           </div>
                         </div>
-                      </div>
-                    </div>
+                      </div></ReportSection>
                   ))}
                 </div>
               </div>
-            )}
-          </div>
+            )}</ReportSection>
         ))}
-      </div>
-    </div>
+      </div></ReportPage>
   );
 }

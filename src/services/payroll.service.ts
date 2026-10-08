@@ -1,5 +1,5 @@
 import api from './api';
-import type { ApiResponse, PaginatedResponse, PaginationParams } from '@/types';
+import type { ApiResponse, Decimalish, PaginatedResponse, PaginationParams } from '@/types';
 
 // ==========================================
 // TYPES
@@ -28,9 +28,107 @@ export interface PayrollEmployee {
   position?: { id: number; name: string };
 }
 
+// HR decisions apply to one employee and period. Omitted fields retain server defaults.
+export interface PayrollPreparationInput {
+  reason: string;
+  work_days_per_week?: 5 | 6;
+  tax_allowance_mode?: 'gross_up' | 'fixed' | 'none';
+  fixed_tax_allowance?: number;
+  bpjs_paid_by_company?: boolean;
+  bpjs_base?: number;
+  external_bpjs?: PayrollExternalBPJS;
+  rounding?: 'legacy' | 'final_cent' | 'final_cash';
+  paid_basic_salary?: number;
+  external_tax?: { amount: number; reference: string };
+  payment_hold_reason?: string;
+  bonus?: { amount: number; external_total_tax?: { amount: number; reference: string } };
+}
+
+export interface PayrollAutomationTreatment {
+  tax_allowance_mode: 'gross_up' | 'fixed_position' | 'none';
+  bpjs_paid_by_company: boolean;
+}
+
+// Company rules recur from the effective period; employee exceptions never recur.
+export interface PayrollAutomationInput {
+  reason: string;
+  work_days_per_week: 5 | 6;
+  rounding: 'legacy' | 'final_cent' | 'final_cash';
+  existing: PayrollAutomationTreatment;
+  new_gross: PayrollAutomationTreatment;
+}
+
+export interface PayrollAutomation {
+  company_id: number;
+  period: string;
+  effective_from: string | null;
+  input: PayrollAutomationInput | null;
+}
+
+export interface PayrollExternalBPJS {
+  reference: string;
+  bpjs_kes_employee: number;
+  bpjs_jht_employee: number;
+  bpjs_jp_employee: number;
+  bpjs_kes_company: number;
+  bpjs_jht_company: number;
+  bpjs_jp_company: number;
+  bpjs_jkk_company: number;
+  bpjs_jkm_company: number;
+}
+
+export interface PayrollPreparationRow {
+  employee_id: number;
+  employee_code: string;
+  employee_name: string;
+  salary_status: string | null;
+  basic_salary: Decimalish | null;
+  input: PayrollPreparationInput | null;
+  locked: boolean;
+}
+
+export type PayrollPreparationSaved = Pick<PayrollPreparationRow, 'employee_id' | 'input'>
+  & Partial<Omit<PayrollPreparationRow, 'employee_id' | 'input'>> & { period?: string };
+
+export interface PayrollCalculationSnapshot {
+  version: 2;
+  automation?: { effective_from: string; rule: 'existing' | 'new_gross' };
+  policy?: {
+    work_days_per_week?: 5 | 6;
+    tax_allowance_mode?: PayrollPreparationInput['tax_allowance_mode'];
+    fixed_tax_allowance?: Decimalish | null;
+    bpjs_paid_by_company?: boolean;
+    bpjs_base?: Decimalish | null;
+    rounding?: PayrollPreparationInput['rounding'];
+    [key: string]: unknown;
+  } | null;
+  input?: PayrollPreparationInput | null;
+  calculated_pph21?: Decimalish | null;
+  rounding_adjustment?: number;
+  tax_allowance?: Decimalish | null;
+  tax_source?: string | null;
+  tax_reference?: string | null;
+  bpjs_base?: Decimalish | null;
+  raw_calculation?: Record<string, unknown> | null;
+  payments?: {
+    regular?: Decimalish | null;
+    bonus?: Decimalish | null;
+    total?: Decimalish | null;
+    held?: boolean | null;
+  } | null;
+  [key: string]: unknown;
+}
+
+export interface PayrollProrationSnapshot {
+  work_days_per_week?: 5 | 6;
+  [key: string]: unknown;
+}
+
 export interface Payroll {
   id: number;
   employee_id: number;
+  employee_name?: string;
+  employee_code?: string;
   company_id?: number;
   payroll_number: string;
   period: string;
@@ -102,7 +200,7 @@ export interface Payroll {
   leave_days?: number;
   // Prorate
   is_prorated?: boolean;
-  prorate_factor?: number;
+  prorate_factor?: Decimalish | null;
   prorate_reason?: string;
   // Status & workflow
   status: PayrollStatus;
@@ -122,6 +220,11 @@ export interface Payroll {
   // Notes
   notes?: string;
   hr_notes?: string;
+  metadata?: {
+    calculation?: PayrollCalculationSnapshot | null;
+    proration?: PayrollProrationSnapshot | null;
+    [key: string]: unknown;
+  } | null;
   // Relations
   employee: PayrollEmployee;
   details?: PayrollDetail[];
@@ -219,6 +322,22 @@ export interface PayrollCalculationResult {
   tax: TaxCalculation;
   prorate?: ProrateCalculation;
   deductions?: DeductionCalculation;
+  calculation_snapshot?: PayrollCalculationSnapshot | null;
+  proration_snapshot?: PayrollProrationSnapshot | null;
+}
+
+export interface PayrollResultEmployee {
+  employee_id: number;
+  employee_name?: string;
+  employee_code?: string;
+}
+
+export interface PayrollPreparationPreview {
+  generated: 0;
+  previewed: number;
+  errors: number;
+  results: Array<PayrollCalculationResult & PayrollResultEmployee>;
+  errorDetails: Array<PayrollResultEmployee & { error: string }>;
 }
 
 // ==========================================
@@ -300,10 +419,11 @@ export interface MarkAsPaidRequest {
 // ==========================================
 
 export interface GeneratePayrollResponse {
+  success: boolean;
   generated: number;
   errors: number;
   results: Payroll[];
-  errorDetails: Array<{ employee_id: number; error: string }>;
+  errorDetails: Array<PayrollResultEmployee & { error: string }>;
 }
 
 // Backend response uses 'meta' for pagination
@@ -323,6 +443,50 @@ interface BackendPaginatedResponse<T> {
 // ==========================================
 
 export const payrollService = {
+  getAutomation: async (company_id: number, period: string): Promise<PayrollAutomation> => {
+    const response = await api.get<ApiResponse<PayrollAutomation>>('/payroll/automation', { params: { company_id, period } });
+    const saved = response.data.data;
+    if (!response.data.success || saved?.company_id !== company_id || saved.period !== period
+      || !('input' in saved) || !('effective_from' in saved)) throw new Error('Gagal memuat aturan perusahaan. Muat ulang aturan.');
+    return saved;
+  },
+
+  saveAutomation: async (company_id: number, period: string, input: PayrollAutomationInput | null): Promise<PayrollAutomation> => {
+    const response = await api.put<ApiResponse<PayrollAutomation>>('/payroll/automation', { company_id, period, input });
+    const saved = response.data.data;
+    if (!response.data.success || saved?.company_id !== company_id || saved.period !== period
+      || !('input' in saved) || saved.effective_from !== period) throw new Error('Simpan aturan belum terkonfirmasi. Muat ulang aturan.');
+    return saved;
+  },
+
+  setPaymentHold: async (id: number, held: boolean, reason: string): Promise<Payroll> => {
+    const response = await api.post<ApiResponse<Payroll>>(`/payroll/${id}/payment-hold`, { held, reason });
+    if (!response.data.success || response.data.data?.id !== id) throw new Error('Perubahan penahanan belum terkonfirmasi. Muat ulang detail.');
+    return response.data.data;
+  },
+
+  getPreparation: async (company_id: number, period: string): Promise<PayrollPreparationRow[]> => {
+    const response = await api.get<ApiResponse<PayrollPreparationRow[]>>('/payroll/preparation', {
+      params: { company_id, period },
+    });
+    if (!response.data.success || !Array.isArray(response.data.data)) throw new Error('Gagal memuat persiapan payroll.');
+    return response.data.data;
+  },
+
+  savePreparation: async (employeeId: number, period: string, input: PayrollPreparationInput | null): Promise<PayrollPreparationSaved> => {
+    const response = await api.put<ApiResponse<PayrollPreparationSaved>>(`/payroll/preparation/${employeeId}`, { period, input });
+    const saved = response.data.data;
+    if (!response.data.success || saved?.employee_id !== employeeId || !('input' in saved)
+      || (saved.period !== undefined && saved.period !== period)) throw new Error('Simpan persiapan belum terkonfirmasi. Muat ulang data.');
+    return response.data.data;
+  },
+
+  previewPreparation: async (data: GeneratePayrollRequest): Promise<PayrollPreparationPreview> => {
+    const response = await api.post<ApiResponse<PayrollPreparationPreview>>('/payroll/preparation/preview', data);
+    if (!response.data.success || !response.data.data) throw new Error('Preview payroll gagal.');
+    return response.data.data;
+  },
+
   // ==========================================
   // PAYROLL CRUD
   // ==========================================
@@ -399,7 +563,9 @@ export const payrollService = {
   generate: async (data: GeneratePayrollRequest): Promise<GeneratePayrollResponse> => {
     // Backend returns result directly without wrapping in 'data' property
     const response = await api.post<GeneratePayrollResponse & { message: string }>('/payroll/generate', data);
+    if (!response.data.success) throw new Error(response.data.message || 'Generate payroll gagal. Preview ulang sebelum mencoba lagi.');
     return {
+      success: response.data.success,
       generated: response.data.generated,
       errors: response.data.errors,
       results: response.data.results,
@@ -546,6 +712,13 @@ export const payrollService = {
   // ==========================================
 
   // Format currency (convert to number in case Prisma Decimal comes as string)
+  formatCalculationCurrency: (amount: Decimalish | null | undefined): string => {
+    if (amount == null || amount === '' || !Number.isFinite(Number(amount))) return '-';
+    return new Intl.NumberFormat('id-ID', {
+      style: 'currency', currency: 'IDR', minimumFractionDigits: 2, maximumFractionDigits: 2,
+    }).format(Number(amount));
+  },
+
   formatCurrency: (amount: number | string | null | undefined): string => {
     const numAmount = Number(amount) || 0;
     return new Intl.NumberFormat('id-ID', {

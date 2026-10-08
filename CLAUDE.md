@@ -1,6 +1,14 @@
 # PeopleHub Frontend - Developer Guide
 
-> Last refreshed: 2026-06-09. Sibling docs: root `CLAUDE.md`, `OPS_RUNBOOK.md`, `WAVE_7_BACKLOG.md`, `CHANGELOG.md`, `PROGRESS.md`, `peoplehub-backend/CLAUDE.md`.
+## UI language (EN / ID, local 2026-09-29)
+
+Application copy uses `t(source, parameters?)` from `@/i18n`, with explicit registered domain catalogs. Components using it subscribe via `useLocale()`; translated memoized results depend on that locale. Translate at render/action time, not module initialization. Store source keys/parameters for feedback that stays visible across a language switch. `intlLocale()` selects display formatting while existing currency, precision and date/WIB semantics must remain unchanged.
+
+Do not translate route/role/permission comparisons, form option values, React keys, employee/company names or arbitrary user/API content. Custom messages remain original unless a confirmed system template matches. The shared EN/ID control saves `/users/me/language`; this is separate from notification preferences. See `../docs/features/LOCALIZATION-EN-ID-2026-09-29.md` and the catalog/role/browser checks under `../.analysis/i18n/`.
+
+> Current local work/handoff (2026-09-13): read [../PROGRESS.md](../PROGRESS.md) and [../ROLE-FEATURE-PLAN.md](../ROLE-FEATURE-PLAN.md). They distinguish verified local changes from deployment and unresolved audit findings.
+
+> Documentation navigation refreshed 2026-10-07: [workspace index](../docs/README.md), [workspace instructions](../AGENTS.md), [current progress](../PROGRESS.md), and [backend guide](../backend/CLAUDE.md). Historical runbook/backlog files from the old checkout are not present here.
 
 ## Quick Start
 
@@ -10,7 +18,7 @@ npm run build        # Production build → dist/
 npm run preview      # Preview production build
 ```
 
-Smoke-test + ops flow: see `/Users/adityacoy/Documents/hr-next/OPS_RUNBOOK.md` (booting both apps, common gotchas, deploy log triage).
+Local startup and health checks: see [Docker local guide](../docs/operations/DOCKER-LOCAL.md). Deployment is a separate, explicitly authorized operation.
 
 ## Tech Stack
 

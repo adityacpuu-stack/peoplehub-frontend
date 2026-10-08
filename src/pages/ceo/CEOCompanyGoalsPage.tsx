@@ -1,15 +1,8 @@
+import { insightEnum, insightNumber } from '@/pages/ceo/insight-display';
+import { t, useLocale, intlLocale } from '@/i18n';
+import { ReportPage, ReportHeader, ReportSummary, ReportSection } from '@/pages/dashboard/ReportingLayout';
 import { useEffect, useState } from 'react';
-import {
-  Target,
-  CheckCircle,
-  AlertCircle,
-  Calendar,
-  ChevronRight,
-  TrendingUp,
-  Users,
-  Award,
-  Loader2,
-} from 'lucide-react';
+import { Target, Calendar, ChevronRight, TrendingUp, Users, Award, Loader2 } from 'lucide-react';
 import { goalService, type Goal, type GoalListResponse } from '@/services/goal.service';
 
 const categoryColors: Record<string, string> = {
@@ -29,6 +22,7 @@ const categoryIcons: Record<string, React.ElementType> = {
 };
 
 export function CEOCompanyGoalsPage() {
+  useLocale();
   const [goals, setGoals] = useState<Goal[]>([]);
   const [pagination, setPagination] = useState<GoalListResponse['pagination'] | null>(null);
   const [filter, setFilter] = useState<string>('all');
@@ -74,12 +68,12 @@ export function CEOCompanyGoalsPage() {
 
   const getStatusLabel = (status: string) => {
     switch (status) {
-      case 'completed': return 'Completed';
-      case 'active': return 'Active';
-      case 'in_progress': return 'In Progress';
-      case 'deferred': return 'Deferred';
-      case 'cancelled': return 'Cancelled';
-      case 'draft': return 'Draft';
+      case 'completed': return t('Completed');
+      case 'active': return t('Active');
+      case 'in_progress': return t('In Progress');
+      case 'deferred': return t('Deferred');
+      case 'cancelled': return t('Cancelled');
+      case 'draft': return t('Draft');
       default: return status;
     }
   };
@@ -92,92 +86,21 @@ export function CEOCompanyGoalsPage() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-900 to-slate-900 rounded-2xl shadow-xl overflow-hidden">
-        <div className="px-4 md:px-8 py-6 md:py-8 relative">
-          <div className="absolute inset-0 opacity-5">
-            <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
-              <defs>
-                <pattern id="goals-pattern" width="60" height="60" patternUnits="userSpaceOnUse">
-                  <path d="M 60 0 L 0 0 0 60" fill="none" stroke="white" strokeWidth="1"/>
-                </pattern>
-              </defs>
-              <rect width="100%" height="100%" fill="url(#goals-pattern)" />
-            </svg>
-          </div>
+    <ReportPage>{/* Header */}<ReportHeader>
+<div className="report-heading"><h1 className="text-xl md:text-2xl font-bold">{t("Company Goals")}</h1><p className="text-xs md:text-sm mt-1">{t("Strategic objectives & targets")}</p></div>
 
-          <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 md:w-14 md:h-14 bg-gradient-to-br from-green-400 to-emerald-600 rounded-2xl flex items-center justify-center shadow-lg">
-                <Award className="h-6 w-6 md:h-7 md:w-7 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl md:text-2xl font-bold text-white">Company Goals</h1>
-                <p className="text-slate-400 text-xs md:text-sm mt-1">Strategic objectives & targets</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-md">
-              <Target className="h-5 w-5 text-white" />
-            </div>
-          </div>
-          <p className="text-xl md:text-2xl font-bold text-gray-900">{stats.total}</p>
-          <p className="text-xs text-gray-500">Total Goals</p>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-md">
-              <CheckCircle className="h-5 w-5 text-white" />
-            </div>
-          </div>
-          <p className="text-xl md:text-2xl font-bold text-gray-900">{stats.completed}</p>
-          <p className="text-xs text-gray-500">Completed</p>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-md">
-              <TrendingUp className="h-5 w-5 text-white" />
-            </div>
-          </div>
-          <p className="text-xl md:text-2xl font-bold text-gray-900">{stats.onTrack}</p>
-          <p className="text-xs text-gray-500">Active / In Progress</p>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-rose-600 rounded-xl flex items-center justify-center shadow-md">
-              <AlertCircle className="h-5 w-5 text-white" />
-            </div>
-          </div>
-          <p className="text-xl md:text-2xl font-bold text-gray-900">{stats.atRisk}</p>
-          <p className="text-xs text-gray-500">Deferred / Cancelled</p>
-        </div>
-      </div>
-
-      {/* Filter */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2">
-        {[
-          { key: 'all', label: 'All Goals', color: 'indigo' },
-          { key: 'active', label: 'Active', color: 'blue' },
-          { key: 'in_progress', label: 'In Progress', color: 'blue' },
-          { key: 'completed', label: 'Completed', color: 'green' },
-          { key: 'draft', label: 'Draft', color: 'gray' },
+</ReportHeader>{/* Stats */}<ReportSummary><div className="report-metric"><div  className="report-metric-context"></div><p className="report-metric-value">{insightNumber(stats.total)}</p><p className="report-metric-label">{t("Total Goals")}</p></div><div className="report-metric"><div  className="report-metric-context"></div><p className="report-metric-value">{insightNumber(stats.completed)}</p><p className="report-metric-label">{t("Completed")}</p></div><div className="report-metric"><div  className="report-metric-context"></div><p className="report-metric-value">{insightNumber(stats.onTrack)}</p><p className="report-metric-label">{t("Active / In Progress")}</p></div><div className="report-metric"><div  className="report-metric-context"></div><p className="report-metric-value">{insightNumber(stats.atRisk)}</p><p className="report-metric-label">{t("Deferred / Cancelled")}</p></div></ReportSummary>{/* Filter */}<div  className="ph-table-scroll flex items-center gap-2 overflow-x-auto pb-2">{[
+          { key: 'all', get label() { return t('All Goals'); }, color: 'indigo' },
+          { key: 'active', get label() { return t('Active'); }, color: 'blue' },
+          { key: 'in_progress', get label() { return t('In Progress'); }, color: 'blue' },
+          { key: 'completed', get label() { return t('Completed'); }, color: 'green' },
+          { key: 'draft', get label() { return t('Draft'); }, color: 'gray' },
         ].map(({ key, label, color }) => (
           <button
             key={key}
             onClick={() => setFilter(key)}
             className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors whitespace-nowrap ${
-              filter === key ? `bg-${color}-600 text-white` : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              filter === key ? `bg-${color}-600 text-white` : "bg-gray-100 text-gray-600 hover:bg-gray-200"
             }`}
             style={filter === key ? {
               backgroundColor: color === 'indigo' ? '#4f46e5' : color === 'blue' ? '#2563eb' : color === 'green' ? '#16a34a' : '#4b5563'
@@ -185,36 +108,24 @@ export function CEOCompanyGoalsPage() {
           >
             {label}
           </button>
-        ))}
-      </div>
-
-      {/* Goals List */}
-      {isLoading ? (
+        ))}</div>{/* Goals List */}{isLoading ? (
         <div className="flex items-center justify-center py-20">
           <div className="flex flex-col items-center gap-3">
             <Loader2 className="h-8 w-8 text-indigo-600 animate-spin" />
-            <p className="text-gray-500 text-sm">Loading goals...</p>
+            <p className="text-gray-500 text-sm">{t("Loading goals...")}</p>
           </div>
         </div>
       ) : goals.length === 0 ? (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-12 text-center">
-          <Target className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">No goals found</h3>
-          <p className="text-gray-500">Try changing the filter or create a new goal.</p>
-        </div>
+        <ReportSection><Target className="h-12 w-12 text-gray-300 mx-auto mb-4" /><h3 className="text-lg font-semibold text-gray-900 mb-2">{t("No goals found")}</h3><p className="text-gray-500">{t("Try changing the filter or create a new goal.")}</p></ReportSection>
       ) : (
         <div className="space-y-4">
           {goals.map((goal) => {
             const CategoryIcon = categoryIcons[goal.category] || Target;
             const color = categoryColors[goal.category] || '#6b7280';
             return (
-              <div
-                key={goal.id}
-                className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-6 hover:shadow-lg transition-shadow"
-              >
-                <div className="flex flex-col md:flex-row md:items-center gap-4">
+              <ReportSection key={goal.id}><div className="flex flex-col md:flex-row md:items-center gap-4">
                   <div
-                    className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
+                    className="w-12 h-12 rounded-md flex items-center justify-center flex-shrink-0"
                     style={{ backgroundColor: `${color}15` }}
                   >
                     <CategoryIcon className="h-6 w-6" style={{ color }} />
@@ -227,11 +138,11 @@ export function CEOCompanyGoalsPage() {
                           {getStatusLabel(goal.status)}
                         </span>
                         <span className={`inline-flex items-center px-2 py-1 rounded-lg text-xs font-medium ${
-                          goal.priority === 'high' || goal.priority === 'critical' ? 'bg-red-50 text-red-600' :
-                          goal.priority === 'medium' ? 'bg-amber-50 text-amber-600' :
-                          'bg-gray-50 text-gray-600'
+                          goal.priority === "high" || goal.priority === "critical" ? "bg-red-50 text-red-600" :
+                          goal.priority === "medium" ? "bg-amber-50 text-amber-600" :
+                          "bg-gray-50 text-gray-600"
                         }`}>
-                          {goal.priority.charAt(0).toUpperCase() + goal.priority.slice(1)}
+                          {insightEnum(goal.priority)}
                         </span>
                       </div>
                     </div>
@@ -242,7 +153,7 @@ export function CEOCompanyGoalsPage() {
                       {goal.target_date && (
                         <div className="flex items-center gap-1.5 text-gray-500">
                           <Calendar className="h-4 w-4" />
-                          <span>Due: {new Date(goal.target_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                          <span>{t("Due:")} {new Date(goal.target_date).toLocaleDateString(intlLocale(), { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                         </div>
                       )}
                       {goal.employee && (
@@ -254,14 +165,14 @@ export function CEOCompanyGoalsPage() {
                       {goal.target_value != null && goal.current_value != null && (
                         <div className="flex items-center gap-1.5 text-gray-500">
                           <Target className="h-4 w-4" />
-                          <span>{goal.current_value}{goal.unit_of_measure || ''} / {goal.target_value}{goal.unit_of_measure || ''}</span>
+                          <span>{insightNumber(goal.current_value)}{goal.unit_of_measure || ''} / {insightNumber(goal.target_value)}{goal.unit_of_measure || ''}</span>
                         </div>
                       )}
                     </div>
                     <div className="mt-3">
                       <div className="flex items-center justify-between text-xs mb-1">
-                        <span className="text-gray-500">Progress</span>
-                        <span className="font-medium text-gray-700">{goal.progress_percentage}%</span>
+                        <span className="text-gray-500">{t("Progress")}</span>
+                        <span className="font-medium text-gray-700">{insightNumber(goal.progress_percentage)}%</span>
                       </div>
                       <div className="w-full bg-gray-100 rounded-full h-2">
                         <div
@@ -275,12 +186,10 @@ export function CEOCompanyGoalsPage() {
                     </div>
                   </div>
                   <ChevronRight className="h-5 w-5 text-gray-400 hidden md:block" />
-                </div>
-              </div>
+                </div></ReportSection>
             );
           })}
         </div>
-      )}
-    </div>
+      )}</ReportPage>
   );
 }

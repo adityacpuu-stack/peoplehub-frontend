@@ -1,0 +1,79 @@
+/* Master Data follows the same workspace as Operations and Leave. */
+.master-refresh { color:#243b32; gap:22px; }
+.master-refresh .md-page-header h1 { color:#163e2f; font-size:28px; line-height:1.25; letter-spacing:-.8px; }
+.master-refresh .md-page-header p { color:#718077; font-size:14px; max-width:80ch; margin-top:8px; }
+.master-refresh :is(.md-surface,.md-explorer) { background:#fff; border:1px solid #e1e8e3; border-radius:12px; overflow:hidden; min-width:0; }
+.master-refresh .md-surface { display:flex; flex-direction:column; }
+.master-refresh .md-surface > .md-summary { order:2; padding:18px 24px; background:#fbfcfa; border-top:1px solid #e1e8e3; margin:0; gap:18px 30px; }
+.master-refresh .md-summary dd { color:#163e2f; font-size:17px; }
+.master-refresh .md-summary dt { color:#718077; }
+.master-refresh :is(.md-toolbar,.md-scope-panel,.md-results-toolbar) { padding:20px 24px; margin:0; border-top:0; border-bottom:1px solid #e8eee9; gap:14px; }
+.master-refresh .md-scope-note { font-size:12px; }
+.master-refresh .md-directory-search { max-width:520px; }
+.master-refresh :is(.md-results-heading,.md-company-viewbar) { padding:16px 24px; margin:0; background:#fbfcfa; }
+.master-refresh .md-results-heading h2 { font-size:14px; color:#386346; }
+.master-refresh .md-results-heading p { font-size:12px; }
+.master-refresh .md-company-viewbar { border-bottom:1px solid #e8eee9; }
+.master-refresh :is(input,select) { border-color:#e1e8e3; border-radius:8px; min-height:40px; font-size:13px; }
+.master-refresh .md-button,.master-refresh-dialog :is(.md-button,.ph-button,button[type=submit]) { border-radius:8px; min-height:38px; }
+.master-refresh .md-button-primary { background:#176b4a; border-color:#176b4a; }
+.master-refresh .md-button-primary:hover { background:#115439; border-color:#115439; }
+.master-refresh table { width:100%; }
+.master-refresh table th { background:#fbfcfa; color:#718077; font-size:11px; text-transform:none; letter-spacing:0; padding:13px 24px; font-weight:600; }
+.master-refresh table td { padding:16px 24px; font-size:13px; border-color:#edf1ed; }
+.master-refresh .md-avatar { background:#edf3e7; color:#4f7149; border-radius:8px; }
+.master-refresh .md-record-link { color:#163e2f; }
+.master-refresh .md-record-meta { color:#718077; }
+.master-refresh .md-pager { padding:16px 24px; margin:0; border-top:1px solid #e8eee9; }
+.master-refresh .md-company-gallery,.master-refresh .md-department-board,.master-refresh .md-position-board { padding:20px 24px; }
+.master-refresh :is(.md-company-card,.md-department-card,.md-position-record) { border-color:#e1e8e3; border-radius:9px; }
+.master-refresh .md-location-gallery { margin:0; padding:20px 24px; gap:12px; background:#fbfcfa; }
+.master-refresh .md-location-card { flex-basis:calc((100% - 36px) / 4); border-radius:9px; border-color:#e1e8e3; padding:16px; }
+.master-refresh .md-location-card[aria-pressed=true] { border-color:#176b4a; background:#edf5ef; }
+.master-refresh .md-office-dossier { padding:0 24px; border-color:#e1e8e3; }
+.master-refresh .md-office-dossier .md-location-heading { padding:22px 0; }
+.master-refresh .md-location-heading h2 { color:#163e2f; font-size:20px; }
+.master-refresh .md-work-schedule { border-block:1px solid #e8eee9; padding:20px 0; }
+.master-refresh .md-work-timeline strong { color:#163e2f; font-size:18px; }
+.master-refresh .md-location-employees { padding-top:18px; }
+.master-refresh .md-location-employees .md-results-heading { background:transparent; padding:0 0 12px; }
+.master-refresh .md-office-metadata { gap:24px; }
+.master-refresh .md-calendar-toolbar { padding:20px 24px; }
+.master-refresh .md-calendar-toolbar .text-indigo-600 { color:#176b4a; }
+.master-refresh .md-calendar-cell.bg-indigo-50 { background:#edf5ef; border-color:#cbdaca; }
+.master-refresh .md-calendar-cell .bg-indigo-500 { background:#176b4a; }
+.master-refresh .md-calendar-agenda { padding:22px 24px; background:#fbfcfa; border-color:#e1e8e3; }
+.master-refresh .md-calendar-agenda h2 { color:#163e2f; }
+.master-refresh .md-agenda-list { margin-top:12px; }
+.master-refresh .md-agenda-item { border-color:#e1e8e3; }
+.master-refresh .md-agenda-date { color:#176b4a; }
+.master-refresh-dialog.md-dialog { border:1px solid #e1e8e3; border-radius:14px; max-width:680px; }
+.master-refresh-dialog.md-dialog:has(form),.master-refresh-dialog.md-dialog-wide { max-width:840px; }
+.master-refresh-dialog.md-dialog:has(> .dw-confirm) { max-width:480px; }
+.master-refresh-dialog .md-dialog-header { padding:22px 26px; background:#fbfcfa; border-color:#e1e8e3; }
+.master-refresh-dialog .md-dialog-header :is(h2,h3) { font-size:21px; color:#163e2f; }
+.master-refresh-dialog :is(.dw-form,.dw-detail,.dw-confirm) { padding:22px 26px; }
+.master-refresh-dialog .dw-form-content { gap:22px; }
+.master-refresh-dialog .dw-section { padding-bottom:22px; border-color:#e8eee9; }
+.master-refresh-dialog .dw-section:last-child { padding-bottom:0; }
+.master-refresh-dialog .dw-section > h3 { font-size:14px; color:#386346; }
+.master-refresh-dialog .dw-form label { font-size:12px; color:#496153; }
+.master-refresh-dialog .dw-form :is(input:not([type=checkbox]):not([type=radio]),select,textarea) { font-size:13px; border-radius:8px; border-color:#e1e8e3; }
+.master-refresh-dialog .dw-actions { position:sticky; bottom:0; z-index:2; margin:22px -26px -22px; padding:16px 26px; background:#fbfcfa; border-color:#e1e8e3; }
+.master-refresh-dialog .dw-actions > button:first-child { margin-right:0; }
+.master-refresh-dialog .dw-kv > div { border-color:#e8eee9; }
+.ph-account-dialog.ow-dialog.master-refresh-confirmation { max-width:480px; border-radius:14px; height:fit-content; }
+.master-refresh-confirmation .ow-dialog-header { padding:22px 26px; background:#fbfcfa; border-color:#e1e8e3; }
+.master-refresh-confirmation .ow-dialog-header h2 { color:#163e2f; font-size:21px; }
+@media(max-width:767px) {
+  .master-refresh .md-page-header h1 { font-size:25px; }
+  .master-refresh .md-page-header p { font-size:13px; }
+  .master-refresh :is(.md-toolbar,.md-scope-panel,.md-results-toolbar,.md-results-heading,.md-company-viewbar,.md-calendar-toolbar,.md-calendar-agenda),.master-refresh .md-surface > .md-summary { padding:16px; }
+  .master-refresh :is(.md-company-gallery,.md-department-board,.md-position-board,.md-location-gallery) { padding:16px; }
+  .master-refresh .md-office-dossier { padding:0 16px; }
+  .master-refresh .md-location-card { flex-basis:85%; }
+  .master-refresh table :is(th,td) { padding:14px 16px; }
+  .master-refresh-dialog .md-dialog-header,.master-refresh-dialog :is(.dw-form,.dw-detail,.dw-confirm) { padding:18px; }
+  .master-refresh-dialog .dw-actions { margin:20px -18px -18px; padding:14px 18px; }
+  .master-refresh-confirmation .ow-dialog-header { padding:18px; }
+}

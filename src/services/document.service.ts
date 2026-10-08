@@ -161,6 +161,17 @@ export const EMPLOYEE_DOCUMENT_TYPES = [
 ];
 
 export const documentService = {
+  downloadFile: async (filePath: string, filename?: string): Promise<void> => {
+    const response = await api.post<ApiResponse<{ url: string }>>('/upload/download-url', {
+      ...(filePath.startsWith('http') ? { url: filePath } : { key: filePath }), filename,
+    });
+    // Request through the authenticated API first; stored private keys are not URLs.
+    const link = document.createElement('a');
+    link.href = response.data.data.url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.click();
+  },
   // ==========================================
   // SELF-SERVICE (MY DOCUMENTS)
   // ==========================================

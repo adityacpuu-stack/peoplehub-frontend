@@ -1,0 +1,65 @@
+.ph-admin-page { min-width: 0; }
+.admin-button-danger { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 38px; padding: 8px 14px; border: 1px solid #b42335; border-radius: 6px; background: #b42335; color: #fff; font-size: 13px; font-weight: 500; }
+.admin-button-danger:hover:not(:disabled) { background: #922131; }
+.admin-button-danger:disabled { opacity: .5; cursor: not-allowed; }
+.admin-workflow-dialog .admin-dialog-content { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.admin-workflow-dialog .ph-section { padding: 20px 0; border-bottom: 1px solid #e4e9e6; }
+.admin-workflow-dialog .ph-section:first-child { padding-top: 0; }
+.admin-workflow-dialog .ph-section h3, .admin-workflow-dialog legend { font-size: 15px; font-weight: 600; margin: 0 0 12px; color: #24302b; }
+.admin-workflow-dialog label { font-size: 13px; color: #24302b; font-weight: 500; }
+.admin-workflow-dialog .admin-choices { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 0 24px; padding: 0; }
+.admin-choices > label { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 11px 0; border-bottom: 1px solid #e4e9e6; }
+.admin-assignee-list { display: flex; flex-direction: column; gap: 0; }
+.admin-assignee-list > label { padding: 14px 0; border-bottom: 1px solid #e4e9e6; cursor: pointer; }
+.admin-assignee-list > label:has(input:checked) { background: #f1f7f3; }
+.admin-assignee-list > label:focus-within { outline: 2px solid #187451; outline-offset: 2px; }
+.admin-assignee-list input { flex-shrink: 0; }
+.admin-scope-layout { display: grid; grid-template-columns: 230px minmax(0,1fr); min-height: 460px; }
+.admin-scope-list { min-width: 0; border-right: 1px solid #e4e9e6; padding-right: 16px; }
+.admin-scope-detail { min-width: 0; padding-left: 24px; }
+.admin-scope-detail > header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 12px; padding-bottom: 20px; }
+.admin-permission-groups { display: flex; flex-direction: column; gap: 24px; }
+.admin-permission-group { display: grid; grid-template-columns: 180px minmax(0,1fr); gap: 24px; border-bottom: 1px solid #e4e9e6; padding-bottom: 20px; }
+.admin-permission-group h3 { font-size: 14px; font-weight: 600; }
+.admin-permission-options { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0 24px; }
+.admin-permission-options > button { border: 0; border-bottom: 1px solid #e4e9e6; border-radius: 0; padding: 12px 0; background: white; }
+.admin-feature-options { display: flex; flex-direction: column; max-width: 720px; }
+.admin-feature-options > button { border: 0; border-bottom: 1px solid #e4e9e6; border-radius: 0; background: white; padding: 16px 0; }
+.admin-change-actions { position: sticky; bottom: 0; z-index: 10; display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 16px 0; border-top: 1px solid #e4e9e6; background: white; }
+.admin-audit-detail .admin-audit-values { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 24px; }
+.admin-audit-detail pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; font-size: 12px; }
+.admin-audit-detail .ph-kv { margin: 0; padding: 0; }
+.admin-audit-detail .ph-kv dd { margin: 0; }
+.admin-audit-detail section { padding-block: 16px; border-top: 1px solid #e4e9e6; }
+.ph-admin-page .report-toolbar .relative > input { padding-left: 32px; }
+.ph-admin-page .report-toolbar > .relative { flex: 1 1 200px; }
+.admin-config-note { max-width: 76ch; color: #65716b; font-size: 13px; }
+@media (max-width: 760px) {
+  .admin-scope-layout { grid-template-columns: minmax(0,1fr); min-height: 0; gap: 20px; }
+  .admin-scope-list { padding: 0 0 16px; border-right: 0; border-bottom: 1px solid #e4e9e6; }
+  .admin-scope-list > .admin-scope-buttons { display: flex; gap: 8px; overflow-x: auto; max-height: 180px; }
+  .admin-scope-buttons > button { flex-shrink: 0; width: 220px; }
+  .admin-scope-detail { padding-left: 0; }
+  .admin-permission-group { grid-template-columns: minmax(0,1fr); gap: 12px; }
+}
+@media (max-width: 520px) {
+  .admin-workflow-dialog .admin-choices, .admin-permission-options, .admin-audit-detail .admin-audit-values { grid-template-columns: minmax(0,1fr); }
+  .admin-change-actions { justify-content: stretch; }
+  .admin-change-actions > button { width: 100%; }
+}
+
+/* Role lists remain compact on mobile. The shared horizontal flex-basis must
+   not become a 200px height when this page stacks its role buttons. */
+@media (max-width: 760px) {
+  .admin-shell .ph-roles-page .admin-scope-list > .admin-scope-buttons {
+    flex-direction: column;
+    overflow-x: hidden;
+    overflow-y: auto;
+    max-height: 220px;
+  }
+  .admin-shell .ph-roles-page .admin-scope-buttons > button {
+    flex: 0 0 auto;
+    width: 100%;
+    min-height: 42px;
+  }
+}

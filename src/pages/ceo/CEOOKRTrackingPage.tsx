@@ -1,3 +1,6 @@
+import { insightNumber, insightFixed } from '@/pages/ceo/insight-display';
+import { t, useLocale } from '@/i18n';
+import { ReportPage, ReportHeader, ReportSection } from '@/pages/dashboard/ReportingLayout';
 import { useState } from 'react';
 import {
   Target,
@@ -65,6 +68,7 @@ const mockOKRs = [
 ];
 
 export function CEOOKRTrackingPage() {
+  useLocale();
   const [expandedOKRs, setExpandedOKRs] = useState<number[]>(mockOKRs.map(o => o.id));
   const [selectedQuarter, setSelectedQuarter] = useState('Q1 2024');
 
@@ -89,63 +93,31 @@ export function CEOOKRTrackingPage() {
   const overallProgress = mockOKRs.reduce((acc, okr) => acc + okr.progress, 0) / mockOKRs.length;
 
   return (
-    <div className="space-y-6">
-      <PreviewBanner message="OKR tracking belum terintegrasi dengan data real. Angka di bawah adalah contoh layout — tidak untuk pengambilan keputusan." />
-      {/* Header */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-900 to-slate-900 rounded-2xl shadow-xl overflow-hidden">
-        <div className="px-4 md:px-8 py-6 md:py-8 relative">
-          <div className="absolute inset-0 opacity-5">
-            <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
-              <defs>
-                <pattern id="okr-pattern" width="60" height="60" patternUnits="userSpaceOnUse">
-                  <path d="M 60 0 L 0 0 0 60" fill="none" stroke="white" strokeWidth="1"/>
-                </pattern>
-              </defs>
-              <rect width="100%" height="100%" fill="url(#okr-pattern)" />
-            </svg>
-          </div>
-
-          <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 md:w-14 md:h-14 bg-gradient-to-br from-purple-400 to-violet-600 rounded-2xl flex items-center justify-center shadow-lg">
-                <Target className="h-6 w-6 md:h-7 md:w-7 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl md:text-2xl font-bold text-white">OKR Tracking</h1>
-                <p className="text-slate-400 text-xs md:text-sm mt-1">Objectives & Key Results</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
+    <ReportPage><PreviewBanner message={t("OKR tracking belum terintegrasi dengan data real. Angka di bawah adalah contoh layout — tidak untuk pengambilan keputusan.")} />{/* Header */}<ReportHeader>
+<div className="report-heading"><h1 className="text-xl md:text-2xl font-bold">{t("OKR Tracking")}</h1><p className="text-xs md:text-sm mt-1">{t("Objectives & Key Results")}</p></div>
+<div className="report-header-context"><div className="flex items-center gap-2">
               <select
                 value={selectedQuarter}
                 onChange={(e) => setSelectedQuarter(e.target.value)}
-                className="px-4 py-2 bg-white/10 backdrop-blur-xl rounded-xl text-sm text-white font-medium border border-white/10"
+                className="px-4 py-2 rounded-md text-sm font-medium border"
               >
-                <option value="Q1 2024">Q1 2024</option>
-                <option value="Q2 2024">Q2 2024</option>
-                <option value="Q3 2024">Q3 2024</option>
-                <option value="Q4 2024">Q4 2024</option>
+                <option value="Q1 2024">{t("Q1 2024")}</option>
+                <option value="Q2 2024">{t("Q2 2024")}</option>
+                <option value="Q3 2024">{t("Q3 2024")}</option>
+                <option value="Q4 2024">{t("Q4 2024")}</option>
               </select>
-              <button className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 backdrop-blur-xl rounded-xl text-sm text-white font-medium border border-white/10 transition-colors">
-                <Plus className="h-4 w-4" />
-                Add OKR
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Overall Progress */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-        <div className="flex flex-col md:flex-row md:items-center gap-6">
+              <button disabled title={t("Belum tersedia — preview UI")} className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium border transition-colors">
+                <Plus className="h-4 w-4" />{t("Add OKR")} </button>
+            </div></div>
+</ReportHeader>{/* Overall Progress */}<ReportSection><div className="flex flex-col md:flex-row md:items-center gap-6">
           <div className="flex-1">
-            <h3 className="text-lg font-bold text-gray-900 mb-2">Overall OKR Progress</h3>
-            <p className="text-sm text-gray-600 mb-4">{selectedQuarter} - Company-wide objectives</p>
+            <h3 className="text-lg font-bold text-gray-900 mb-2">{t("Overall OKR Progress")}</h3>
+            <p className="text-sm text-gray-600 mb-4">{selectedQuarter}{' '}{t("- Company-wide objectives")}</p>
             <div className="flex items-center gap-4">
               <div className="flex-1">
                 <div className="flex items-center justify-between text-sm mb-2">
-                  <span className="text-gray-500">Progress</span>
-                  <span className="font-bold text-gray-900">{overallProgress.toFixed(0)}%</span>
+                  <span className="text-gray-500">{t("Progress")}</span>
+                  <span className="font-bold text-gray-900">{insightFixed(overallProgress, 0)}%</span>
                 </div>
                 <div className="w-full bg-gray-100 rounded-full h-4">
                   <div
@@ -161,36 +133,30 @@ export function CEOOKRTrackingPage() {
           </div>
           <div className="grid grid-cols-3 gap-4 md:gap-6">
             <div className="text-center">
-              <div className="w-12 h-12 mx-auto bg-green-100 rounded-xl flex items-center justify-center mb-2">
+              <div className="w-12 h-12 mx-auto bg-green-100 rounded-md flex items-center justify-center mb-2">
                 <CheckCircle className="h-6 w-6 text-green-600" />
               </div>
-              <p className="text-lg font-bold text-gray-900">{mockOKRs.filter(o => o.progress >= 70).length}</p>
-              <p className="text-xs text-gray-500">On Track</p>
+              <p className="text-lg font-bold text-gray-900">{insightNumber(mockOKRs.filter(o => o.progress >= 70).length)}</p>
+              <p className="text-xs text-gray-500">{t("On Track")}</p>
             </div>
             <div className="text-center">
-              <div className="w-12 h-12 mx-auto bg-amber-100 rounded-xl flex items-center justify-center mb-2">
+              <div className="w-12 h-12 mx-auto bg-amber-100 rounded-md flex items-center justify-center mb-2">
                 <Clock className="h-6 w-6 text-amber-600" />
               </div>
-              <p className="text-lg font-bold text-gray-900">{mockOKRs.filter(o => o.progress >= 40 && o.progress < 70).length}</p>
-              <p className="text-xs text-gray-500">In Progress</p>
+              <p className="text-lg font-bold text-gray-900">{insightNumber(mockOKRs.filter(o => o.progress >= 40 && o.progress < 70).length)}</p>
+              <p className="text-xs text-gray-500">{t("In Progress")}</p>
             </div>
             <div className="text-center">
-              <div className="w-12 h-12 mx-auto bg-red-100 rounded-xl flex items-center justify-center mb-2">
+              <div className="w-12 h-12 mx-auto bg-red-100 rounded-md flex items-center justify-center mb-2">
                 <AlertCircle className="h-6 w-6 text-red-600" />
               </div>
-              <p className="text-lg font-bold text-gray-900">{mockOKRs.filter(o => o.progress < 40).length}</p>
-              <p className="text-xs text-gray-500">At Risk</p>
+              <p className="text-lg font-bold text-gray-900">{insightNumber(mockOKRs.filter(o => o.progress < 40).length)}</p>
+              <p className="text-xs text-gray-500">{t("At Risk")}</p>
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* OKR List */}
-      <div className="space-y-4">
+        </div></ReportSection>{/* OKR List */}<div className="space-y-4">
         {mockOKRs.map((okr) => (
-          <div key={okr.id} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-            {/* Objective Header */}
-            <div
+          <ReportSection key={okr.id} className="overflow-hidden">{/* Objective Header */}<div
               className="p-4 md:p-6 cursor-pointer hover:bg-gray-50 transition-colors"
               onClick={() => toggleOKR(okr.id)}
             >
@@ -206,8 +172,7 @@ export function CEOOKRTrackingPage() {
                   <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-2">
                     <h3 className="text-lg font-bold text-gray-900">{okr.objective}</h3>
                     <span className={`inline-flex items-center px-3 py-1 rounded-xl text-sm font-semibold ${getProgressBg(okr.progress)}`}>
-                      {okr.progress}% Complete
-                    </span>
+                      {insightNumber(okr.progress)}{' '}{t("% Complete")} </span>
                   </div>
                   <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
                     <span className="inline-flex items-center gap-1.5">
@@ -220,8 +185,7 @@ export function CEOOKRTrackingPage() {
                     </span>
                     <span className="inline-flex items-center gap-1.5">
                       <Target className="h-4 w-4" />
-                      {okr.keyResults.length} Key Results
-                    </span>
+                      {insightNumber(okr.keyResults.length)}{' '}{t("Key Results")} </span>
                   </div>
                   <div className="mt-3">
                     <div className="w-full bg-gray-100 rounded-full h-2">
@@ -236,43 +200,37 @@ export function CEOOKRTrackingPage() {
                   </div>
                 </div>
               </div>
-            </div>
-
-            {/* Key Results */}
-            {expandedOKRs.includes(okr.id) && (
+            </div>{/* Key Results */}{expandedOKRs.includes(okr.id) && (
               <div className="border-t border-gray-100 bg-gray-50 p-4 md:px-6">
-                <h4 className="text-sm font-semibold text-gray-700 mb-4">Key Results</h4>
+                <h4 className="text-sm font-semibold text-gray-700 mb-4">{t("Key Results")}</h4>
                 <div className="space-y-4">
                   {okr.keyResults.map((kr, index) => (
-                    <div key={kr.id} className="bg-white rounded-xl p-4 border border-gray-200">
-                      <div className="flex items-start gap-4">
+                    <ReportSection key={kr.id}><div className="flex items-start gap-4">
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                          kr.progress >= 70 ? 'bg-green-100' :
-                          kr.progress >= 40 ? 'bg-amber-100' :
-                          'bg-red-100'
+                          kr.progress >= 70 ? "bg-green-100" :
+                          kr.progress >= 40 ? "bg-amber-100" :
+                          "bg-red-100"
                         }`}>
                           <span className={`text-sm font-bold ${
-                            kr.progress >= 70 ? 'text-green-600' :
-                            kr.progress >= 40 ? 'text-amber-600' :
-                            'text-red-600'
+                            kr.progress >= 70 ? "text-green-600" :
+                            kr.progress >= 40 ? "text-amber-600" :
+                            "text-red-600"
                           }`}>
-                            {index + 1}
+                            {insightNumber(index + 1)}
                           </span>
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-gray-900 mb-2">{kr.title}</p>
                           <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4 text-sm">
-                            <span className="text-gray-500">
-                              Current: <span className="font-medium text-gray-700">{kr.current}{kr.unit}</span>
+                            <span className="text-gray-500">{t("Current:")} <span className="font-medium text-gray-700">{insightNumber(kr.current)}{kr.unit === ' days' ? ` ${t('days')}` : kr.unit}</span>
                             </span>
-                            <span className="text-gray-500">
-                              Target: <span className="font-medium text-gray-700">{kr.target}{kr.unit}</span>
+                            <span className="text-gray-500">{t("Target:")} <span className="font-medium text-gray-700">{insightNumber(kr.target)}{kr.unit}</span>
                             </span>
                           </div>
                           <div className="mt-2">
                             <div className="flex items-center justify-between text-xs mb-1">
-                              <span className="text-gray-400">Progress</span>
-                              <span className="font-medium text-gray-600">{kr.progress}%</span>
+                              <span className="text-gray-400">{t("Progress")}</span>
+                              <span className="font-medium text-gray-600">{insightNumber(kr.progress)}%</span>
                             </div>
                             <div className="w-full bg-gray-100 rounded-full h-1.5">
                               <div
@@ -285,15 +243,12 @@ export function CEOOKRTrackingPage() {
                             </div>
                           </div>
                         </div>
-                      </div>
-                    </div>
+                      </div></ReportSection>
                   ))}
                 </div>
               </div>
-            )}
-          </div>
+            )}</ReportSection>
         ))}
-      </div>
-    </div>
+      </div></ReportPage>
   );
 }

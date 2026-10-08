@@ -1,859 +1,149 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
-import {
-  Bell,
-  Search,
-  LogOut,
-  User,
-  Settings,
-  ChevronDown,
-  ChevronRight,
-  Home,
-  X,
-  Grid3X3,
-  UserPlus,
-  CreditCard,
-  Menu,
-  Command,
-  UsersRound,
-  Clock,
-  Timer,
-  CalendarCheck,
-  Check,
-  CheckCheck,
-  Megaphone,
-  FileText,
-  Calendar,
-  AlertCircle,
-  Loader2,
-} from 'lucide-react';
+import { t, useLocale } from '@/i18n';
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
+import { roleLabel } from '@/pages/admin/localization';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Bell, CheckCheck, ChevronDown, ChevronRight, Grid3X3, LogOut, Menu, Search, Settings, X } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth.store';
 import { useSidebarStore } from '@/stores/sidebar.store';
-import { cn } from '@/lib/utils';
-import { notificationService, type Notification } from '@/services/notification.service';
-import { employeeService } from '@/services/employee.service';
-import type { Employee } from '@/types';
+import { getInitials } from '@/lib/utils';
+import { useIsMobile } from '@/hooks/useIsMobile';
+import { getNavigation } from './navigation';
+import { useNavigationConfig } from './useNavigationConfig';
+import { SearchModal } from './SearchModal';
+import { NotificationList } from './NotificationList';
+import { useNotifications, useUnreadNotifications } from '@/hooks/useNotifications';
+import './navbar.css';
 
-// Breadcrumb configuration
-const breadcrumbLabels: Record<string, string> = {
-  dashboard: 'Dashboard',
-  employees: 'Employees',
-  create: 'Create',
-  edit: 'Edit',
-  departments: 'Departments',
-  positions: 'Positions',
-  attendance: 'Attendance',
-  leave: 'Leave',
-  payroll: 'Payroll',
-  performance: 'Performance',
-  contracts: 'Contracts',
-  requests: 'Requests',
-  users: 'User Management',
-  settings: 'Settings',
-  profile: 'Profile',
-  movement: 'Movement',
-  'org-chart': 'Org Chart',
+type Popover = 'notifications' | 'shortcuts' | 'account';
+const labels: Record<string, string> = {
+  employees: 'Employees', create: 'Tambah', edit: 'Edit', settings: 'Profil & Pengaturan', profile: 'Profil & Pengaturan',
+  general: 'Profil perusahaan', attendance: 'Kehadiran', payroll: 'Payroll', notifications: 'Notifikasi', security: 'Keamanan akun',
+  resources: 'Resources', leave: 'Leave', tax: 'Tax', ceo: 'Executive', manager: 'Team', employee: 'Personal',
 };
 
 export function Header() {
+  useLocale();
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout } = useAuthStore();
-  const { isCollapsed, isOpen, setOpen } = useSidebarStore();
-  const [showDropdown, setShowDropdown] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [showQuickActions, setShowQuickActions] = useState(false);
-  const [showSearchModal, setShowSearchModal] = useState(false);
-  const searchInputRef = useRef<HTMLInputElement>(null);
-
-  // Notification states
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [notificationsLoading, setNotificationsLoading] = useState(false);
-
-  // Fetch notifications
-  const fetchNotifications = useCallback(async () => {
-    try {
-      setNotificationsLoading(true);
-      const response = await notificationService.getMyNotifications({ limit: 10 });
-      setNotifications(response.data);
-      setUnreadCount(response.unread_count);
-    } catch (error) {
-      console.error('Failed to fetch notifications:', error);
-    } finally {
-      setNotificationsLoading(false);
-    }
-  }, []);
-
-  // Fetch unread count periodically
-  const fetchUnreadCount = useCallback(async () => {
-    try {
-      const count = await notificationService.getUnreadCount();
-      setUnreadCount(count);
-    } catch (error) {
-      console.error('Failed to fetch unread count:', error);
-    }
-  }, []);
-
-  // Initial fetch and polling
+  const user = useAuthStore(state => state.user);
+  const logout = useAuthStore(state => state.logout);
+  const { isOpen, setOpen } = useSidebarStore();
+  const isMobile = useIsMobile();
+  useNavigationConfig();
+  const navigation = getNavigation(user);
+  const [popover, setPopover] = useState<Popover | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const root = useRef<HTMLElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const opener = useRef<HTMLButtonElement | null>(null);
+  const count = useUnreadNotifications();
+  const feed = useNotifications(1, false, 10, popover === 'notifications');
+  const name = user?.employee?.name || user?.email?.split('@')[0] || t('User');
+  const closePopover = (restore = false) => { setPopover(null); if (restore) opener.current?.focus(); };
+  const toggle = (value: Popover, button: HTMLButtonElement) => {
+    opener.current = button; setPopover(previous => previous === value ? null : value);
+  };
+  const openSearch = () => { setPopover(null); setSearchOpen(true); };
+  useEffect(() => { setPopover(null); setSearchOpen(false); }, [location.pathname]);
   useEffect(() => {
-    fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, 30000); // Poll every 30 seconds
-    return () => clearInterval(interval);
-  }, [fetchUnreadCount]);
-
-  // Fetch full notifications when dropdown opens
+    if (popover) panel.current?.focus({ preventScroll: true });
+  }, [popover]);
   useEffect(() => {
-    if (showNotifications) {
-      fetchNotifications();
-    }
-  }, [showNotifications, fetchNotifications]);
-
-  // Mark notification as read
-  const handleMarkAsRead = async (notification: Notification) => {
-    if (notification.is_read) return;
-    try {
-      await notificationService.markAsRead(notification.id);
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === notification.id ? { ...n, is_read: true } : n))
-      );
-      setUnreadCount((prev) => Math.max(0, prev - 1));
-    } catch (error) {
-      console.error('Failed to mark as read:', error);
-    }
-  };
-
-  // Mark all as read
-  const handleMarkAllAsRead = async () => {
-    try {
-      await notificationService.markAllAsRead();
-      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
-      setUnreadCount(0);
-    } catch (error) {
-      console.error('Failed to mark all as read:', error);
-    }
-  };
-
-  // Handle notification click
-  const handleNotificationClick = (notification: Notification) => {
-    handleMarkAsRead(notification);
-    if (notification.link) {
-      navigate(notification.link);
-      setShowNotifications(false);
-    }
-  };
-
-  // Get notification icon based on type
-  const getNotificationIcon = (type: string) => {
-    switch (type) {
-      case 'announcement_new':
-      case 'announcement_urgent':
-        return <Megaphone className="h-4 w-4 text-orange-500" />;
-      case 'leave_request_submitted':
-      case 'leave_approval_pending':
-        return <Calendar className="h-4 w-4 text-blue-500" />;
-      case 'leave_request_approved':
-        return <Check className="h-4 w-4 text-green-500" />;
-      case 'leave_request_rejected':
-        return <X className="h-4 w-4 text-red-500" />;
-      case 'document_uploaded':
-      case 'document_verified':
-        return <FileText className="h-4 w-4 text-purple-500" />;
-      case 'document_expiring':
-        return <AlertCircle className="h-4 w-4 text-amber-500" />;
-      default:
-        return <Bell className="h-4 w-4 text-gray-500" />;
-    }
-  };
-
-  // Format relative time
-  const formatRelativeTime = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString();
-  };
-
-  // Generate breadcrumbs from pathname
+    const keydown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+      if (isMobile && isOpen) return;
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        if (document.querySelector('dialog[open], [role="alertdialog"]')) return;
+        event.preventDefault(); openSearch();
+      } else if (event.key === 'Escape' && popover) {
+        event.preventDefault(); closePopover(true);
+      }
+    };
+    const outside = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node)) setPopover(null); };
+    document.addEventListener('keydown', keydown); document.addEventListener('pointerdown', outside);
+    return () => { document.removeEventListener('keydown', keydown); document.removeEventListener('pointerdown', outside); };
+  }, [popover, isMobile, isOpen]);
   const pathSegments = location.pathname.split('/').filter(Boolean);
   const breadcrumbs = pathSegments.map((segment, index) => {
     const path = '/' + pathSegments.slice(0, index + 1).join('/');
-    const isLast = index === pathSegments.length - 1;
-    const isId = /^\d+$/.test(segment);
-    const label = isId ? 'Detail' : breadcrumbLabels[segment] || segment.charAt(0).toUpperCase() + segment.slice(1);
-    return { path, label, isLast };
-  });
+    const known = navigation.links.find(item => item.path === path);
+    return { path, known: !!known, label: known?.label || (labels[segment] ? t(labels[segment]) : undefined) || (/^\d+$/.test(segment) ? 'Detail' : segment.charAt(0).toUpperCase() + segment.slice(1)) };
+  }).filter(crumb => crumb.path !== '/dashboard');
+  // These are destinations from the shared model, never another set of role rules.
+  const priorities = ['/my-attendance', '/my-leave', '/documents', '/employees', '/my-team', '/leave-approval', '/payroll', '/ceo/payroll-report', '/users'];
+  const shortcuts = priorities.flatMap(path => { const item = navigation.links.find(link => link.path === path); return item ? [item] : []; }).slice(0, 6);
+  if (!shortcuts.length) shortcuts.push(...navigation.links.filter(link => link.path !== '/notifications').slice(0, 4));
+  const windows = typeof navigator !== 'undefined' && !/Mac|iPhone|iPad/.test(navigator.platform);
 
-  // Handle keyboard shortcut for search
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        setShowSearchModal(true);
-      }
-      if (e.key === 'Escape') {
-        setShowSearchModal(false);
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
-  // Focus search input when modal opens
-  useEffect(() => {
-    if (showSearchModal && searchInputRef.current) {
-      searchInputRef.current.focus();
-    }
-  }, [showSearchModal]);
-
-  const handleLogout = async () => {
-    await logout();
-    navigate('/login');
-  };
-
-  const getDisplayName = () => {
-    return user?.employee?.name || user?.email?.split('@')[0] || 'User';
-  };
-
-  const userRoles = user?.roles || ['Employee'];
-  const isCEO = userRoles.some(r => ['Group CEO', 'CEO'].includes(r));
-  const isHR = userRoles.some(r => ['HR Manager', 'HR Staff'].includes(r));
-  const isManager = userRoles.includes('Manager') && !isHR && !isCEO;
-  const isSuperAdmin = userRoles.includes('Super Admin');
-  const isEmployee = !isSuperAdmin && !isHR && !isManager && !isCEO;
-
-  // Different quick actions based on role
-  const quickActions = isEmployee
-    ? [
-        { icon: Clock, label: 'Attendance', path: '/attendance', color: 'blue' },
-        { icon: CalendarCheck, label: 'My Leave', path: '/my-leave', color: 'green' },
-      ]
-    : isManager
-    ? [
-        { icon: UsersRound, label: 'My Team', path: '/my-team', color: 'blue' },
-        { icon: CalendarCheck, label: 'Leave Approval', path: '/leave-approval', color: 'green' },
-      ]
-    : isCEO
-    ? [
-        { icon: Home, label: 'Dashboard', path: '/ceo', color: 'blue' },
-        { icon: CreditCard, label: 'Payroll Report', path: '/ceo/payroll-report', color: 'green' },
-      ]
-    : [
-        { icon: UserPlus, label: 'Add Employee', path: '/employees/create', color: 'blue' },
-        { icon: CreditCard, label: 'Payroll', path: '/payroll', color: 'green' },
-      ];
-
-  return (
-    <>
-      <header
-        className={cn(
-          'fixed right-0 top-0 z-50 flex h-16 items-center justify-between border-b border-gray-200 bg-white px-4 md:px-6 transition-all duration-300',
-          // Mobile: full width (left-0), Desktop: account for sidebar
-          'left-0 lg:left-[280px]',
-          isCollapsed && 'lg:left-20'
-        )}
-      >
-        {/* Left: Mobile Menu + Breadcrumbs */}
-        <div className="flex items-center gap-3 overflow-x-auto">
-          {/* Mobile Menu Toggle */}
-          <button
-            onClick={() => setOpen(!isOpen)}
-            className="lg:hidden p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition"
-          >
-            <Menu className="h-5 w-5" />
-          </button>
-
-          {/* Breadcrumb */}
-          <div className="hidden md:flex items-center gap-2 text-sm">
-            {location.pathname === '/dashboard' ? (
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
-                  <Home className="h-4 w-4 text-white" />
-                </div>
-                <span className="text-gray-900 font-semibold text-base">Dashboard</span>
-              </div>
-            ) : (
-              <>
-                <Link
-                  to="/dashboard"
-                  className="flex items-center gap-2 text-gray-600 hover:text-blue-600 transition"
-                >
-                  <Home className="h-4 w-4" />
-                  <span className="font-medium">Dashboard</span>
-                </Link>
-                {breadcrumbs.slice(1).map((crumb, _index) => (
-                  <div key={crumb.path} className="flex items-center gap-2">
-                    <ChevronRight className="h-4 w-4 text-gray-400" />
-                    {crumb.isLast ? (
-                      <span className="text-gray-900 font-semibold">{crumb.label}</span>
-                    ) : (
-                      <Link
-                        to={crumb.path}
-                        className="text-gray-600 hover:text-blue-600 font-medium transition"
-                      >
-                        {crumb.label}
-                      </Link>
-                    )}
-                  </div>
-                ))}
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Right Actions */}
-        <div className="flex items-center gap-2 md:gap-3">
-          {/* Desktop Search Trigger */}
-          <button
-            onClick={() => setShowSearchModal(true)}
-            className="hidden md:flex items-center bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 w-[280px] lg:w-[320px] hover:border-blue-300 hover:bg-white transition cursor-pointer group"
-          >
-            <Search className="h-4 w-4 text-gray-400 mr-3 group-hover:text-blue-500" />
-            <span className="flex-1 text-left text-sm text-gray-400">Search employees, documents...</span>
-            <kbd className="hidden xl:inline-block px-2 py-1 text-xs font-semibold text-gray-500 bg-white border border-gray-200 rounded group-hover:border-blue-200">
-              <Command className="inline h-3 w-3" />K
-            </kbd>
-          </button>
-
-          {/* Mobile Search Button */}
-          <button
-            onClick={() => setShowSearchModal(true)}
-            className="md:hidden p-2.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition"
-          >
-            <Search className="h-5 w-5" />
-          </button>
-
-          {/* Notifications */}
-          <div className="relative">
-            <button
-              onClick={() => {
-                setShowNotifications(!showNotifications);
-                setShowQuickActions(false);
-                setShowDropdown(false);
-              }}
-              className="relative p-2.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition"
-            >
-              <Bell className="h-5 w-5" />
-              {unreadCount > 0 && (
-                <span className="absolute top-1 right-1 min-w-[18px] h-[18px] bg-red-500 rounded-full ring-2 ring-white flex items-center justify-center text-[10px] font-bold text-white">
-                  {unreadCount > 99 ? '99+' : unreadCount}
-                </span>
-              )}
-            </button>
-
-            {showNotifications && (
-              <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => setShowNotifications(false)}
-                />
-                <div className="absolute right-0 mt-2 w-80 md:w-96 bg-white border border-gray-200 rounded-2xl shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-200">
-                  <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-gray-900">Notifications</h3>
-                    {unreadCount > 0 && (
-                      <button
-                        onClick={handleMarkAllAsRead}
-                        className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
-                      >
-                        <CheckCheck className="h-3.5 w-3.5" />
-                        Mark all read
-                      </button>
-                    )}
-                  </div>
-                  <div className="max-h-96 overflow-y-auto">
-                    {notificationsLoading ? (
-                      <div className="p-8 text-center">
-                        <Loader2 className="h-6 w-6 text-gray-400 mx-auto mb-2 animate-spin" />
-                        <p className="text-sm text-gray-500">Loading...</p>
-                      </div>
-                    ) : notifications.length === 0 ? (
-                      <div className="p-8 text-center">
-                        <Bell className="h-8 w-8 text-gray-300 mx-auto mb-2" />
-                        <p className="text-sm text-gray-500">No notifications</p>
-                      </div>
-                    ) : (
-                      <div className="divide-y divide-gray-100">
-                        {notifications.map((notification) => (
-                          <button
-                            key={notification.id}
-                            onClick={() => handleNotificationClick(notification)}
-                            className={cn(
-                              'w-full p-4 text-left hover:bg-gray-50 transition flex gap-3',
-                              !notification.is_read && 'bg-blue-50/50'
-                            )}
-                          >
-                            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
-                              {getNotificationIcon(notification.type)}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className={cn(
-                                'text-sm truncate',
-                                notification.is_read ? 'text-gray-700' : 'text-gray-900 font-medium'
-                              )}>
-                                {notification.title}
-                              </p>
-                              <p className="text-xs text-gray-500 line-clamp-2 mt-0.5">
-                                {notification.message}
-                              </p>
-                              <p className="text-[10px] text-gray-400 mt-1">
-                                {formatRelativeTime(notification.created_at)}
-                              </p>
-                            </div>
-                            {!notification.is_read && (
-                              <div className="flex-shrink-0 w-2 h-2 bg-blue-500 rounded-full mt-2" />
-                            )}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  {notifications.length > 0 && (
-                    <div className="p-3 border-t border-gray-100">
-                      <Link
-                        to="/notifications"
-                        onClick={() => setShowNotifications(false)}
-                        className="block text-center text-sm text-blue-600 hover:text-blue-700 font-medium"
-                      >
-                        View all notifications
-                      </Link>
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Quick Actions */}
-          <div className="relative hidden md:block">
-            <button
-              onClick={() => {
-                setShowQuickActions(!showQuickActions);
-                setShowNotifications(false);
-                setShowDropdown(false);
-              }}
-              className="p-2.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition"
-            >
-              <Grid3X3 className="h-5 w-5" />
-            </button>
-
-            {showQuickActions && (
-              <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => setShowQuickActions(false)}
-                />
-                <div className="absolute right-0 mt-2 w-72 bg-white border border-gray-200 rounded-2xl shadow-2xl z-50 p-4 animate-in fade-in slide-in-from-top-2 duration-200">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Quick Actions</h3>
-                  <div className="grid grid-cols-2 gap-2">
-                    {quickActions.map((action) => (
-                      <Link
-                        key={action.path}
-                        to={action.path}
-                        onClick={() => setShowQuickActions(false)}
-                        className={cn(
-                          'flex flex-col items-center p-3 rounded-xl transition',
-                          action.color === 'blue' && 'hover:bg-blue-50',
-                          action.color === 'green' && 'hover:bg-green-50'
-                        )}
-                      >
-                        <action.icon
-                          className={cn(
-                            'h-6 w-6 mb-2',
-                            action.color === 'blue' && 'text-blue-600',
-                            action.color === 'green' && 'text-green-600'
-                          )}
-                        />
-                        <span className="text-xs font-medium text-gray-700">{action.label}</span>
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* User menu */}
-          <div className="relative">
-            <button
-              onClick={() => {
-                setShowDropdown(!showDropdown);
-                setShowNotifications(false);
-                setShowQuickActions(false);
-              }}
-              className="flex items-center gap-2 hover:bg-gray-50 rounded-xl p-1.5 pr-2 md:pr-3 transition"
-            >
-              <img
-                src={`https://ui-avatars.com/api/?name=${encodeURIComponent(getDisplayName())}&background=3b82f6&color=ffffff`}
-                alt={getDisplayName()}
-                className="w-9 h-9 md:w-10 md:h-10 rounded-full border-2 border-blue-500 shadow-lg"
-              />
-              <ChevronDown
-                className={cn(
-                  'h-4 w-4 text-gray-400 transition-transform duration-200 hidden md:block',
-                  showDropdown && 'rotate-180'
-                )}
-              />
-            </button>
-
-            {showDropdown && (
-              <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => setShowDropdown(false)}
-                />
-                <div className="absolute right-0 top-full z-50 mt-2 w-64 rounded-2xl border border-gray-200 bg-white shadow-2xl animate-in fade-in slide-in-from-top-2 duration-200">
-                  {/* User info in dropdown */}
-                  <div className="px-4 py-4 border-b border-gray-100">
-                    <p className="text-sm font-semibold text-gray-900">
-                      {getDisplayName()}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1 truncate">{user?.email}</p>
-                  </div>
-
-                  <div className="py-1">
-                    <button
-                      onClick={() => {
-                        setShowDropdown(false);
-                        navigate('/settings');
-                      }}
-                      className="flex w-full items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-blue-50 transition-colors"
-                    >
-                      <Settings className="h-4 w-4 text-gray-400" />
-                      Settings
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowDropdown(false);
-                        navigate('/profile');
-                      }}
-                      className="flex w-full items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-blue-50 transition-colors border-t border-gray-100"
-                    >
-                      <User className="h-4 w-4 text-gray-400" />
-                      Profile
-                    </button>
-                  </div>
-
-                  <div className="border-t border-gray-100">
-                    <button
-                      onClick={handleLogout}
-                      className="flex w-full items-center gap-3 px-4 py-3 text-sm text-red-600 hover:bg-red-50 transition-colors"
-                    >
-                      <LogOut className="h-4 w-4" />
-                      Logout
-                    </button>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      </header>
-
-      {/* Global Search Modal */}
-      {showSearchModal && (
-        <SearchModal onClose={() => setShowSearchModal(false)} searchInputRef={searchInputRef} isManager={isManager} isEmployee={isEmployee} isCEO={isCEO} />
-      )}
-    </>
-  );
-}
-
-// Search Modal Component
-function SearchModal({
-  onClose,
-  searchInputRef,
-  isManager,
-  isEmployee,
-  isCEO,
-}: {
-  onClose: () => void;
-  searchInputRef: React.RefObject<HTMLInputElement | null>;
-  isManager: boolean;
-  isEmployee: boolean;
-  isCEO: boolean;
-}) {
-  const navigate = useNavigate();
-  const [query, setQuery] = useState('');
-  const [filterType, setFilterType] = useState('all');
-  const [searchResults, setSearchResults] = useState<Employee[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-
-  // Debounced employee search
-  useEffect(() => {
-    if (!query || query.length < 2) {
-      setSearchResults([]);
-      return;
-    }
-
-    const timer = setTimeout(async () => {
-      setIsSearching(true);
-      try {
-        const response = await employeeService.getAll({
-          search: query,
-          limit: 8,
-          employment_status: 'all',
-        });
-        setSearchResults(response.data);
-      } catch (error) {
-        console.error('Search failed:', error);
-        setSearchResults([]);
-      } finally {
-        setIsSearching(false);
-      }
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [query]);
-
-  const filters = isEmployee
-    ? [
-        { id: 'all', label: 'All', color: 'blue' },
-        { id: 'attendance', label: 'Attendance', color: 'green' },
-        { id: 'leave', label: 'Leave', color: 'orange' },
-        { id: 'requests', label: 'Requests', color: 'purple' },
-      ]
-    : isManager
-    ? [
-        { id: 'all', label: 'All', color: 'blue' },
-        { id: 'team', label: 'Team', color: 'blue' },
-        { id: 'attendance', label: 'Attendance', color: 'green' },
-        { id: 'leave', label: 'Leave', color: 'orange' },
-      ]
-    : isCEO
-    ? [
-        { id: 'all', label: 'All', color: 'blue' },
-        { id: 'reports', label: 'Reports', color: 'green' },
-        { id: 'payroll', label: 'Payroll', color: 'orange' },
-        { id: 'approvals', label: 'Approvals', color: 'purple' },
-      ]
-    : [
-        { id: 'all', label: 'All', color: 'blue' },
-        { id: 'employees', label: 'Employees', color: 'blue' },
-        { id: 'payroll', label: 'Payroll', color: 'green' },
-        { id: 'leave', label: 'Leave', color: 'orange' },
-        { id: 'departments', label: 'Departments', color: 'purple' },
-      ];
-
-  const quickNav = isEmployee
-    ? [
-        { title: 'Dashboard', path: '/dashboard', icon: Home, color: 'blue' },
-        { title: 'My Attendance', path: '/attendance', icon: Clock, color: 'green' },
-        { title: 'My Leave', path: '/my-leave', icon: CalendarCheck, color: 'orange' },
-        { title: 'My Requests', path: '/requests', icon: Bell, color: 'purple' },
-        { title: 'Profile', path: '/profile', icon: User, color: 'gray' },
-      ]
-    : isManager
-    ? [
-        { title: 'Dashboard', path: '/dashboard', icon: Home, color: 'blue' },
-        { title: 'My Team', path: '/my-team', icon: UsersRound, color: 'indigo' },
-        { title: 'Attendance', path: '/team-attendance', icon: Clock, color: 'green' },
-        { title: 'Overtime', path: '/team-overtime', icon: Timer, color: 'orange' },
-        { title: 'Leave Approval', path: '/leave-approval', icon: CalendarCheck, color: 'purple' },
-      ]
-    : isCEO
-    ? [
-        { title: 'Dashboard', path: '/ceo', icon: Home, color: 'blue' },
-        { title: 'Leadership Team', path: '/ceo/leadership-team', icon: UsersRound, color: 'indigo' },
-        { title: 'Financial Overview', path: '/ceo/financial-overview', icon: CreditCard, color: 'green' },
-        { title: 'Payroll Report', path: '/ceo/payroll-report', icon: CreditCard, color: 'orange' },
-        { title: 'Approvals', path: '/ceo/approvals', icon: CalendarCheck, color: 'purple' },
-        { title: 'Settings', path: '/settings', icon: Settings, color: 'gray' },
-      ]
-    : [
-        { title: 'Dashboard', path: '/dashboard', icon: Home, color: 'blue' },
-        { title: 'Employees', path: '/employees', icon: User, color: 'indigo' },
-        { title: 'Payroll', path: '/payroll', icon: CreditCard, color: 'green' },
-        { title: 'Leave', path: '/leave', icon: Bell, color: 'orange' },
-        { title: 'Settings', path: '/settings', icon: Settings, color: 'gray' },
-      ];
-
-  const handleNavigate = (path: string) => {
-    navigate(path);
-    onClose();
-  };
-
-  return (
-    <>
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[100]"
-        onClick={onClose}
-      />
-
-      {/* Modal */}
-      <div className="fixed inset-x-4 top-20 md:inset-x-auto md:left-1/2 md:-translate-x-1/2 md:w-full md:max-w-2xl z-[101] animate-in fade-in zoom-in-95 duration-200">
-        <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
-          {/* Search Input */}
-          <div className="flex items-center px-4 py-3 border-b border-gray-100">
-            <Search className="h-5 w-5 text-gray-400 mr-3" />
-            <input
-              ref={searchInputRef}
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search employees, payroll, leave, documents..."
-              className="flex-1 bg-transparent border-none outline-none text-base text-gray-900 placeholder-gray-400"
-            />
-            <button
-              onClick={onClose}
-              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-
-          {/* Filter Tabs */}
-          <div className="flex items-center gap-1 px-4 py-2 border-b border-gray-100 bg-gray-50 overflow-x-auto">
-            {filters.map((filter) => (
-              <button
-                key={filter.id}
-                onClick={() => setFilterType(filter.id)}
-                className={cn(
-                  'px-3 py-1.5 text-xs font-medium rounded-lg transition whitespace-nowrap',
-                  filterType === filter.id
-                    ? filter.color === 'blue'
-                      ? 'bg-blue-100 text-blue-700'
-                      : filter.color === 'green'
-                      ? 'bg-green-100 text-green-700'
-                      : filter.color === 'orange'
-                      ? 'bg-orange-100 text-orange-700'
-                      : 'bg-purple-100 text-purple-700'
-                    : 'text-gray-600 hover:bg-gray-100'
-                )}
-              >
-                {filter.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Results / Quick Nav */}
-          <div className="max-h-[60vh] overflow-y-auto">
-            {!query ? (
-              <div className="p-4">
-                <p className="text-xs font-semibold text-gray-500 uppercase mb-3">
-                  Quick Navigation
-                </p>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                  {quickNav.map((item) => (
-                    <button
-                      key={item.path}
-                      onClick={() => handleNavigate(item.path)}
-                      className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition group text-left"
-                    >
-                      <div
-                        className={cn(
-                          'w-9 h-9 rounded-lg flex items-center justify-center',
-                          item.color === 'blue' && 'bg-blue-100',
-                          item.color === 'indigo' && 'bg-indigo-100',
-                          item.color === 'green' && 'bg-green-100',
-                          item.color === 'orange' && 'bg-orange-100',
-                          item.color === 'purple' && 'bg-purple-100',
-                          item.color === 'gray' && 'bg-gray-100'
-                        )}
-                      >
-                        <item.icon
-                          className={cn(
-                            'h-4 w-4',
-                            item.color === 'blue' && 'text-blue-600',
-                            item.color === 'indigo' && 'text-indigo-600',
-                            item.color === 'green' && 'text-green-600',
-                            item.color === 'orange' && 'text-orange-600',
-                            item.color === 'purple' && 'text-purple-600',
-                            item.color === 'gray' && 'text-gray-600'
-                          )}
-                        />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">
-                          {item.title}
-                        </p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : isSearching ? (
-              <div className="p-8 text-center">
-                <Loader2 className="h-8 w-8 text-blue-500 animate-spin mx-auto mb-3" />
-                <p className="text-sm text-gray-500">Searching...</p>
-              </div>
-            ) : searchResults.length > 0 ? (
-              <div className="p-2">
-                <p className="text-xs font-semibold text-gray-500 uppercase px-3 py-2">
-                  Employees ({searchResults.length})
-                </p>
-                {searchResults.map((emp) => (
-                  <button
-                    key={emp.id}
-                    onClick={() => {
-                      navigate(`/employees/${emp.id}`);
-                      onClose();
-                    }}
-                    className="flex items-center gap-3 w-full p-3 rounded-xl hover:bg-blue-50 transition text-left"
-                  >
-                    <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-xs shadow-md flex-shrink-0">
-                      {emp.name?.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase() || 'NA'}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-900 truncate">{emp.name}</p>
-                      <p className="text-xs text-gray-500 truncate">
-                        {emp.employee_id} {emp.company?.name ? `· ${emp.company.name}` : ''}
-                      </p>
-                    </div>
-                    <div className="flex-shrink-0">
-                      <span className={cn(
-                        'text-xs font-medium px-2 py-1 rounded-lg',
-                        emp.employment_status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                      )}>
-                        {emp.employment_status}
-                      </span>
-                    </div>
-                    <ChevronRight className="h-4 w-4 text-gray-300 flex-shrink-0" />
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div className="p-8 text-center">
-                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Search className="h-6 w-6 text-gray-400" />
-                </div>
-                <p className="text-sm font-medium text-gray-900">
-                  No results for "{query}"
-                </p>
-                <p className="text-xs text-gray-500 mt-1">
-                  Try different keywords or change the filter
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Footer */}
-          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 bg-gray-50 text-xs text-gray-500">
-            <div className="flex items-center gap-4">
-              <span>
-                <kbd className="px-1.5 py-0.5 bg-white border border-gray-200 rounded text-[10px]">
-                  ↵
-                </kbd>{' '}
-                to open
-              </span>
-              <span>
-                <kbd className="px-1.5 py-0.5 bg-white border border-gray-200 rounded text-[10px]">
-                  ESC
-                </kbd>{' '}
-                to close
-              </span>
-            </div>
-          </div>
+  return <>
+    <header ref={root} className="ph-navbar" inert={isMobile && isOpen}>
+      <a className="ph-shell-skip" href="#main-content">{t("Langsung ke konten")}</a>
+      <div className="ph-navbar-location">
+        <button aria-label={t("Buka menu navigasi")} aria-expanded={isOpen} aria-controls="app-sidebar" onClick={() => { closePopover(); setOpen(!isOpen); }} className="ph-navbar-icon ph-navbar-menu"><Menu size={20} /></button>
+        <div className="ph-navbar-heading">
+        {navigation.isEmployee && <span className="ess-navbar-title">{t("Employee Self-Service")}</span>}
+        {navigation.isHR && <span className="ess-navbar-title">{t("People & Culture")}</span>}
+        {navigation.isManager && <span className="ess-navbar-title">{t("Team workspace")}</span>}
+        {navigation.isSuperAdmin && <span className="ess-navbar-title">{t("Administration")}</span>}
+        {(navigation.isCEO || navigation.isGroupCEO) && <span className="ess-navbar-title">{navigation.isGroupCEO ? t("Group overview") : t("Executive workspace")}</span>}
+        <nav aria-label={t("Breadcrumb")} className="ph-breadcrumb">
+          <Link to="/dashboard" aria-current={!breadcrumbs.length ? 'page' : undefined}>{t("Dashboard")}</Link>
+          {breadcrumbs.map((crumb, index) => <span key={crumb.path}><ChevronRight size={14} aria-hidden="true" />
+            {index === breadcrumbs.length - 1 ? <strong aria-current="page">{crumb.label}</strong>
+              : crumb.known ? <Link to={crumb.path}>{crumb.label}</Link> : <span>{crumb.label}</span>}</span>)}
+        </nav>
         </div>
       </div>
-    </>
-  );
+        <button className="ph-navbar-search" aria-label={t("Buka pencarian")} aria-keyshortcuts="Control+k Meta+k" onClick={openSearch}>
+          <Search size={18} aria-hidden="true" /><span>{navigation.canSearchEmployees ? t("Cari halaman atau karyawan…") : t("Cari halaman…")}</span><kbd>{windows ? t("Ctrl K") : t("⌘ K")}</kbd>
+        </button>
+      <div className="ph-navbar-actions">
+        <LanguageSwitcher />
+        <button className="ph-navbar-icon ph-navbar-shortcut-trigger" aria-label={t("Akses cepat")} title={t("Akses cepat")} aria-expanded={popover === 'shortcuts'}
+          aria-controls={popover === 'shortcuts' ? 'navbar-popover' : undefined}
+          onClick={event => toggle('shortcuts', event.currentTarget)}><Grid3X3 size={19} /></button>
+        <button className="ph-navbar-icon" aria-label={count == null ? t("Notifikasi, jumlah belum tersedia") : t('Notifikasi, {count} belum dibaca', { count })}
+          title={t("Notifikasi")}
+          aria-expanded={popover === 'notifications'} aria-controls={popover === 'notifications' ? 'navbar-popover' : undefined}
+          onClick={event => toggle('notifications', event.currentTarget)}><Bell size={20} />
+          {count !== null && count > 0 && <span className="ph-navbar-badge">{count > 99 ? '99+' : count}</span>}</button>
+        <button className="ph-navbar-account" aria-label={t("Menu akun")} aria-expanded={popover === 'account'} data-account-menu-trigger
+          aria-controls={popover === 'account' ? 'navbar-popover' : undefined}
+          onClick={event => toggle('account', event.currentTarget)}>
+          <span className="ph-navbar-avatar" aria-hidden="true">{getInitials(name)}</span>
+          <span className="ph-navbar-identity"><strong>{name}</strong><small>{user?.employee?.job_title || user?.employee?.position?.name || user?.roles.map(roleLabel).join(' / ')}</small></span>
+          <ChevronDown size={14} aria-hidden="true" /></button>
+      </div>
+      {popover && <div ref={panel} id="navbar-popover" tabIndex={-1} className={'ph-navbar-popover ' + (popover === 'notifications' ? 'ph-navbar-notifications' : '')}
+        role="region" aria-label={popover === 'notifications' ? t("Notifikasi terbaru") : popover === 'shortcuts' ? t("Akses cepat") : t("Akun saya")}
+        onBlur={event => { if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget as Node) && !opener.current?.contains(event.relatedTarget as Node)) setPopover(null); }}
+        onKeyDown={event => {
+          if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+          const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), a[href]'));
+          if (!items.length) return;
+          event.preventDefault();
+          const current = items.indexOf(document.activeElement as HTMLElement);
+          const index = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1
+            : current < 0 ? (event.key === 'ArrowDown' ? 0 : items.length - 1)
+              : (current + (event.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length;
+          items[index].focus();
+        }}>
+        <div className="ph-navbar-popover-header"><h2>{popover === 'notifications' ? t("Notifikasi") : popover === 'shortcuts' ? t("Akses cepat") : name}</h2>
+          <button aria-label={t("Tutup menu navbar")} className="ph-navbar-icon" onClick={() => closePopover(true)}><X size={17} /></button></div>
+        {popover === 'notifications' ? <>
+          <button className="ph-navbar-read-all" disabled={feed.status !== 'ready' || !feed.data?.unread_count || feed.busy !== null}
+            onClick={() => feed.markRead('all')}><CheckCheck size={15} />{t("Tandai semua dibaca")}</button>
+          <div className="ph-navbar-feed"><NotificationList feed={feed} onNavigate={() => closePopover()} /></div>
+          <Link to="/notifications" className="ph-navbar-all" onClick={() => closePopover()}>{t("Lihat semua notifikasi")}</Link>
+        </> : popover === 'shortcuts' ? <div className="ph-navbar-shortcuts">{shortcuts.map(item =>
+          <Link key={item.path} to={item.path} onClick={() => closePopover()}><item.icon size={19} /><span>{item.label}</span></Link>)}</div>
+          : <div className="ph-navbar-account-menu"><p>{user?.email}</p>
+            <button onClick={() => { closePopover(); navigate('/settings'); }}><Settings size={18} />{t("Profil & Pengaturan")}</button>
+            <button onClick={async () => { closePopover(); await logout(); navigate('/login'); }}><LogOut size={18} />{t("Keluar")}</button>
+          </div>}
+      </div>}
+    </header>
+    {searchOpen && <SearchModal key={JSON.stringify([user?.id, user?.roles, user?.accessibleCompanyIds])} navigation={navigation} onClose={() => setSearchOpen(false)} />}
+  </>;
 }

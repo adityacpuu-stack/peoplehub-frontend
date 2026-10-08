@@ -1,0 +1,34 @@
+.tt-page,.tt-dialog { font-family:'Public Sans',sans-serif; }
+.tt-page .tt-date-actions { display:flex; gap:6px; align-items:center; }
+.tt-page .ow-header p { max-width:760px; }
+.tt-register-heading { display:flex; justify-content:space-between; gap:14px; padding:18px 24px; align-items:center; border-bottom:1px solid #e8eee9; }
+.tt-register-heading h2 { margin:0; font-size:14px; font-weight:600; color:#243b32; }
+.tt-register-heading > span { font-size:11px; color:#718077; }
+.tt-page .tt-table :is(th,td) { padding-inline:18px; }
+.tt-page .tt-table td { font-variant-numeric:tabular-nums; }
+.tt-page .tt-table .tm-person { min-width:180px; }
+.tt-page .tt-row-actions { display:flex; gap:7px; flex-wrap:wrap; }
+.tt-page .tt-row-actions .ow-button { min-height:34px; padding:6px 10px; }
+.tt-page .tt-reason-preview { max-width:290px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tt-page .tm-status[data-status=work_from_home],.tt-dialog .tm-status[data-status=work_from_home] { color:#446c60; background:#edf5f2; }
+.tt-page .tm-status[data-status=half_day],.tt-dialog .tm-status[data-status=half_day] { color:#876827; background:#faf5e8; }
+.tt-dialog .tm-reason { margin-top:18px; }
+.tt-dialog .ow-button.tm-danger { background:#a44638; border-color:#a44638; color:white; }
+.tt-dialog .ow-button.tm-danger:hover:not(:disabled) { background:#893a2e; border-color:#893a2e; color:white; }
+.tt-dialog .tm-reason textarea:focus-visible { outline:2px solid #176b4a; outline-offset:2px; }
+.tt-dialog .tt-feedback { padding:24px; }
+.tt-page .tm-summary strong { margin-right:5px; }
+@media(max-width:767px) {
+  .tt-page .ow-filters { grid-template-columns:minmax(0,1fr); }
+  .tt-page .ow-filters > .tm-search { grid-column:1/-1; min-width:0; width:100%; max-width:none; }
+  .tt-page .ow-filters > .ow-field { min-width:0; width:100%; }
+  .tt-page .tt-date-actions { flex-wrap:wrap; }
+  .tt-register-heading { padding:16px; flex-wrap:wrap; }
+  .tt-page .tt-table td { padding:0; min-width:0; }
+  .tt-page .tt-table td[data-label] { display:flex; justify-content:space-between; gap:12px; align-items:center; }
+  .tt-page .tt-table td[data-label]::before { content:attr(data-label); font-size:11px; color:#718077; }
+  .tt-page .tt-table .tm-person { min-width:0; }
+  .tt-page .tt-reason-preview { max-width:100%; }
+  .tt-page .tt-row-actions { justify-content:flex-end; }
+  .tt-dialog .tm-dialog-actions > div { flex-wrap:wrap; }
+}

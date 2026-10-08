@@ -4,7 +4,8 @@ import * as Sentry from '@sentry/react'
 import './index.css'
 import App from './App.tsx'
 
-const sentryDsn = import.meta.env.VITE_SENTRY_DSN as string | undefined;
+// Pasted environment values can contain a BOM or surrounding whitespace.
+const sentryDsn = (import.meta.env.VITE_SENTRY_DSN as string | undefined)?.trim();
 const isProd = import.meta.env.MODE === 'production';
 
 if (sentryDsn) {

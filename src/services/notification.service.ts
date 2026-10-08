@@ -1,6 +1,9 @@
 import api from './api';
 import type { ApiResponse } from '@/types';
 
+export const NOTIFICATIONS_CHANGED = 'peoplehub:notifications-changed';
+const notifyChanged = () => window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED));
+
 // ==========================================
 // TYPES
 // ==========================================
@@ -80,22 +83,26 @@ export const notificationService = {
   // Mark notification as read
   markAsRead: async (id: number): Promise<Notification> => {
     const response = await api.post<ApiResponse<Notification>>(`/notifications/${id}/read`);
+    notifyChanged();
     return response.data.data;
   },
 
   // Mark all as read
   markAllAsRead: async (): Promise<void> => {
     await api.post('/notifications/mark-all-read');
+    notifyChanged();
   },
 
   // Delete notification
   deleteNotification: async (id: number): Promise<void> => {
     await api.delete(`/notifications/${id}`);
+    notifyChanged();
   },
 
   // Delete all read notifications
   deleteAllRead: async (): Promise<void> => {
     await api.delete('/notifications/read');
+    notifyChanged();
   },
 
   // Get announcement popups (unread announcements for popup display)
@@ -107,10 +114,12 @@ export const notificationService = {
   // Dismiss single announcement popup
   dismissAnnouncementPopup: async (notificationId: number): Promise<void> => {
     await api.post(`/notifications/announcement-popups/${notificationId}/dismiss`);
+    notifyChanged();
   },
 
   // Dismiss all announcement popups
   dismissAllAnnouncementPopups: async (): Promise<void> => {
     await api.post('/notifications/announcement-popups/dismiss-all');
+    notifyChanged();
   },
 };

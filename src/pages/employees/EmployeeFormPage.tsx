@@ -1,41 +1,23 @@
+import { enumLabel } from '@/pages/employees/enum-labels';
+import { t, useLocale, intlLocale } from '@/i18n';
+import '@/components/ui/operations-refresh.css';
+import '@/pages/employees/operations-workflows.css';
+import '@/pages/employees/employee-form.css';
+import { Modal } from '@/components/ui/Modal';
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useForm, Controller, type Control, type FieldErrors, type UseFormRegister, type UseFormSetValue } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import {
-  ArrowLeft,
-  ArrowRight,
-  Save,
-  Loader2,
-  User,
-  Phone,
-  Briefcase,
-  CreditCard,
-  MapPin,
-  UserPlus,
-  Check,
-  Hash,
-  Calendar,
-  Mail,
-  Building,
-  Clock,
-  Wallet,
-  Users,
-  AlertCircle,
-  FileText,
-  Shield,
-  LogOut,
-  X,
-  Landmark,
-  Contact,
-} from 'lucide-react';
+import { ArrowLeft, ArrowRight, Save, Loader2, User, Phone, Briefcase, CreditCard, MapPin, Check, Hash, Calendar, Mail, Building, Clock, Wallet, Users, AlertCircle, FileText, Shield, LogOut, Landmark } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { PageSpinner, SearchableSelect } from '@/components/ui';
 import { employeeService } from '@/services/employee.service';
 import { departmentService } from '@/services/department.service';
 import { companyService, type Company } from '@/services/company.service';
 import { workLocationService, type WorkLocationOption } from '@/services/work-location.service';
-import type { CreateEmployeeRequest, Department, Employee } from '@/types';
+import type { CreateEmployeeRequest, UpdateEmployeeRequest, PaginatedResponse, Department, Employee } from '@/types';
+import { useAuthStore } from '@/stores/auth.store';
+import { canAction, canEditCompensation } from '@/lib/actions';
 import {
   employeeFormSchema,
   STEP_FIELDS,
@@ -55,6 +37,12 @@ const STEPS = [
   { id: 4, title: 'Contact', subtitle: 'Address', icon: MapPin },
   { id: 5, title: 'Review', subtitle: 'Confirm', icon: Check },
 ];
+
+// Review date-only fields without interpreting midnight as a UTC instant.
+const reviewDate = (value?: string) => {
+  if (!value) return '-';
+  return new Date(`${value}T00:00:00`).toLocaleDateString(intlLocale(), { day: 'numeric', month: 'short', year: 'numeric' });
+};
 
 // Friendly labels for validation messages. Keep in sync with STEP_FIELDS.
 const FIELD_LABELS: Record<string, string> = {
@@ -262,31 +250,62 @@ const employeeToFormValues = (e: Employee): EmployeeFormInput => ({
   bank_account_holder: e.bank_account_holder || '',
 });
 
-/** Strip empty strings + the UI-only `has_office_email` flag before sending. */
-const buildPayload = (values: EmployeeFormValues): CreateEmployeeRequest => {
+function buildPayload(values: EmployeeFormValues): CreateEmployeeRequest;
+function buildPayload(values: EmployeeFormValues, dirty: Partial<Record<keyof EmployeeFormValues, unknown>>): UpdateEmployeeRequest;
+function buildPayload(values: EmployeeFormValues, dirty?: Partial<Record<keyof EmployeeFormValues, unknown>>): UpdateEmployeeRequest {
   // Defensively cast — Zod's optionalEnum yields '' | enum-string
   const stripped: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(values)) {
     if (k === 'has_office_email') continue;
-    if (v === '' || v === undefined || v === null) continue;
-    stripped[k] = v;
+    if (dirty && !dirty[k as keyof EmployeeFormValues]) continue;
+    if (v === '' || v === undefined || v === null) {
+      if (dirty) stripped[k] = null;
+    } else stripped[k] = v;
   }
   // If office email toggle was off, ensure email isn't accidentally sent
   if (!values.has_office_email) {
-    delete stripped.email;
+    if (dirty?.has_office_email || dirty?.email) stripped.email = null;
+    else delete stripped.email;
   }
-  return stripped as unknown as CreateEmployeeRequest;
-};
+  return stripped as UpdateEmployeeRequest;
+}
+
+// Compensation inputs (incl. their form defaults such as IDR/monthly/gross) must
+// not be sent without employee.update_salary; the API would refuse the request.
+const COMPENSATION_FIELDS = ['basic_salary', 'salary_currency', 'pay_frequency', 'pay_type', 'salary_status',
+  'transport_allowance', 'meal_allowance', 'position_allowance', 'communication_allowance', 'housing_allowance',
+  'performance_bonus', 'salary_grade_id'] as const;
+type CompensationField = (typeof COMPENSATION_FIELDS)[number];
+// Every compensation field is optional in Create/UpdateEmployeeRequest, so the
+// narrowed Omit<> payload stays assignable to the service without widening it.
+function withoutCompensation<T extends object>(payload: T, compensationEditable: boolean): T | Omit<T, CompensationField> {
+  if (compensationEditable) return payload;
+  const kept = Object.entries(payload).filter(([key]) => !(COMPENSATION_FIELDS as readonly string[]).includes(key));
+  return Object.fromEntries(kept) as Omit<T, CompensationField>;
+}
+
+async function allPages<T>(fetchPage: (page: number) => Promise<PaginatedResponse<T>>): Promise<T[]> {
+  const first = await fetchPage(1);
+  const rows = [...first.data];
+  for (let page = 2; page <= first.pagination.totalPages; page++) rows.push(...(await fetchPage(page)).data);
+  return rows;
+}
 
 // =============================================================================
 
 export function EmployeeFormPage() {
+  useLocale();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const isEdit = Boolean(id);
 
   const [currentStep, setCurrentStep] = useState(1);
-  const [isLoading, setIsLoading] = useState(isEdit);
+  const authUser = useAuthStore(state => state.user);
+  const compensationEditable = canEditCompensation(authUser);
+  const employeeLookupAvailable = canAction(authUser, 'employee.view');
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -320,9 +339,8 @@ export function EmployeeFormPage() {
     watch,
     setValue,
     trigger,
-    getValues,
     getFieldState,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, dirtyFields },
   } = useForm<EmployeeFormInput, unknown, EmployeeFormValues>({
     resolver: zodResolver(employeeFormSchema),
     defaultValues: emptyValues,
@@ -337,62 +355,80 @@ export function EmployeeFormPage() {
 
   // ---- Fetch reference data + employee (edit mode) -------------------------
   useEffect(() => {
+    let cancelled = false;
     const fetchData = async () => {
+      setIsLoading(true);
+      setLoadError(false);
       try {
         const [deptResponse, companyResponse, empResponse, workLocResponse] = await Promise.all([
-          departmentService.getAll({ page: 1, limit: 100 }),
-          companyService.getAll({ page: 1, limit: 100, is_active: true }),
-          employeeService.getAll({ page: 1, limit: 200, employment_status: 'active' }),
+          allPages(page => departmentService.getAll({ page, limit: 100 })),
+          allPages(page => companyService.getAll({ page, limit: 100, is_active: true })),
+          // The employee directory (manager lookup) is optional: a create-only account
+          // without employee.view skips it instead of failing the whole form.
+          employeeLookupAvailable
+            ? allPages(page => employeeService.getAll({ page, limit: 200, employment_status: 'active' }))
+            : Promise.resolve([] as Employee[]),
           // Use lightweight /options endpoint to populate the work-location dropdown.
-          workLocationService.getOptions().catch(() => [] as WorkLocationOption[]),
+          workLocationService.getOptions(),
         ]);
-        setDepartments(deptResponse.data);
-        setCompanies(companyResponse.data);
-        setEmployees(empResponse.data);
+        const employee = id ? await employeeService.getById(Number(id)) : null;
+        if (cancelled) return;
+        setDepartments(deptResponse);
+        setCompanies(companyResponse);
+        setEmployees(empResponse);
         setWorkLocations(workLocResponse);
 
-        if (id) {
-          const employee = await employeeService.getById(parseInt(id));
+        if (employee) {
           reset(employeeToFormValues(employee));
         }
       } catch (error) {
+        if (cancelled) return;
+        setLoadError(true);
         console.error('Failed to fetch data:', error);
-        toast.error('Failed to load data');
+        toast.error(t("Failed to load data"), { id: 'api-error' });
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     };
 
     fetchData();
-  }, [id, reset]);
+    return () => { cancelled = true; };
+  }, [id, reset, loadAttempt, employeeLookupAvailable]);
 
   // ---- Auto-generate employee_id on company change (create mode) -----------
   useEffect(() => {
+    let cancelled = false;
+    if (isEdit) return;
+    setGeneratedEmployeeId('');
+    setValue('employee_id', '');
+    setIsLoadingEmployeeId(false);
     const fetchNextEmployeeId = async () => {
       if (!isEdit && companyId) {
         setIsLoadingEmployeeId(true);
         try {
           const nextId = await employeeService.getNextEmployeeId(Number(companyId));
+          if (cancelled) return;
           setGeneratedEmployeeId(nextId);
           setValue('employee_id', nextId, { shouldValidate: false });
         } catch (error) {
           console.error('Failed to generate employee ID:', error);
         } finally {
-          setIsLoadingEmployeeId(false);
+          if (!cancelled) setIsLoadingEmployeeId(false);
         }
       }
     };
 
     fetchNextEmployeeId();
+    return () => { cancelled = true; };
   }, [companyId, isEdit, setValue]);
 
   // ---- Auto-update BPJS defaults on employment_type change -----------------
   // Mirror old behavior: permanent => all 4 true; freelance => jht only; else => all false
-  const [lastEmploymentType, setLastEmploymentType] = useState<string>('permanent');
+  const [lastEmploymentType, setLastEmploymentType] = useState<string>('');
   useEffect(() => {
-    if (!employmentType || employmentType === lastEmploymentType) return;
-    // Only auto-set in create mode (avoid stomping on user-edited values when loading edit data)
-    if (isEdit && lastEmploymentType === 'permanent' && !employees.length) return;
+    // Existing benefits are explicit stored choices, not defaults to reapply
+    // when the async employee fetch resets the form.
+    if (isEdit || !employmentType || employmentType === lastEmploymentType) return;
 
     if (employmentType === 'permanent') {
       setValue('jht_registered', true);
@@ -411,18 +447,26 @@ export function EmployeeFormPage() {
       setValue('life_insurance', false);
     }
     setLastEmploymentType(employmentType);
-  }, [employmentType, lastEmploymentType, isEdit, employees.length, setValue]);
+  }, [employmentType, lastEmploymentType, isEdit, setValue]);
 
   // ---- Auto-calculate probation dates when join_date changes ---------------
   useEffect(() => {
+    if (isEdit) return;
     if (joinDate && /^\d{4}-\d{2}-\d{2}$/.test(joinDate)) {
       const [year, month, day] = joinDate.split('-').map(Number);
-      const probationDate = new Date(Date.UTC(year, month - 1 + 3, day));
+      // Clamp to the last day of the target calendar month: Jan 31 + 3
+      // months is Apr 30, not May 1. UTC keeps date-only fields stable.
+      const lastDay = new Date(Date.UTC(year, month + 3, 0)).getUTCDate();
+      const probationDate = new Date(Date.UTC(year, month - 1 + 3, Math.min(day, lastDay)));
       const probationEnd = probationDate.toISOString().split('T')[0];
       setValue('probation_start_date', joinDate);
       setValue('probation_end_date', probationEnd);
+    } else {
+      // Clearing the source date must not submit a stale derived period.
+      setValue('probation_start_date', '');
+      setValue('probation_end_date', '');
     }
-  }, [joinDate, setValue]);
+  }, [joinDate, isEdit, setValue]);
 
   // ---- Reset office email value when toggle disabled -----------------------
   useEffect(() => {
@@ -436,7 +480,7 @@ export function EmployeeFormPage() {
   const filteredDepartments = departments.filter((d) => {
     if (!companyIdNum) return true;
     const deptCompanyId = d.company_id || d.company?.id;
-    return deptCompanyId === companyIdNum;
+    return deptCompanyId == null || deptCompanyId === companyIdNum;
   });
 
   // ---- Step navigation -----------------------------------------------------
@@ -452,18 +496,18 @@ export function EmployeeFormPage() {
         .map((f) => {
           const state = getFieldState(f as Parameters<typeof getFieldState>[0]);
           if (!state.invalid) return null;
-          const label = FIELD_LABELS[f] || f.replace(/_/g, ' ');
+          const label = t(FIELD_LABELS[f] || f.replace(/_/g, ' '));
           const msg = state.error?.message;
-          return msg ? `${label}: ${msg}` : label;
+          return msg ? `${label}: ${t(msg)}` : label;
         })
         .filter((x): x is string => x !== null);
 
       if (invalid.length > 0) {
         const preview = invalid.slice(0, 3).join('\n• ');
-        const extra = invalid.length > 3 ? `\n…and ${invalid.length - 3} more` : '';
-        toast.error(`Please fix the following:\n• ${preview}${extra}`, { duration: 5000 });
+        const extra = invalid.length > 3 ? '\n' + t('…and {count} more', { count: invalid.length - 3 }) : '';
+        toast.error(t('Please fix the following:') + '\n• ' + preview + extra, { duration: 5000 });
       } else {
-        toast.error('Please fix validation errors before continuing');
+        toast.error(t("Please fix validation errors before continuing"));
       }
       return;
     }
@@ -479,9 +523,8 @@ export function EmployeeFormPage() {
   };
 
   const goToStep = (step: number) => {
-    if (step <= currentStep || step === currentStep + 1) {
-      setCurrentStep(step);
-    }
+    if (step <= currentStep) setCurrentStep(step);
+    else if (step === currentStep + 1) void nextStep();
   };
 
   // ---- Submit --------------------------------------------------------------
@@ -490,20 +533,23 @@ export function EmployeeFormPage() {
       // Block accidental submits triggered from earlier steps
       return;
     }
-    const payload = buildPayload(values);
     try {
       if (isEdit && id) {
-        await employeeService.update(parseInt(id), payload);
-        toast.success('Employee updated successfully');
+        await employeeService.update(parseInt(id), withoutCompensation(buildPayload(values, dirtyFields), compensationEditable));
+        toast.success(t("Employee updated successfully"));
       } else {
-        await employeeService.create(payload);
-        toast.success('Employee created successfully');
+        await employeeService.create(withoutCompensation(buildPayload(values), compensationEditable));
+        toast.success(t("Employee created successfully"));
       }
       navigate('/employees');
     } catch (error) {
       // Axios interceptor handles toast for HTTP errors
       console.error('Failed to save employee:', error);
     }
+  }, (validationErrors) => {
+    const failedStep = Object.entries(STEP_FIELDS).find(([, fields]) => fields.some(field => field in validationErrors));
+    if (failedStep) setCurrentStep(Number(failedStep[0]));
+    toast.error(t("Periksa isian yang ditandai sebelum menyimpan."), { id: 'employee-validation' });
   });
 
   // ---- Resign action -------------------------------------------------------
@@ -514,17 +560,14 @@ export function EmployeeFormPage() {
 
   const onResign = handleSubmitResign(async (data) => {
     try {
-      const currentValues = getValues();
-      const payload = buildPayload(currentValues as EmployeeFormValues);
       await employeeService.update(parseInt(id!), {
-        ...payload,
         resign_date: data.resign_date,
         resign_type: data.resign_type,
         resign_reason: data.resign_reason,
         resign_notes: data.resign_notes,
         employment_status: 'resigned',
       });
-      toast.success('Karyawan berhasil di-resign');
+      toast.success(t("Karyawan berhasil di-resign"));
       resetResign();
       setShowResignModal(false);
       navigate('/employees');
@@ -538,147 +581,51 @@ export function EmployeeFormPage() {
     return <PageSpinner />;
   }
 
+  if (loadError) return (
+    <div role="alert" className="ph-section ops-section">
+      <h1 className="ops-page-title">{t("Data formulir karyawan gagal dimuat")}</h1>
+      <p>{t("Muat ulang data sebelum menambah atau mengedit karyawan.")}</p>
+      <button type="button" onClick={() => setLoadAttempt(value => value + 1)} className="ph-button ph-button-primary">{t("Coba Lagi")}</button>
+    </div>
+  );
+
   // Get current form values for review step (read-only display)
   const values = watch();
 
   return (
-    <div className="space-y-6">
-      {/* Header Banner */}
-      <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-2xl shadow-xl overflow-hidden">
-        <div className="px-6 md:px-8 py-8 md:py-10 relative">
-          {/* Grid Pattern */}
-          <div className="absolute inset-0 opacity-10">
-            <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
-              <defs>
-                <pattern id="employee-form-grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                  <path d="M 40 0 L 0 0 0 40" fill="none" stroke="white" strokeWidth="1"/>
-                </pattern>
-              </defs>
-              <rect width="100%" height="100%" fill="url(#employee-form-grid)" />
-            </svg>
-          </div>
-
-          <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-            <div className="flex-1">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-14 h-14 bg-white/20 backdrop-blur-xl rounded-2xl flex items-center justify-center shadow-lg">
-                  <UserPlus className="h-7 w-7 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-2xl md:text-3xl font-bold text-white">
-                    {isEdit ? 'Edit Employee' : 'Add New Employee'}
+    <div className="ph-workflow ops-workflow ph-form-page ops-employee-form operations-refresh-form">
+      {/* Form heading */}
+      <header className="ph-page-header ops-page-heading"><div>
+                  <h1 className="ops-page-title">
+                    {isEdit ? t("Edit Employee") : t("Add New Employee")}
                   </h1>
-                  <p className="text-blue-100 text-sm mt-1">
-                    Step <span className="font-bold">{currentStep}</span> of <span className="font-bold">{STEPS.length}</span> - Complete all required information
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              {isEdit && values.employment_status === 'active' && (
+                  <p className="text-gray-500 text-sm mt-1">{t("Step")} <span className="font-bold">{currentStep}</span>{' '}{t("of")} <span className="font-bold">{STEPS.length}</span>{' '}{t("- Fields marked * are required")} </p>
+                </div><div className="ph-actions"><div className="flex items-center gap-3">
+              {isEdit && values.employment_status === 'active' && canAction(authUser, 'employee.update') && (
                 <button
                   type="button"
                   onClick={() => setShowResignModal(true)}
-                  className="px-5 py-3 bg-red-500/80 backdrop-blur-xl text-white rounded-xl hover:bg-red-600 transition-all duration-200 flex items-center gap-2 font-bold border-2 border-red-400/50 shadow-lg"
+                  className="ph-button ops-danger"
                 >
                   <LogOut className="h-4 w-4" />
-                  <span>Resign</span>
+                  <span>{t("Resign")}</span>
                 </button>
               )}
               <Link
                 to="/employees"
-                className="px-5 py-3 bg-white/20 backdrop-blur-xl text-white rounded-xl hover:bg-white/30 transition-all duration-200 flex items-center gap-2 font-bold border-2 border-white/30 shadow-lg"
+                className="ph-button"
               >
                 <ArrowLeft className="h-4 w-4" />
-                <span>Back to List</span>
+                <span>{t("Back to List")}</span>
               </Link>
-            </div>
-          </div>
-        </div>
-      </div>
+            </div></div></header>
 
-      {/* Progress Steps */}
-      <div className="bg-white rounded-2xl shadow-lg border-2 border-gray-100 p-6 md:p-8">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-md">
-              <FileText className="h-5 w-5 text-white" />
-            </div>
-            <h3 className="text-lg font-bold text-gray-900">Registration Progress</h3>
-          </div>
-          <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
-            <span className="text-sm font-bold text-gray-700">Step</span>
-            <span className="text-lg font-bold text-blue-600">{currentStep}</span>
-            <span className="text-sm text-gray-500">/</span>
-            <span className="text-sm font-bold text-gray-500">{STEPS.length}</span>
-          </div>
-        </div>
-
-        {/* Progress Bar (Mobile) */}
-        <div className="md:hidden mb-6">
-          <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-all duration-500 ease-out"
-              style={{ width: `${(currentStep / STEPS.length) * 100}%` }}
-            />
-          </div>
-        </div>
-
-        {/* Desktop Steps */}
-        <div className="hidden md:flex items-center justify-between">
-          {STEPS.map((step, index) => (
-            <div key={step.id} className={`flex items-center ${index < STEPS.length - 1 ? 'flex-1' : ''} min-w-0`}>
-              <button
-                type="button"
-                onClick={() => goToStep(step.id)}
-                className={`relative flex items-center justify-center w-14 h-14 rounded-2xl border-2 transition-all duration-500 shadow-lg ${
-                  currentStep >= step.id
-                    ? 'bg-gradient-to-br from-blue-500 to-indigo-600 border-blue-500 text-white scale-110'
-                    : currentStep + 1 === step.id
-                    ? 'border-blue-300 text-blue-600 bg-blue-50 shadow-xl cursor-pointer hover:border-blue-400'
-                    : 'border-gray-300 text-gray-400 bg-gray-50 cursor-not-allowed'
-                }`}
-                disabled={step.id > currentStep + 1}
-              >
-                {currentStep > step.id ? (
-                  <Check className="h-5 w-5" />
-                ) : (
-                  <step.icon className="h-5 w-5" />
-                )}
-                {currentStep === step.id && (
-                  <span className="absolute inline-flex h-full w-full rounded-2xl bg-blue-400 opacity-75 animate-ping" />
-                )}
-              </button>
-
-              <div className="ml-3 min-w-0">
-                <div className={`text-sm font-bold transition-all duration-300 ${
-                  currentStep >= step.id
-                    ? 'text-blue-600'
-                    : currentStep + 1 === step.id
-                    ? 'text-gray-800'
-                    : 'text-gray-500'
-                }`}>
-                  {step.title}
-                </div>
-                <div className="text-xs text-gray-500 mt-0.5">{step.subtitle}</div>
-              </div>
-
-              {index < STEPS.length - 1 && (
-                <div className="flex-1 mx-3 h-1 rounded-full bg-gray-200 relative overflow-hidden">
-                  <div
-                    className="absolute inset-0 bg-gradient-to-r from-blue-500 to-indigo-600 transition-all duration-500"
-                    style={{ width: currentStep > step.id ? '100%' : '0%' }}
-                  />
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
+      <nav aria-label={t("Employee registration steps")}><ol className="ops-step-nav">
+        {STEPS.map((step) => <li key={step.id}><button type="button" aria-label={t('Go to {step}', { step: t(step.title) })} aria-current={currentStep === step.id ? 'step' : undefined} onClick={() => goToStep(step.id)} disabled={step.id > currentStep + 1}><span>{step.id}</span>{t(step.title)}</button></li>)}
+      </ol></nav>
 
       {/* Form */}
-      <form onSubmit={onSubmit} noValidate>
+      <form onSubmit={onSubmit} noValidate className="employee-form-body">
         {/* Each step is conditionally hidden via className so RHF state is preserved */}
         <div className={currentStep === 1 ? '' : 'hidden'}>
           <Step1Personal
@@ -688,6 +635,7 @@ export function EmployeeFormPage() {
             generatedEmployeeId={generatedEmployeeId}
             isLoadingEmployeeId={isLoadingEmployeeId}
             isEdit={isEdit}
+            onCompanyChange={() => setValue('department_id', undefined, { shouldDirty: true })}
           />
         </div>
         <div className={currentStep === 2 ? '' : 'hidden'}>
@@ -700,10 +648,11 @@ export function EmployeeFormPage() {
             employees={employees}
             companyId={companyId != null ? Number(companyId) : undefined}
             currentEmployeeId={id ? parseInt(id) : 0}
+            employeeLookupAvailable={employeeLookupAvailable}
           />
         </div>
         <div className={currentStep === 3 ? '' : 'hidden'}>
-          <Step3Payroll register={register} errors={errors} />
+          <Step3Payroll register={register} errors={errors} compensationEditable={compensationEditable} />
         </div>
         <div className={currentStep === 4 ? '' : 'hidden'}>
           <Step4Contact
@@ -719,52 +668,43 @@ export function EmployeeFormPage() {
             companies={companies}
             departments={departments}
             employees={employees}
+            compensationEditable={compensationEditable}
           />
         </div>
 
         {/* Navigation */}
-        <div className="bg-white rounded-2xl shadow-lg border-2 border-gray-100 p-6 mt-6">
+        <div className="ph-form-actions ops-wizard-actions">
           <div className="flex items-center justify-between">
             <button
               type="button"
               onClick={prevStep}
               disabled={currentStep === 1}
-              className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all duration-200 ${
-                currentStep === 1
-                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
+              className="ph-button"
             >
-              <ArrowLeft className="h-4 w-4" />
-              Previous
-            </button>
+              <ArrowLeft className="h-4 w-4" />{t("Previous")} </button>
 
             <div className="flex items-center gap-3">
               {currentStep < 5 && (
                 <button
                   type="button"
                   onClick={nextStep}
-                  className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl font-bold hover:from-blue-600 hover:to-indigo-700 transition-all duration-200 shadow-lg shadow-blue-500/25"
-                >
-                  Next Step
-                  <ArrowRight className="h-4 w-4" />
+                  className="ph-button ph-button-primary"
+                >{t("Next Step")} <ArrowRight className="h-4 w-4" />
                 </button>
               )}
               {currentStep === 5 && (
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-bold hover:from-green-600 hover:to-emerald-700 transition-all duration-200 shadow-lg shadow-green-500/25 disabled:opacity-50"
+                  className="ph-button ph-button-primary"
                 >
                   {isSubmitting ? (
                     <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Saving...
-                    </>
+                      <Loader2 className="h-4 w-4 animate-spin" />{t("Saving...")} </>
                   ) : (
                     <>
                       <Save className="h-4 w-4" />
-                      {isEdit ? 'Update Employee' : 'Create Employee'}
+                      {isEdit ? t("Update Employee") : t("Create Employee")}
                     </>
                   )}
                 </button>
@@ -776,14 +716,7 @@ export function EmployeeFormPage() {
 
       {/* Resign Modal — RHF + Zod (Wave 6 migration) */}
       {showResignModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex min-h-screen items-center justify-center p-4">
-            <div
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
-              onClick={closeResignModal}
-            />
-
-            <form
+        <Modal isOpen={true} onClose={closeResignModal} title={t("Resign Karyawan")} size="lg" busy={isResigning} className="ph-workflow ops-workflow ops-modal operations-refresh-dialog"><form
               onSubmit={onResign}
               onKeyDown={(e) => {
                 // Block accidental Enter-submit from text inputs (textarea/select unaffected).
@@ -792,138 +725,114 @@ export function EmployeeFormPage() {
                 }
               }}
               noValidate
-              className="relative w-full max-w-lg transform rounded-2xl bg-white shadow-2xl transition-all"
+              className="ops-dialog-form"
             >
               <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-orange-600 rounded-xl flex items-center justify-center shadow-md">
-                    <LogOut className="h-5 w-5 text-white" />
-                  </div>
+
                   <div>
-                    <h3 className="text-lg font-bold text-gray-900">Resign Karyawan</h3>
+
                     <p className="text-sm text-gray-500">{values.name}</p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={closeResignModal}
-                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <X className="h-5 w-5" />
-                </button>
+
               </div>
 
-              <div className="p-6 space-y-5">
-                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
+              <div className="ops-dialog-content space-y-5">
+                <div className="ops-record-block">
                   <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
                   <div>
-                    <h5 className="font-bold text-amber-800">Perhatian</h5>
-                    <p className="text-sm text-amber-700 mt-1">
-                      Status karyawan akan diubah menjadi <strong>Resigned</strong>. Data resign akan disimpan dan karyawan tidak akan tampil di daftar aktif.
-                    </p>
+                    <h5 className="font-semibold text-amber-800">{t("Perhatian")}</h5>
+                    <p className="text-sm text-amber-700 mt-1">{t("Status karyawan akan diubah menjadi")} <strong>{t("Resigned")}</strong>{t(". Data resign akan disimpan dan karyawan tidak akan tampil di daftar aktif.")} </p>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-bold text-gray-900 mb-2">
-                    <span className="inline-flex mr-1"><Calendar className="h-4 w-4 text-red-600" /></span>
-                    Tanggal Resign <span className="text-red-500">*</span>
+                  <label htmlFor="ops-employeeform-1" className="block text-sm font-bold text-gray-900 mb-2">
+                    <span className="inline-flex mr-1"><Calendar className="h-4 w-4 text-red-600" /></span>{t("Tanggal Resign")} <span className="text-red-500">*</span>
                   </label>
-                  <input
+                  <input id="ops-employeeform-1"
                     type="date"
                     {...registerResign('resign_date')}
-                    className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-red-500 focus:ring-4 focus:ring-red-100 sm:text-sm transition-all"
+                    className="block w-full rounded-xl border-gray-300 focus:border-red-500 focus:ring-4 focus:ring-red-100 sm:text-sm transition-all"
                   />
                   {resignErrors.resign_date && (
-                    <p className="mt-1 text-sm text-red-600">{resignErrors.resign_date.message}</p>
+                    <p className="mt-1 text-sm text-red-600">{t(resignErrors.resign_date.message || "")}</p>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-bold text-gray-900 mb-2">
-                    <span className="inline-flex mr-1"><FileText className="h-4 w-4 text-orange-600" /></span>
-                    Tipe Resign <span className="text-red-500">*</span>
+                  <label htmlFor="ops-employeeform-2" className="block text-sm font-bold text-gray-900 mb-2">
+                    <span className="inline-flex mr-1"><FileText className="h-4 w-4 text-orange-600" /></span>{t("Tipe Resign")} <span className="text-red-500">*</span>
                   </label>
-                  <select
+                  <select id="ops-employeeform-2"
                     {...registerResign('resign_type')}
                     defaultValue=""
-                    className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-red-500 focus:ring-4 focus:ring-red-100 sm:text-sm transition-all"
+                    className="block w-full rounded-xl border-gray-300 focus:border-red-500 focus:ring-4 focus:ring-red-100 sm:text-sm transition-all"
                   >
-                    <option value="">-- Pilih Tipe Resign --</option>
-                    <option value="voluntary">Voluntary (Mengundurkan Diri)</option>
-                    <option value="involuntary">Involuntary (PHK)</option>
-                    <option value="retirement">Retirement (Pensiun)</option>
-                    <option value="contract_end">Contract End (Kontrak Berakhir)</option>
-                    <option value="mutual_agreement">Mutual Agreement (Kesepakatan Bersama)</option>
-                    <option value="other">Other (Lainnya)</option>
+                    <option value="">{t("-- Pilih Tipe Resign --")}</option>
+                    <option value="voluntary">{t("Voluntary (Mengundurkan Diri)")}</option>
+                    <option value="involuntary">{t("Involuntary (PHK)")}</option>
+                    <option value="retirement">{t("Retirement (Pensiun)")}</option>
+                    <option value="contract_end">{t("Contract End (Kontrak Berakhir)")}</option>
+                    <option value="mutual_agreement">{t("Mutual Agreement (Kesepakatan Bersama)")}</option>
+                    <option value="other">{t("Other (Lainnya)")}</option>
                   </select>
                   {resignErrors.resign_type && (
-                    <p className="mt-1 text-sm text-red-600">{resignErrors.resign_type.message}</p>
+                    <p className="mt-1 text-sm text-red-600">{t(resignErrors.resign_type.message || "")}</p>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-bold text-gray-900 mb-2">
-                    <span className="inline-flex mr-1"><FileText className="h-4 w-4 text-purple-600" /></span>
-                    Alasan Resign
-                  </label>
-                  <input
+                  <label htmlFor="ops-employeeform-3" className="block text-sm font-bold text-gray-900 mb-2">
+                    <span className="inline-flex mr-1"><FileText className="h-4 w-4 text-purple-600" /></span>{t("Alasan Resign")} </label>
+                  <input id="ops-employeeform-3"
                     type="text"
                     {...registerResign('resign_reason')}
-                    placeholder="Contoh: Pindah ke perusahaan lain, Melanjutkan pendidikan, dll"
-                    className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-red-500 focus:ring-4 focus:ring-red-100 sm:text-sm transition-all"
+                    placeholder={t("Contoh: Pindah ke perusahaan lain, Melanjutkan pendidikan, dll")}
+                    className="block w-full rounded-xl border-gray-300 focus:border-red-500 focus:ring-4 focus:ring-red-100 sm:text-sm transition-all"
                   />
                   {resignErrors.resign_reason && (
-                    <p className="mt-1 text-sm text-red-600">{resignErrors.resign_reason.message}</p>
+                    <p className="mt-1 text-sm text-red-600">{t(resignErrors.resign_reason.message || "")}</p>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-bold text-gray-900 mb-2">
-                    <span className="inline-flex mr-1"><FileText className="h-4 w-4 text-gray-600" /></span>
-                    Catatan Tambahan
-                  </label>
-                  <textarea
+                  <label htmlFor="ops-employeeform-4" className="block text-sm font-bold text-gray-900 mb-2">
+                    <span className="inline-flex mr-1"><FileText className="h-4 w-4 text-gray-600" /></span>{t("Catatan Tambahan")} </label>
+                  <textarea id="ops-employeeform-4"
                     {...registerResign('resign_notes')}
-                    placeholder="Catatan tambahan mengenai proses resign..."
+                    placeholder={t("Catatan tambahan mengenai proses resign...")}
                     rows={3}
-                    className="block w-full rounded-xl border-gray-300 shadow-sm focus:border-red-500 focus:ring-4 focus:ring-red-100 sm:text-sm transition-all resize-none"
+                    className="block w-full rounded-xl border-gray-300 focus:border-red-500 focus:ring-4 focus:ring-red-100 sm:text-sm transition-all resize-none"
                   />
                   {resignErrors.resign_notes && (
-                    <p className="mt-1 text-sm text-red-600">{resignErrors.resign_notes.message}</p>
+                    <p className="mt-1 text-sm text-red-600">{t(resignErrors.resign_notes.message || "")}</p>
                   )}
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-3 border-t border-gray-200 px-6 py-4">
+              <div className="ph-form-actions ops-wizard-actions">
                 <button
                   type="button"
                   onClick={closeResignModal}
-                  className="px-5 py-2.5 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl font-bold transition-colors"
-                >
-                  Batal
-                </button>
+                  className="ph-button"
+                >{t("Batal")} </button>
                 <button
                   type="submit"
                   disabled={isResigning}
-                  className="px-5 py-2.5 bg-gradient-to-r from-red-500 to-orange-600 text-white rounded-xl font-bold hover:from-red-600 hover:to-orange-700 transition-all shadow-lg shadow-red-500/25 disabled:opacity-50 flex items-center gap-2"
+                  className="ph-button ph-button-primary"
                 >
                   {isResigning ? (
                     <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Processing...
-                    </>
+                      <Loader2 className="h-4 w-4 animate-spin" />{t("Processing...")} </>
                   ) : (
                     <>
-                      <LogOut className="h-4 w-4" />
-                      Konfirmasi Resign
-                    </>
+                      <LogOut className="h-4 w-4" />{t("Konfirmasi Resign")} </>
                   )}
                 </button>
               </div>
-            </form>
-          </div>
-        </div>
+            </form></Modal>
       )}
     </div>
   );
@@ -945,242 +854,195 @@ function Step1Personal({
   generatedEmployeeId,
   isLoadingEmployeeId,
   isEdit,
+  onCompanyChange,
 }: StepProps & {
   companies: Company[];
   generatedEmployeeId: string;
   isLoadingEmployeeId: boolean;
   isEdit: boolean;
+  onCompanyChange: () => void;
 }) {
+  useLocale();
   return (
-    <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/50 p-8 transition-all">
-      <div className="flex items-center mb-8">
-        <div className="w-12 h-12 bg-gradient-to-r from-teal-500 to-cyan-600 rounded-xl flex items-center justify-center mr-4 shadow-md">
-          <User className="h-6 w-6 text-white" />
-        </div>
-        <div>
-          <h3 className="text-2xl font-bold text-gray-900">Personal Information</h3>
-          <p className="text-sm text-gray-600">Basic identity and demographic details</p>
-        </div>
-      </div>
-
-      <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl border-2 border-purple-200 p-6 mb-6">
-        <div className="flex items-center mb-6">
-          <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center mr-3 shadow-md">
-            <CreditCard className="h-5 w-5 text-white" />
+    <div className="ops-form-step">
+      <section className="ops-form-section employee-field-group">
+        <h3>{t("Registration")}</h3>
+        <div className="ph-form-grid ">
+          <div>
+            <FieldLabel name="company_id" label={t("Company")} required icon={<Building className="h-4 w-4 text-indigo-600" />} />
+            <select id="company_id"
+              {...register('company_id', {
+                onChange: onCompanyChange,
+                // `valueAsNumber: true` turns '' (no selection) into NaN, which
+                // breaks the Zod union schema. `setValueAs` returns undefined
+                // for empty and Number(v) otherwise — schema-friendly.
+                setValueAs: (v) => (v === '' || v === null || v === undefined ? undefined : Number(v)),
+              })}
+              className={baseInput}
+            >
+              <option value="">{t("-- Pilih Company --")}</option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>{c.name} ({c.code})</option>
+              ))}
+            </select>
+            <FieldHint>{t("Pilih company dimana karyawan akan didaftarkan")}</FieldHint>
+            <FieldError msg={errors.company_id?.message} />
           </div>
           <div>
-            <h4 className="text-base font-bold text-gray-900">Basic Identity</h4>
-            <p className="text-xs text-gray-600">Personal identification information</p>
-          </div>
-        </div>
-
-        {/* Company */}
-        <div className="bg-white rounded-lg p-5 mb-6 border border-purple-100">
-          <h5 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <Building className="h-4 w-4 text-indigo-600" />
-            Company Assignment
-          </h5>
-          <div className="grid grid-cols-1 gap-6">
-            <div>
-              <FieldLabel label="Company" required icon={<Building className="h-4 w-4 text-indigo-600" />} />
-              <select
-                {...register('company_id', {
-                  // `valueAsNumber: true` turns '' (no selection) into NaN, which
-                  // breaks the Zod union schema. `setValueAs` returns undefined
-                  // for empty and Number(v) otherwise — schema-friendly.
-                  setValueAs: (v) => (v === '' || v === null || v === undefined ? undefined : Number(v)),
-                })}
-                className={baseInput}
-              >
-                <option value="">-- Pilih Company --</option>
-                {companies.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name} ({c.code})</option>
-                ))}
-              </select>
-              <FieldHint>Pilih company dimana karyawan akan didaftarkan</FieldHint>
-              <FieldError msg={errors.company_id?.message} />
-            </div>
-          </div>
-        </div>
-
-        {/* Identity Numbers */}
-        <div className="bg-white rounded-lg p-5 mb-6 border border-purple-100">
-          <h5 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <Hash className="h-4 w-4 text-purple-600" />
-            Identity Numbers
-          </h5>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div>
-              <FieldLabel label="Employee ID (NIK)" icon={<Hash className="h-4 w-4 text-indigo-600" />} />
-              <div className="relative">
-                <input
-                  type="text"
-                  {...register('employee_id')}
-                  placeholder={isLoadingEmployeeId ? 'Generating...' : 'Pilih company untuk generate otomatis'}
-                  readOnly={!isEdit && !!generatedEmployeeId}
-                  className={`block w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-4 focus:ring-blue-100 sm:text-sm transition-all ${
-                    !isEdit && generatedEmployeeId ? 'bg-gray-50 font-mono font-bold text-indigo-700' : ''
+            <FieldLabel name="employee_id" label={t("Employee ID (NIK)")} icon={<Hash className="h-4 w-4 text-indigo-600" />} />
+            <div className="relative">
+              <input id="employee_id"
+                type="text"
+                {...register('employee_id')}
+                placeholder={isLoadingEmployeeId ? t("Generating...") : t("Pilih company untuk generate otomatis")}
+                readOnly={!isEdit && !!generatedEmployeeId}
+                className={`block w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-4 focus:ring-blue-100 sm:text-sm transition-all ${!isEdit && generatedEmployeeId ? 'bg-gray-50 font-mono font-bold text-indigo-700' : ''
                   }`}
-                />
-                {isLoadingEmployeeId && (
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                    <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
-                  </div>
-                )}
-              </div>
-              <FieldHint>
-                {generatedEmployeeId
-                  ? `Format: ${generatedEmployeeId.split('-').slice(0, 2).join('-')}-YYNNNNN`
-                  : 'Pilih company terlebih dahulu untuk generate ID otomatis'}
-              </FieldHint>
-              <FieldError msg={errors.employee_id?.message} />
+              />
+              {isLoadingEmployeeId && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                </div>
+              )}
             </div>
-            <TextField
-              label="NIK KTP"
-              name="national_id"
-              register={register}
-              errors={errors}
-              placeholder="1234567890123456"
-              hint="16-digit National ID Number"
-              icon={<CreditCard className="h-4 w-4 text-purple-600" />}
-            />
-            <TextField
-              label="Family Card Number (KK)"
-              name="family_card_number"
-              register={register}
-              errors={errors}
-              placeholder="1234567890123456"
-              hint="16-digit Family Card Number"
-              icon={<CreditCard className="h-4 w-4 text-indigo-600" />}
-            />
-            <TextField
-              label="Passport Number"
-              name="passport_number"
-              register={register}
-              errors={errors}
-              placeholder="A1234567"
-              icon={<FileText className="h-4 w-4 text-teal-600" />}
-            />
-            <TextField
-              label="Passport Expiry"
-              name="passport_expiry"
-              type="date"
-              register={register}
-              errors={errors}
-              icon={<Calendar className="h-4 w-4 text-red-600" />}
-            />
-          </div>
-        </div>
-
-        {/* Personal Details */}
-        <div className="bg-white rounded-lg p-5 mb-6 border border-purple-100">
-          <h5 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <User className="h-4 w-4 text-blue-600" />
-            Personal Details
-          </h5>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <TextField
-              label="Full Name"
-              name="name"
-              register={register}
-              errors={errors}
-              placeholder="John Doe"
-              required
-              hint="Full legal name as per ID card"
-              icon={<User className="h-4 w-4 text-blue-600" />}
-            />
-            <TextField
-              label="Nickname"
-              name="nick_name"
-              register={register}
-              errors={errors}
-              placeholder="John"
-              hint="Preferred name or nickname"
-              icon={<User className="h-4 w-4 text-cyan-600" />}
-            />
-            <TextField
-              label="Date of Birth"
-              name="date_of_birth"
-              type="date"
-              register={register}
-              errors={errors}
-              icon={<Calendar className="h-4 w-4 text-green-600" />}
-            />
-            <TextField
-              label="Place of Birth"
-              name="place_of_birth"
-              register={register}
-              errors={errors}
-              placeholder="Jakarta"
-              hint="City/regency of birth"
-              icon={<MapPin className="h-4 w-4 text-red-600" />}
-            />
-          </div>
-        </div>
-
-        {/* Demographics */}
-        <div className="bg-white rounded-lg p-5 border border-purple-100">
-          <h5 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <Users className="h-4 w-4 text-orange-600" />
-            Demographics
-          </h5>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <SelectField
-              label="Gender"
-              name="gender"
-              register={register}
-              errors={errors}
-              icon={<Users className="h-4 w-4 text-purple-600" />}
-              options={[
-                { value: '', label: '-- Select Gender --' },
-                { value: 'male', label: 'Male (Laki-laki)' },
-                { value: 'female', label: 'Female (Perempuan)' },
-              ]}
-            />
-            <SelectField
-              label="Marital Status"
-              name="marital_status"
-              register={register}
-              errors={errors}
-              icon={<Users className="h-4 w-4 text-pink-600" />}
-              options={[
-                { value: '', label: '-- Select Status --' },
-                { value: 'single', label: 'Single (Belum Menikah)' },
-                { value: 'married', label: 'Married (Menikah)' },
-                { value: 'divorced', label: 'Divorced (Cerai)' },
-                { value: 'widowed', label: 'Widowed (Duda/Janda)' },
-              ]}
-            />
-            <SelectField
-              label="Religion"
-              name="religion"
-              register={register}
-              errors={errors}
-              icon={<Users className="h-4 w-4 text-teal-600" />}
-              options={[
-                { value: '', label: '-- Select Religion --' },
-                { value: 'islam', label: 'Islam' },
-                { value: 'kristen', label: 'Kristen' },
-                { value: 'katolik', label: 'Katolik' },
-                { value: 'hindu', label: 'Hindu' },
-                { value: 'buddha', label: 'Buddha' },
-                { value: 'konghucu', label: 'Konghucu' },
-                { value: 'other', label: 'Other' },
-              ]}
-            />
-            <TextField
-              label="Nationality"
-              name="nationality"
-              register={register}
-              errors={errors}
-              placeholder="Indonesia"
-              hint="Country of citizenship"
-              icon={<MapPin className="h-4 w-4 text-blue-600" />}
-            />
-          </div>
-        </div>
-      </div>
-
+            <FieldHint>
+              {generatedEmployeeId
+                ? `${t("Format:")} ${generatedEmployeeId.split('-').slice(0, 2).join('-')}-YYNNNNN`
+                : t("Pilih company terlebih dahulu untuk generate ID otomatis")}
+            </FieldHint>
+            <FieldError msg={errors.employee_id?.message} />
+          </div></div>
+      </section>
+      <section className="ops-form-section employee-field-group">
+        <h3>{t("Personal details")}</h3>
+        <div className="ph-form-grid employee-grid-four">
+          <TextField
+            label={t("Full Name")}
+            name="name"
+            register={register}
+            errors={errors}
+            placeholder="John Doe"
+            required
+            hint={t("Full legal name as per ID card")}
+            icon={<User className="h-4 w-4 text-blue-600" />}
+          />
+          <TextField
+            label={t("Nickname")}
+            name="nick_name"
+            register={register}
+            errors={errors}
+            placeholder="John"
+            hint={t("Preferred name or nickname")}
+            icon={<User className="h-4 w-4 text-cyan-600" />}
+          />
+          <TextField
+            label={t("Date of Birth")}
+            name="date_of_birth"
+            type="date"
+            register={register}
+            errors={errors}
+            icon={<Calendar className="h-4 w-4 text-green-600" />}
+          />
+          <TextField
+            label={t("Place of Birth")}
+            name="place_of_birth"
+            register={register}
+            errors={errors}
+            placeholder="Jakarta"
+            hint={t("City/regency of birth")}
+            icon={<MapPin className="h-4 w-4 text-red-600" />}
+          />
+          <SelectField
+            label={t("Gender")}
+            name="gender"
+            register={register}
+            errors={errors}
+            icon={<Users className="h-4 w-4 text-purple-600" />}
+            options={[
+              { value: '', label: t('-- Select Gender --') },
+              { value: 'male', label: t('Male (Laki-laki)') },
+              { value: 'female', label: t('Female (Perempuan)') },
+            ]}
+          />
+          <SelectField
+            label={t("Marital Status")}
+            name="marital_status"
+            register={register}
+            errors={errors}
+            icon={<Users className="h-4 w-4 text-pink-600" />}
+            options={[
+              { value: '', label: t('-- Select Status --') },
+              { value: 'single', label: t('Single (Belum Menikah)') },
+              { value: 'married', label: t('Married (Menikah)') },
+              { value: 'divorced', label: t('Divorced (Cerai)') },
+              { value: 'widowed', label: t('Widowed (Duda/Janda)') },
+            ]}
+          />
+          <SelectField
+            label={t("Religion")}
+            name="religion"
+            register={register}
+            errors={errors}
+            icon={<Users className="h-4 w-4 text-teal-600" />}
+            options={[
+              { value: '', label: t('-- Select Religion --') },
+              { value: 'islam', label: t('Islam') },
+              { value: 'kristen', label: t('Kristen') },
+              { value: 'katolik', label: t('Katolik') },
+              { value: 'hindu', label: t('Hindu') },
+              { value: 'buddha', label: t('Buddha') },
+              { value: 'konghucu', label: t('Konghucu') },
+              { value: 'other', label: t('Other') },
+            ]}
+          />
+          <TextField
+            label={t("Nationality")}
+            name="nationality"
+            register={register}
+            errors={errors}
+            placeholder="Indonesia"
+            hint={t("Country of citizenship")}
+            icon={<MapPin className="h-4 w-4 text-blue-600" />}
+          /></div>
+      </section>
+      <section className="ops-form-section employee-field-group">
+        <h3>{t("Identity documents")}</h3>
+        <div className="ph-form-grid employee-grid-four">
+          <TextField
+            label={t("NIK KTP")}
+            name="national_id"
+            register={register}
+            errors={errors}
+            placeholder="1234567890123456"
+            hint={t("16-digit National ID Number")}
+            icon={<CreditCard className="h-4 w-4 text-purple-600" />}
+          />
+          <TextField
+            label={t("Family Card Number (KK)")}
+            name="family_card_number"
+            register={register}
+            errors={errors}
+            placeholder="1234567890123456"
+            hint={t("16-digit Family Card Number")}
+            icon={<CreditCard className="h-4 w-4 text-indigo-600" />}
+          />
+          <TextField
+            label={t("Passport Number")}
+            name="passport_number"
+            register={register}
+            errors={errors}
+            placeholder="A1234567"
+            icon={<FileText className="h-4 w-4 text-teal-600" />}
+          />
+          <TextField
+            label={t("Passport Expiry")}
+            name="passport_expiry"
+            type="date"
+            register={register}
+            errors={errors}
+            icon={<Calendar className="h-4 w-4 text-red-600" />}
+          /></div>
+      </section>
     </div>
   );
 }
@@ -1194,6 +1056,7 @@ function Step2Employment({
   employees,
   companyId,
   currentEmployeeId,
+  employeeLookupAvailable = true,
 }: StepProps & {
   control: Control<EmployeeFormInput>;
   departments: Department[];
@@ -1201,87 +1064,73 @@ function Step2Employment({
   employees: Employee[];
   companyId: number | undefined;
   currentEmployeeId: number;
+  employeeLookupAvailable?: boolean;
 }) {
+  useLocale();
   return (
-    <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/50 p-8 transition-all">
-      <div className="flex items-center mb-8">
-        <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center mr-4 shadow-md">
-          <Briefcase className="h-6 w-6 text-white" />
-        </div>
-        <div>
-          <h3 className="text-2xl font-bold text-gray-900">Employment Information</h3>
-          <p className="text-sm text-gray-600">Job position and employment details</p>
-        </div>
-      </div>
+    <div className="ph-section ops-form-step">
+
 
       {/* Job Details */}
-      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border-2 border-blue-200 p-6 mb-6">
-        <div className="flex items-center mb-6">
-          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center mr-3 shadow-md">
-            <Briefcase className="h-5 w-5 text-white" />
-          </div>
-          <div>
-            <h4 className="text-base font-bold text-gray-900">Job Details</h4>
-            <p className="text-xs text-gray-600">Position and department information</p>
-          </div>
-        </div>
+      <div className="ph-section ops-form-section">
+        <h3>{t("Job Details")}</h3>
 
-        <div className="bg-white rounded-lg p-5 border border-blue-100">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className=" ops-quiet-surface">
+          <div className="ph-form-grid employee-grid-three">
             <TextField
-              label="Position"
+              label={t("Position")}
               name="job_title"
               register={register}
               errors={errors}
-              placeholder="Software Engineer"
+              placeholder={t("Software Engineer")}
               icon={<Briefcase className="h-4 w-4 text-blue-600" />}
             />
             <SelectField
-              label="Department"
+              label={t("Department")}
               name="department_id"
               register={register}
               errors={errors}
               valueAsNumber
               icon={<Building className="h-4 w-4 text-indigo-600" />}
               options={[
-                { value: '', label: companyId ? '-- Select Department --' : '-- Pilih Company dulu --' },
+                { value: '', label: companyId ? t('-- Select Department --') : t('-- Pilih Company dulu --') },
                 ...departments.map((d) => ({ value: d.id.toString(), label: d.name })),
               ]}
             />
             <div>
-              <FieldLabel label="Reports To (Manager)" icon={<Users className="h-4 w-4 text-purple-600" />} />
-              <Controller
+              <FieldLabel label={t("Reports To (Manager)")} icon={<Users className="h-4 w-4 text-purple-600" />} />
+              {!employeeLookupAvailable ? <FieldHint><span data-testid="manager-lookup-unavailable">{t("Manager selection needs access to the employee directory. Leave it empty; it can be set later by someone with that access.")}</span></FieldHint> : <><Controller
                 name="manager_id"
                 control={control}
                 render={({ field }) => (
                   <SearchableSelect
                     value={field.value ?? ''}
                     onChange={(val) => field.onChange(val ? Number(val) : undefined)}
-                    placeholder="-- No Manager (Top Level / Group CEO) --"
+                    placeholder={t("-- No Manager (Top Level / Group CEO) --")}
                     searchPlaceholder="Search by name..."
-                    emptyMessage="No employees found"
+                    emptyMessage={t("No employees found")}
                     options={employees
                       .filter((e) => e.id !== currentEmployeeId)
                       .map((e) => ({
                         value: e.id,
                         label: e.name,
-                        sublabel: `${e.position?.name || e.job_title || 'No Position'} • ${e.company?.name || ''}`,
+                        sublabel: `${e.position?.name || e.job_title || t('No Position')} • ${e.company?.name || ''}`,
                       }))}
                   />
                 )}
               />
-              <FieldHint>Pilih atasan langsung. Kosongkan untuk posisi tertinggi (Group CEO)</FieldHint>
+              <FieldHint>{t("Pilih atasan langsung. Kosongkan untuk posisi tertinggi (Group CEO)")}</FieldHint></>}
               <FieldError msg={errors.manager_id?.message} />
             </div>
             <SelectField
-              label="Work Location"
+              label={t("Work Location")}
               name="work_location_id"
               register={register}
               errors={errors}
               valueAsNumber
               icon={<MapPin className="h-4 w-4 text-purple-600" />}
               options={[
-                { value: '', label: '-- Select Work Location --' },
+                { value: '', label: t('-- Select Work Location --') },
                 ...workLocations.map((wl) => ({
                   value: String(wl.id),
                   label: wl.code ? `${wl.name} (${wl.code})` : wl.name,
@@ -1289,11 +1138,11 @@ function Step2Employment({
               ]}
             />
             <TextField
-              label="Work Schedule"
+              label={t("Work Schedule")}
               name="work_schedule"
               register={register}
               errors={errors}
-              placeholder="Mon-Fri, 09:00-18:00"
+              placeholder={t("Mon-Fri, 09:00-18:00")}
               icon={<Clock className="h-4 w-4 text-orange-600" />}
             />
           </div>
@@ -1301,46 +1150,38 @@ function Step2Employment({
       </div>
 
       {/* Employment Status */}
-      <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl border-2 border-green-200 p-6 mb-6">
-        <div className="flex items-center mb-6">
-          <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center mr-3 shadow-md">
-            <Check className="h-5 w-5 text-white" />
-          </div>
-          <div>
-            <h4 className="text-base font-bold text-gray-900">Employment Status</h4>
-            <p className="text-xs text-gray-600">Type and status of employment</p>
-          </div>
-        </div>
+      <div className="ph-section ops-form-section">
+        <h3>{t("Employment Status")}</h3>
 
-        <div className="bg-white rounded-lg p-5 border border-green-100">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className=" ops-quiet-surface">
+          <div className="ph-form-grid">
             <SelectField
-              label="Employment Type"
+              label={t("Employment Type")}
               name="employment_type"
               register={register}
               errors={errors}
               icon={<FileText className="h-4 w-4 text-green-600" />}
               options={[
-                { value: '', label: '-- Select Type --' },
-                { value: 'permanent', label: 'Permanent (Tetap)' },
-                { value: 'contract', label: 'Contract (Kontrak)' },
-                { value: 'internship', label: 'Internship (Magang)' },
-                { value: 'freelance', label: 'Freelance' },
+                { value: '', label: t('-- Select Type --') },
+                { value: 'permanent', label: t('Permanent (Tetap)') },
+                { value: 'contract', label: t('Contract (Kontrak)') },
+                { value: 'internship', label: t('Internship (Magang)') },
+                { value: 'freelance', label: t('Freelance') },
               ]}
             />
             <SelectField
-              label="Employment Status"
+              label={t("Employment Status")}
               name="employment_status"
               register={register}
               errors={errors}
               icon={<Check className="h-4 w-4 text-emerald-600" />}
               options={[
-                { value: '', label: '-- Select Status --' },
-                { value: 'active', label: 'Active' },
-                { value: 'inactive', label: 'Inactive' },
-                { value: 'terminated', label: 'Terminated' },
-                { value: 'resigned', label: 'Resigned' },
-                { value: 'retired', label: 'Retired' },
+                { value: '', label: t('-- Select Status --') },
+                { value: 'active', label: t('Active') },
+                { value: 'inactive', label: t('Inactive') },
+                { value: 'terminated', label: t('Terminated') },
+                { value: 'resigned', label: t('Resigned') },
+                { value: 'retired', label: t('Retired') },
               ]}
             />
           </div>
@@ -1348,51 +1189,45 @@ function Step2Employment({
       </div>
 
       {/* Important Dates */}
-      <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl border-2 border-orange-200 p-6">
-        <div className="flex items-center mb-6">
-          <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-amber-600 rounded-xl flex items-center justify-center mr-3 shadow-md">
-            <Calendar className="h-5 w-5 text-white" />
-          </div>
-          <div>
-            <h4 className="text-base font-bold text-gray-900">Important Dates</h4>
-            <p className="text-xs text-gray-600">Employment and contract dates</p>
-          </div>
-        </div>
+      <div className="ph-section ops-form-section">
+        <h3>{t("Important Dates")}</h3>
 
-        <div className="bg-white rounded-lg p-5 border border-orange-100">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className=" ops-quiet-surface">
+          <div className="ph-form-grid employee-grid-three">
             <TextField
-              label="Join Date"
+              label={t("Join Date")}
               name="join_date"
               type="date"
               register={register}
               errors={errors}
-              hint="Tanggal mulai bekerja. Probation akan dihitung otomatis."
+              hint={currentEmployeeId ? t('Tanggal mulai bekerja. Tanggal probation tersimpan tidak dihitung ulang saat edit.') : t('Tanggal mulai bekerja. Default probation dihitung 3 bulan kalender.')}
               icon={<Calendar className="h-4 w-4 text-amber-600" />}
             />
-            <div className="lg:col-span-1" />
+
             <div>
-              <FieldLabel label="Probation Start" icon={<Calendar className="h-4 w-4 text-blue-600" />} />
+              <FieldLabel name="probation_start_date" label={t("Probation Start")} icon={<Calendar className="h-4 w-4 text-blue-600" />} />
               <input
                 type="date"
                 {...register('probation_start_date')}
+                id="probation_start_date"
                 readOnly
-                className="block w-full rounded-xl border-gray-300 bg-gray-50 shadow-sm sm:text-sm cursor-not-allowed"
+                className="block w-full rounded-xl border-gray-300 bg-gray-50 sm:text-sm cursor-not-allowed"
               />
-              <FieldHint>Otomatis sama dengan Join Date</FieldHint>
+              <FieldHint>{currentEmployeeId ? t("Tanggal probation yang tersimpan.") : t("Otomatis sama dengan Join Date")}</FieldHint>
             </div>
             <div>
-              <FieldLabel label="Probation End" icon={<Calendar className="h-4 w-4 text-green-600" />} />
+              <FieldLabel name="probation_end_date" label={t("Probation End")} icon={<Calendar className="h-4 w-4 text-green-600" />} />
               <input
                 type="date"
                 {...register('probation_end_date')}
+                id="probation_end_date"
                 readOnly
-                className="block w-full rounded-xl border-gray-300 bg-gray-50 shadow-sm sm:text-sm cursor-not-allowed"
+                className="block w-full rounded-xl border-gray-300 bg-gray-50 sm:text-sm cursor-not-allowed"
               />
-              <FieldHint>Otomatis Join Date + 3 bulan</FieldHint>
+              <FieldHint>{currentEmployeeId ? t("Tanggal probation yang tersimpan; tidak berubah otomatis saat edit.") : t("Default Join Date + 3 bulan kalender; menyesuaikan akhir bulan.")}</FieldHint>
             </div>
             <TextField
-              label="Contract Start"
+              label={t("Contract Start")}
               name="contract_start_date"
               type="date"
               register={register}
@@ -1400,7 +1235,7 @@ function Step2Employment({
               icon={<Calendar className="h-4 w-4 text-purple-600" />}
             />
             <TextField
-              label="Contract End"
+              label={t("Contract End")}
               name="contract_end_date"
               type="date"
               register={register}
@@ -1414,35 +1249,27 @@ function Step2Employment({
   );
 }
 
-function Step3Payroll({ register, errors }: StepProps) {
+function Step3Payroll({ register, errors, compensationEditable }: StepProps & { compensationEditable: boolean }) {
+  useLocale();
   return (
-    <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/50 p-8 transition-all">
-      <div className="flex items-center mb-8">
-        <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl flex items-center justify-center mr-4 shadow-md">
-          <Wallet className="h-6 w-6 text-white" />
-        </div>
-        <div>
-          <h3 className="text-2xl font-bold text-gray-900">Payroll Information</h3>
-          <p className="text-sm text-gray-600">Salary and compensation details</p>
-        </div>
-      </div>
+    <div className="ph-section ops-form-step">
 
+      {/* Without employee.update_salary the compensation inputs are not rendered
+          and never sent; stored values stay unchanged. */}
+      {!compensationEditable && <div className="ph-section ops-form-section" data-testid="compensation-locked">
+        <h3>{t("Compensation")}</h3>
+        <p className="text-sm text-slate-600">{t("Salary and allowances can only be changed by roles with salary-edit access. Existing values stay unchanged.")}</p>
+      </div>}
+
+      {compensationEditable && <>
       {/* Basic Salary */}
-      <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl border-2 border-green-200 p-6 mb-6">
-        <div className="flex items-center mb-6">
-          <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center mr-3 shadow-md">
-            <Wallet className="h-5 w-5 text-white" />
-          </div>
-          <div>
-            <h4 className="text-base font-bold text-gray-900">Basic Salary</h4>
-            <p className="text-xs text-gray-600">Monthly base salary information</p>
-          </div>
-        </div>
+      <div className="ph-section ops-form-section">
+        <h3>{t("Basic Salary")}</h3>
 
-        <div className="bg-white rounded-lg p-5 border border-green-100">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className=" ops-quiet-surface">
+          <div className="ph-form-grid">
             <TextField
-              label="Basic Salary"
+              label={t("Basic Salary")}
               name="basic_salary"
               type="number"
               register={register}
@@ -1451,52 +1278,52 @@ function Step3Payroll({ register, errors }: StepProps) {
               icon={<Wallet className="h-4 w-4 text-green-600" />}
             />
             <SelectField
-              label="Currency"
+              label={t("Currency")}
               name="salary_currency"
               register={register}
               errors={errors}
               icon={<CreditCard className="h-4 w-4 text-blue-600" />}
               options={[
-                { value: 'IDR', label: 'IDR - Indonesian Rupiah' },
-                { value: 'USD', label: 'USD - US Dollar' },
-                { value: 'SGD', label: 'SGD - Singapore Dollar' },
+                { value: 'IDR', label: t('IDR - Indonesian Rupiah') },
+                { value: 'USD', label: t('USD - US Dollar') },
+                { value: 'SGD', label: t('SGD - Singapore Dollar') },
               ]}
             />
             <SelectField
-              label="Pay Frequency"
+              label={t("Pay Frequency")}
               name="pay_frequency"
               register={register}
               errors={errors}
               icon={<Calendar className="h-4 w-4 text-purple-600" />}
-              options={[{ value: 'monthly', label: 'Monthly' }]}
+              options={[{ value: 'monthly', label: t('Monthly') }]}
             />
             <SelectField
-              label="Pay Type"
+              label={t("Pay Type")}
               name="pay_type"
               register={register}
               errors={errors}
               icon={<Wallet className="h-4 w-4 text-indigo-600" />}
-              hint="Semua karyawan PFI menggunakan tipe Gross — PPh 21 dipotong dari gaji"
+              hint={t("Semua karyawan PFI menggunakan tipe Gross — PPh 21 dipotong dari gaji")}
               options={[
-                { value: 'gross', label: 'Gross (Pajak Ditanggung Karyawan)' },
+                { value: 'gross', label: t('Gross (Pajak Ditanggung Karyawan)') },
               ]}
             />
             <SelectField
-              label="Status Karyawan (Payroll)"
+              label={t("Status Karyawan (Payroll)")}
               name="salary_status"
               register={register}
               errors={errors}
               icon={<Shield className="h-4 w-4 text-indigo-600" />}
-              hint="Existing: karyawan lama dari skema net. New (Gross): karyawan baru, gaji pure gross."
+              hint={t("Existing: karyawan lama dari skema net. New (Gross): karyawan baru, gaji pure gross.")}
               options={[
                 {
                   value: 'existing',
                   label:
-                    'Existing (Legacy Net→Gross) — THP = Basic, tunjangan pajak otomatis',
+                    t('Existing (Legacy Net→Gross) — THP = Basic, tunjangan pajak otomatis'),
                 },
                 {
                   value: 'new_gross',
-                  label: 'New (Gross) — Karyawan bayar PPh21, THP < Basic',
+                  label: t('New (Gross) — Karyawan bayar PPh21, THP < Basic'),
                 },
               ]}
             />
@@ -1505,21 +1332,13 @@ function Step3Payroll({ register, errors }: StepProps) {
       </div>
 
       {/* Allowances */}
-      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border-2 border-blue-200 p-6">
-        <div className="flex items-center mb-6">
-          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center mr-3 shadow-md">
-            <CreditCard className="h-5 w-5 text-white" />
-          </div>
-          <div>
-            <h4 className="text-base font-bold text-gray-900">Allowances</h4>
-            <p className="text-xs text-gray-600">Additional compensation and benefits</p>
-          </div>
-        </div>
+      <div className="ph-section ops-form-section">
+        <h3>{t("Allowances")}</h3>
 
-        <div className="bg-white rounded-lg p-5 border border-blue-100">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className=" ops-quiet-surface">
+          <div className="ph-form-grid employee-grid-three">
             <TextField
-              label="Transport Allowance"
+              label={t("Transport Allowance")}
               name="transport_allowance"
               type="number"
               register={register}
@@ -1528,7 +1347,7 @@ function Step3Payroll({ register, errors }: StepProps) {
               icon={<Wallet className="h-4 w-4 text-blue-600" />}
             />
             <TextField
-              label="Meal Allowance"
+              label={t("Meal Allowance")}
               name="meal_allowance"
               type="number"
               register={register}
@@ -1537,7 +1356,7 @@ function Step3Payroll({ register, errors }: StepProps) {
               icon={<Wallet className="h-4 w-4 text-orange-600" />}
             />
             <TextField
-              label="Position Allowance"
+              label={t("Position Allowance")}
               name="position_allowance"
               type="number"
               register={register}
@@ -1548,85 +1367,78 @@ function Step3Payroll({ register, errors }: StepProps) {
           </div>
         </div>
       </div>
+      </>}
 
       {/* Bank Account */}
-      <div className="bg-gradient-to-br from-amber-50 to-yellow-50 rounded-xl border-2 border-amber-200 p-6 mt-6 mb-6">
-        <div className="flex items-center mb-6">
-          <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-yellow-600 rounded-xl flex items-center justify-center mr-3 shadow-md">
-            <Landmark className="h-5 w-5 text-white" />
-          </div>
-          <div>
-            <h4 className="text-base font-bold text-gray-900">Bank Account</h4>
-            <p className="text-xs text-gray-600">Bank account for salary disbursement</p>
-          </div>
-        </div>
+      <div className="ph-section ops-form-section">
+        <h3>{t("Bank Account")}</h3>
 
-        <div className="bg-white rounded-lg p-5 border border-amber-100">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className=" ops-quiet-surface">
+          <div className="ph-form-grid employee-grid-three">
             <TextField
-              label="Bank Name"
+              label={t("Bank Name")}
               name="bank_name"
               register={register}
               errors={errors}
-              placeholder="BCA, Mandiri, BNI, etc."
+              placeholder={t("BCA, Mandiri, BNI, etc.")}
               icon={<Landmark className="h-4 w-4 text-amber-600" />}
             />
             <TextField
-              label="Account Number"
+              label={t("Account Number")}
               name="bank_account_number"
               register={register}
               errors={errors}
               placeholder="1234567890"
               icon={<CreditCard className="h-4 w-4 text-amber-600" />}
             />
+            <TextField
+              label={t("Account Holder")}
+              name="bank_account_holder"
+              register={register}
+              errors={errors}
+              placeholder={t("Nama pemilik rekening")}
+              icon={<User className="h-4 w-4 text-amber-600" />}
+            />
           </div>
         </div>
       </div>
 
       {/* Tax Information */}
-      <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl border-2 border-purple-200 p-6">
-        <div className="flex items-center mb-6">
-          <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center mr-3 shadow-md">
-            <FileText className="h-5 w-5 text-white" />
-          </div>
-          <div>
-            <h4 className="text-base font-bold text-gray-900">Tax Information</h4>
-            <p className="text-xs text-gray-600">PTKP status dan informasi pajak karyawan</p>
-          </div>
-        </div>
+      <div className="ph-section ops-form-section">
+        <h3>{t("Tax Information")}</h3>
 
-        <div className="bg-white rounded-lg p-5 border border-purple-100">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className=" ops-quiet-surface">
+          <div className="ph-form-grid">
             <TextField
-              label="NPWP Number"
+              label={t("NPWP Number")}
               name="npwp_number"
               register={register}
               errors={errors}
               placeholder="XX.XXX.XXX.X-XXX.XXX"
-              hint="Nomor Pokok Wajib Pajak"
+              hint={t("Nomor Pokok Wajib Pajak")}
               icon={<FileText className="h-4 w-4 text-blue-600" />}
             />
             <SelectField
-              label="Status PTKP"
+              label={t("Status PTKP")}
               name="ptkp_status"
               register={register}
               errors={errors}
-              hint="Penghasilan Tidak Kena Pajak untuk perhitungan PPh 21"
+              hint={t("Penghasilan Tidak Kena Pajak untuk perhitungan PPh 21")}
               icon={<FileText className="h-4 w-4 text-purple-600" />}
               options={[
-                { value: '', label: '-- Pilih Status PTKP --' },
-                { value: 'TK/0', label: 'TK/0 - Tidak Kawin, Tanpa Tanggungan' },
-                { value: 'TK/1', label: 'TK/1 - Tidak Kawin, 1 Tanggungan' },
-                { value: 'TK/2', label: 'TK/2 - Tidak Kawin, 2 Tanggungan' },
-                { value: 'TK/3', label: 'TK/3 - Tidak Kawin, 3 Tanggungan' },
-                { value: 'K/0', label: 'K/0 - Kawin, Tanpa Tanggungan' },
-                { value: 'K/1', label: 'K/1 - Kawin, 1 Tanggungan' },
-                { value: 'K/2', label: 'K/2 - Kawin, 2 Tanggungan' },
-                { value: 'K/3', label: 'K/3 - Kawin, 3 Tanggungan' },
-                { value: 'K/I/0', label: 'K/I/0 - Kawin, Penghasilan Istri Digabung' },
-                { value: 'K/I/1', label: 'K/I/1 - Kawin, Penghasilan Istri Digabung, 1 Tanggungan' },
-                { value: 'K/I/2', label: 'K/I/2 - Kawin, Penghasilan Istri Digabung, 2 Tanggungan' },
-                { value: 'K/I/3', label: 'K/I/3 - Kawin, Penghasilan Istri Digabung, 3 Tanggungan' },
+                { value: '', label: t('-- Pilih Status PTKP --') },
+                { value: 'TK/0', label: t('TK/0 - Tidak Kawin, Tanpa Tanggungan') },
+                { value: 'TK/1', label: t('TK/1 - Tidak Kawin, 1 Tanggungan') },
+                { value: 'TK/2', label: t('TK/2 - Tidak Kawin, 2 Tanggungan') },
+                { value: 'TK/3', label: t('TK/3 - Tidak Kawin, 3 Tanggungan') },
+                { value: 'K/0', label: t('K/0 - Kawin, Tanpa Tanggungan') },
+                { value: 'K/1', label: t('K/1 - Kawin, 1 Tanggungan') },
+                { value: 'K/2', label: t('K/2 - Kawin, 2 Tanggungan') },
+                { value: 'K/3', label: t('K/3 - Kawin, 3 Tanggungan') },
+                { value: 'K/I/0', label: t('K/I/0 - Kawin, Penghasilan Istri Digabung') },
+                { value: 'K/I/1', label: t('K/I/1 - Kawin, Penghasilan Istri Digabung, 1 Tanggungan') },
+                { value: 'K/I/2', label: t('K/I/2 - Kawin, Penghasilan Istri Digabung, 2 Tanggungan') },
+                { value: 'K/I/3', label: t('K/I/3 - Kawin, Penghasilan Istri Digabung, 3 Tanggungan') },
               ]}
             />
           </div>
@@ -1634,46 +1446,34 @@ function Step3Payroll({ register, errors }: StepProps) {
       </div>
 
       {/* BPJS */}
-      <div className="bg-gradient-to-br from-teal-50 to-cyan-50 rounded-xl border-2 border-teal-200 p-6 mt-6">
-        <div className="flex items-center mb-6">
-          <div className="w-10 h-10 bg-gradient-to-br from-teal-500 to-cyan-600 rounded-xl flex items-center justify-center mr-3 shadow-md">
-            <Shield className="h-5 w-5 text-white" />
-          </div>
-          <div>
-            <h4 className="text-base font-bold text-gray-900">BPJS & Asuransi</h4>
-            <p className="text-xs text-gray-600">Informasi BPJS dan asuransi karyawan</p>
-          </div>
-        </div>
+      <div className="ph-section ops-form-section">
+        <h3>{t("BPJS & Asuransi")}</h3>
 
-        <div className="bg-white rounded-lg p-5 border border-teal-100 mb-4">
-          <h5 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <CreditCard className="h-4 w-4 text-teal-600" />
-            Nomor BPJS
-          </h5>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="mb-4 ops-quiet-surface">
+          <h5 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <CreditCard className="h-4 w-4 text-teal-600" />{t("Nomor BPJS")} </h5>
+          <div className="ph-form-grid">
             <TextField
-              label="No. BPJS Ketenagakerjaan"
+              label={t("No. BPJS Ketenagakerjaan")}
               name="bpjs_ketenagakerjaan_number"
               register={register}
               errors={errors}
-              placeholder="Masukkan nomor BPJS TK"
+              placeholder={t("Masukkan nomor BPJS TK")}
               icon={<CreditCard className="h-4 w-4 text-teal-600" />}
             />
             <TextField
-              label="No. BPJS Kesehatan"
+              label={t("No. BPJS Kesehatan")}
               name="bpjs_kesehatan_number"
               register={register}
               errors={errors}
-              placeholder="Masukkan nomor BPJS Kesehatan"
+              placeholder={t("Masukkan nomor BPJS Kesehatan")}
               icon={<CreditCard className="h-4 w-4 text-cyan-600" />}
             />
           </div>
         </div>
 
-        <div className="bg-white rounded-lg p-5 border border-teal-100">
-          <p className="text-sm text-gray-500">
-            Program BPJS Ketenagakerjaan dan asuransi akan diatur otomatis berdasarkan tipe karyawan yang dipilih.
-          </p>
+        <div className=" ops-quiet-surface">
+          <p className="text-sm text-gray-500">{t("Program BPJS Ketenagakerjaan dan asuransi akan diatur otomatis berdasarkan tipe karyawan yang dipilih.")} </p>
           {/* keep these registered so values are submitted */}
           <input type="hidden" {...register('jht_registered')} />
           <input type="hidden" {...register('jp_registered')} />
@@ -1694,88 +1494,75 @@ function Step4Contact({
   hasOfficeEmail: boolean;
   setValue: UseFormSetValue<EmployeeFormInput>;
 }) {
+  useLocale();
   return (
-    <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/50 p-8 transition-all">
-      <div className="flex items-center mb-8">
-        <div className="w-12 h-12 bg-gradient-to-r from-orange-500 to-red-600 rounded-xl flex items-center justify-center mr-4 shadow-md">
-          <MapPin className="h-6 w-6 text-white" />
-        </div>
-        <div>
-          <h3 className="text-2xl font-bold text-gray-900">Contact & Address</h3>
-          <p className="text-sm text-gray-600">Contact information and addresses</p>
-        </div>
-      </div>
+    <div className="ph-section ops-form-step">
+
 
       {/* Contact Information */}
-      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border-2 border-blue-200 p-6 mb-6">
-        <div className="flex items-center mb-6">
-          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center mr-3 shadow-md">
-            <Phone className="h-5 w-5 text-white" />
-          </div>
-          <div>
-            <h4 className="text-base font-bold text-gray-900">Contact Information</h4>
-            <p className="text-xs text-gray-600">Phone and email details</p>
-          </div>
-        </div>
+      <div className="ph-section ops-form-section">
+        <h3>{t("Contact Information")}</h3>
 
-        <div className="bg-white rounded-lg p-5 border border-blue-100">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className=" ops-quiet-surface">
+          <div className="ph-form-grid employee-grid-three">
             <TextField
-              label="Phone Number"
+              label={t("Phone Number")}
               name="phone"
               register={register}
               errors={errors}
               placeholder="+62 21 1234567"
-              hint="Office or home landline"
+              hint={t("Office or home landline")}
               icon={<Phone className="h-4 w-4 text-blue-600" />}
             />
             <TextField
-              label="Mobile Number"
+              label={t("Mobile Number")}
               name="mobile_number"
               register={register}
               errors={errors}
               placeholder="+62 812 3456 7890"
-              hint="Personal mobile/WhatsApp"
+              hint={t("Personal mobile/WhatsApp")}
               icon={<Phone className="h-4 w-4 text-green-600" />}
             />
             <TextField
-              label="Personal Email"
+              label={t("Personal Email")}
               name="personal_email"
               type="email"
               register={register}
               errors={errors}
               required
               placeholder="name@gmail.com"
-              hint={hasOfficeEmail ? 'For onboarding credentials' : 'Used as login & for notifications'}
+              hint={hasOfficeEmail ? t('For onboarding credentials') : t('Used as login & for notifications')}
               icon={<Mail className="h-4 w-4 text-orange-500" />}
             />
             <div className="lg:col-span-2">
               <label className="flex items-center gap-3 cursor-pointer select-none mb-3">
-                <div
+                <button
+                  type="button"
+                  role="switch"
+                  aria-label={t("Employee has office email")}
+                  aria-checked={hasOfficeEmail}
                   className={`relative w-10 h-5 rounded-full transition-colors ${hasOfficeEmail ? 'bg-purple-500' : 'bg-gray-300'}`}
-                  onClick={() => setValue('has_office_email', !hasOfficeEmail)}
+                  onClick={() => setValue('has_office_email', !hasOfficeEmail, { shouldDirty: true })}
                 >
                   <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${hasOfficeEmail ? 'translate-x-5' : ''}`} />
-                </div>
-                <span className="text-sm font-medium text-gray-700">Employee has office email</span>
+                </button>
+                <span className="text-sm font-medium text-gray-700">{t("Employee has office email")}</span>
               </label>
               {hasOfficeEmail && (
                 <TextField
-                  label="Office Email"
+                  label={t("Office Email")}
                   name="email"
                   type="email"
                   register={register}
                   errors={errors}
                   required
                   placeholder="employee@company.com"
-                  hint="Official company email (M365 / Google Workspace)"
+                  hint={t("Official company email (M365 / Google Workspace)")}
                   icon={<Mail className="h-4 w-4 text-purple-600" />}
                 />
               )}
               {!hasOfficeEmail && (
-                <p className="text-xs text-gray-500 bg-gray-50 p-3 rounded-lg">
-                  Login credential will be sent to personal email. Office email can be added later.
-                </p>
+                <p className="text-xs text-gray-500 bg-gray-50 p-3 rounded-lg">{t("Login credential will be sent to personal email. Office email can be added later.")} </p>
               )}
             </div>
           </div>
@@ -1783,52 +1570,44 @@ function Step4Contact({
       </div>
 
       {/* Address */}
-      <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl border-2 border-orange-200 p-6">
-        <div className="flex items-center mb-6">
-          <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-amber-600 rounded-xl flex items-center justify-center mr-3 shadow-md">
-            <MapPin className="h-5 w-5 text-white" />
-          </div>
-          <div>
-            <h4 className="text-base font-bold text-gray-900">Address Information</h4>
-            <p className="text-xs text-gray-600">Permanent (KTP) and current address</p>
-          </div>
-        </div>
+      <div className="ph-section ops-form-section">
+        <h3>{t("Address Information")}</h3>
 
-        <div className="bg-white rounded-lg p-5 border border-orange-100 space-y-6">
+        <div className="ops-quiet-surface employee-address-grid">
           <div>
-            <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">Permanent Address (KTP)</p>
+            <p className="text-xs font-semibold text-slate-600 mb-3 pb-2 border-b border-gray-100">{t("Permanent Address (KTP)")}</p>
             <div className="space-y-4">
               <TextareaField
-                label="Full Address"
+                label={t("Full Address")}
                 name="address"
                 register={register}
                 errors={errors}
                 rows={2}
-                placeholder="Full address as per ID card"
+                placeholder={t("Full address as per ID card")}
               />
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <TextField label="City" name="city" register={register} errors={errors} placeholder="Bandar Lampung" icon={<MapPin className="h-4 w-4 text-blue-600" />} />
-                <TextField label="Province" name="province" register={register} errors={errors} placeholder="Lampung" icon={<MapPin className="h-4 w-4 text-green-600" />} />
-                <TextField label="Postal Code" name="postal_code" register={register} errors={errors} placeholder="35141" icon={<MapPin className="h-4 w-4 text-purple-600" />} />
+              <div className="ph-form-grid">
+                <TextField label={t("City")} name="city" register={register} errors={errors} placeholder="Bandar Lampung" icon={<MapPin className="h-4 w-4 text-blue-600" />} />
+                <TextField label={t("Province")} name="province" register={register} errors={errors} placeholder="Lampung" icon={<MapPin className="h-4 w-4 text-green-600" />} />
+                <TextField label={t("Postal Code")} name="postal_code" register={register} errors={errors} placeholder="35141" icon={<MapPin className="h-4 w-4 text-purple-600" />} />
               </div>
             </div>
           </div>
 
           <div>
-            <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">Current Address (Domicile)</p>
+            <p className="text-xs font-semibold text-slate-600 mb-3 pb-2 border-b border-gray-100">{t("Current Address (Domicile)")}</p>
             <div className="space-y-4">
               <TextareaField
-                label="Full Address"
+                label={t("Full Address")}
                 name="current_address"
                 register={register}
                 errors={errors}
                 rows={2}
-                placeholder="Current residential address"
+                placeholder={t("Current residential address")}
               />
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <TextField label="City" name="current_city" register={register} errors={errors} placeholder="Tangerang Selatan" icon={<MapPin className="h-4 w-4 text-blue-600" />} />
-                <TextField label="Province" name="current_province" register={register} errors={errors} placeholder="Banten" icon={<MapPin className="h-4 w-4 text-green-600" />} />
-                <TextField label="Postal Code" name="current_postal_code" register={register} errors={errors} placeholder="15417" icon={<MapPin className="h-4 w-4 text-purple-600" />} />
+              <div className="ph-form-grid">
+                <TextField label={t("City")} name="current_city" register={register} errors={errors} placeholder="Tangerang Selatan" icon={<MapPin className="h-4 w-4 text-blue-600" />} />
+                <TextField label={t("Province")} name="current_province" register={register} errors={errors} placeholder="Banten" icon={<MapPin className="h-4 w-4 text-green-600" />} />
+                <TextField label={t("Postal Code")} name="current_postal_code" register={register} errors={errors} placeholder="15417" icon={<MapPin className="h-4 w-4 text-purple-600" />} />
               </div>
             </div>
           </div>
@@ -1836,42 +1615,34 @@ function Step4Contact({
       </div>
 
       {/* Emergency Contact */}
-      <div className="bg-gradient-to-br from-red-50 to-pink-50 rounded-xl border-2 border-red-200 p-6 mt-6">
-        <div className="flex items-center mb-6">
-          <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-pink-600 rounded-xl flex items-center justify-center mr-3 shadow-md">
-            <Contact className="h-5 w-5 text-white" />
-          </div>
-          <div>
-            <h4 className="text-base font-bold text-gray-900">Emergency Contact</h4>
-            <p className="text-xs text-gray-600">Person to contact in case of emergency</p>
-          </div>
-        </div>
+      <div className="ph-section ops-form-section">
+        <h3>{t("Emergency Contact")}</h3>
 
-        <div className="bg-white rounded-lg p-5 border border-red-100">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <TextField label="Contact Name" name="emergency_contact_name" register={register} errors={errors} placeholder="Full name" icon={<User className="h-4 w-4 text-red-600" />} />
-            <TextField label="Contact Phone" name="emergency_contact_phone" register={register} errors={errors} placeholder="+62 812 3456 7890" icon={<Phone className="h-4 w-4 text-red-600" />} />
+        <div className=" ops-quiet-surface">
+          <div className="ph-form-grid">
+            <TextField label={t("Contact Name")} name="emergency_contact_name" register={register} errors={errors} placeholder={t("Full name")} icon={<User className="h-4 w-4 text-red-600" />} />
+            <TextField label={t("Contact Phone")} name="emergency_contact_phone" register={register} errors={errors} placeholder="+62 812 3456 7890" icon={<Phone className="h-4 w-4 text-red-600" />} />
             <SelectField
-              label="Relationship"
+              label={t("Relationship")}
               name="emergency_contact_relationship"
               register={register}
               errors={errors}
               icon={<Users className="h-4 w-4 text-pink-600" />}
               options={[
-                { value: '', label: '-- Pilih Hubungan --' },
-                { value: 'Suami', label: 'Suami' },
-                { value: 'Istri', label: 'Istri' },
-                { value: 'Orang Tua', label: 'Orang Tua' },
-                { value: 'Ayah', label: 'Ayah' },
-                { value: 'Ibu', label: 'Ibu' },
-                { value: 'Anak', label: 'Anak' },
-                { value: 'Saudara', label: 'Saudara' },
-                { value: 'Kakak', label: 'Kakak' },
-                { value: 'Adik', label: 'Adik' },
-                { value: 'Lainnya', label: 'Lainnya' },
+                { value: '', label: t('-- Pilih Hubungan --') },
+                { value: 'Suami', label: t('Suami') },
+                { value: 'Istri', label: t('Istri') },
+                { value: 'Orang Tua', label: t('Orang Tua') },
+                { value: 'Ayah', label: t('Ayah') },
+                { value: 'Ibu', label: t('Ibu') },
+                { value: 'Anak', label: t('Anak') },
+                { value: 'Saudara', label: t('Saudara') },
+                { value: 'Kakak', label: t('Kakak') },
+                { value: 'Adik', label: t('Adik') },
+                { value: 'Lainnya', label: t('Lainnya') },
               ]}
             />
-            <TextField label="Contact Address" name="emergency_contact_address" register={register} errors={errors} placeholder="Full address" icon={<MapPin className="h-4 w-4 text-red-600" />} />
+            <TextField label={t("Contact Address")} name="emergency_contact_address" register={register} errors={errors} placeholder={t("Full address")} icon={<MapPin className="h-4 w-4 text-red-600" />} />
           </div>
         </div>
       </div>
@@ -1884,111 +1655,106 @@ function Step5Review({
   companies,
   departments,
   employees,
+  compensationEditable,
 }: {
   values: EmployeeFormInput;
   companies: Company[];
   departments: Department[];
   employees: Employee[];
+  compensationEditable: boolean;
 }) {
+  useLocale();
   return (
-    <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/50 p-8 transition-all">
-      <div className="flex items-center mb-8">
-        <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl flex items-center justify-center mr-4 shadow-md">
-          <Check className="h-6 w-6 text-white" />
-        </div>
-        <div>
-          <h3 className="text-2xl font-bold text-gray-900">Review & Confirm</h3>
-          <p className="text-sm text-gray-600">Review all information before submitting</p>
-        </div>
-      </div>
+    <div className="ph-section ops-form-step">
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl border-2 border-purple-200 p-5">
+
+      <div className="ops-review-sections">
+        <div className="ph-section ops-form-section">
           <div className="flex items-center gap-2 mb-4">
             <User className="h-5 w-5 text-purple-600" />
-            <h4 className="font-bold text-gray-900">Personal Information</h4>
+            <h4 className="font-semibold text-gray-900">{t("Personal Information")}</h4>
           </div>
           <div className="space-y-2 text-sm">
-            <SummaryItem label="Full Name" value={values.name || '-'} />
-            <SummaryItem label="Employee ID" value={values.employee_id || 'Auto-generated'} />
-            <SummaryItem label="Gender" value={values.gender || '-'} />
-            <SummaryItem label="Date of Birth" value={values.date_of_birth || '-'} />
-            <SummaryItem label="Nationality" value={values.nationality || '-'} />
+            <SummaryItem label={t("Full Name")} value={values.name || '-'} />
+            <SummaryItem label={t("Employee ID")} value={values.employee_id || t('Auto-generated')} />
+            <SummaryItem label={t("Gender")} value={enumLabel(values.gender)} />
+            <SummaryItem label={t("Date of Birth")} value={reviewDate(values.date_of_birth)} />
+            <SummaryItem label={t("Nationality")} value={values.nationality || '-'} />
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border-2 border-blue-200 p-5">
+        <div className="ph-section ops-form-section">
           <div className="flex items-center gap-2 mb-4">
             <Briefcase className="h-5 w-5 text-blue-600" />
-            <h4 className="font-bold text-gray-900">Employment</h4>
+            <h4 className="font-semibold text-gray-900">{t("Employment")}</h4>
           </div>
           <div className="space-y-2 text-sm">
-            <SummaryItem label="Company" value={companies.find((c) => c.id === values.company_id)?.name || '-'} />
-            <SummaryItem label="Position" value={values.job_title || '-'} />
-            <SummaryItem label="Department" value={departments.find((d) => d.id === values.department_id)?.name || '-'} />
-            <SummaryItem label="Reports To" value={employees.find((e) => e.id === values.manager_id)?.name || 'No Manager (Top Level)'} />
-            <SummaryItem label="Employment Type" value={values.employment_type || '-'} />
-            <SummaryItem label="Status" value={values.employment_status || '-'} />
-            <SummaryItem label="Join Date" value={values.join_date || '-'} />
+            <SummaryItem label={t("Company")} value={companies.find((c) => c.id === values.company_id)?.name || '-'} />
+            <SummaryItem label={t("Position")} value={values.job_title || '-'} />
+            <SummaryItem label={t("Department")} value={departments.find((d) => d.id === values.department_id)?.name || '-'} />
+            <SummaryItem label={t("Reports To")} value={employees.find((e) => e.id === values.manager_id)?.name || t('No Manager (Top Level)')} />
+            <SummaryItem label={t("Employment Type")} value={enumLabel(values.employment_type)} />
+            <SummaryItem label={t("Status")} value={enumLabel(values.employment_status)} />
+            <SummaryItem label={t("Join Date")} value={reviewDate(values.join_date)} />
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl border-2 border-green-200 p-5">
+        <div className="ph-section ops-form-section">
           <div className="flex items-center gap-2 mb-4">
             <Wallet className="h-5 w-5 text-green-600" />
-            <h4 className="font-bold text-gray-900">Payroll</h4>
+            <h4 className="font-semibold text-gray-900">{t("Payroll")}</h4>
           </div>
           <div className="space-y-2 text-sm">
+            {compensationEditable ? <>
             <SummaryItem
-              label="Basic Salary"
-              value={values.basic_salary ? `${values.salary_currency} ${Number(values.basic_salary).toLocaleString()}` : '-'}
+              label={t("Basic Salary")}
+              value={values.basic_salary ? `${values.salary_currency} ${Number(values.basic_salary).toLocaleString(intlLocale())}` : '-'}
             />
-            <SummaryItem label="Pay Frequency" value={values.pay_frequency || '-'} />
-            <SummaryItem label="Pay Type" value="Gross (Pajak Ditanggung Karyawan)" />
-            <SummaryItem label="PTKP Status" value={values.ptkp_status || '-'} />
-            <SummaryItem label="Bank" value={values.bank_name ? `${values.bank_name} - ${values.bank_account_number || '-'}` : '-'} />
+            <SummaryItem label={t("Pay Frequency")} value={enumLabel(values.pay_frequency)} />
+            <SummaryItem label={t("Pay Type")} value={t("Gross (Pajak Ditanggung Karyawan)")} />
+            </> : <SummaryItem label={t("Compensation")} value={t("Not changed")} />}
+            <SummaryItem label={t("PTKP Status")} value={values.ptkp_status || '-'} />
+            <SummaryItem label={t("Bank")} value={values.bank_name ? `${values.bank_name} - ${values.bank_account_number || '-'}` : '-'} />
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl border-2 border-orange-200 p-5">
+        <div className="ph-section ops-form-section">
           <div className="flex items-center gap-2 mb-4">
             <Phone className="h-5 w-5 text-orange-600" />
-            <h4 className="font-bold text-gray-900">Contact & Address</h4>
+            <h4 className="font-semibold text-gray-900">{t("Contact & Address")}</h4>
           </div>
           <div className="space-y-2 text-sm">
-            <SummaryItem label="Personal Email" value={values.personal_email || '-'} />
-            <SummaryItem label="Office Email" value={values.has_office_email ? (values.email || '-') : 'N/A (uses personal email)'} />
-            <SummaryItem label="Phone" value={values.phone || '-'} />
-            <SummaryItem label="Mobile" value={values.mobile_number || '-'} />
-            <SummaryItem label="KTP City" value={values.city || '-'} />
-            <SummaryItem label="Current City" value={values.current_city || '-'} />
-            <SummaryItem label="Emergency Contact" value={values.emergency_contact_name ? `${values.emergency_contact_name} (${values.emergency_contact_relationship || '-'})` : '-'} />
+            <SummaryItem label={t("Personal Email")} value={values.personal_email || '-'} />
+            <SummaryItem label={t("Office Email")} value={values.has_office_email ? (values.email || '-') : t('N/A (uses personal email)')} />
+            <SummaryItem label={t("Phone")} value={values.phone || '-'} />
+            <SummaryItem label={t("Mobile")} value={values.mobile_number || '-'} />
+            <SummaryItem label={t("KTP City")} value={values.city || '-'} />
+            <SummaryItem label={t("Current City")} value={values.current_city || '-'} />
+            <SummaryItem label={t("Emergency Contact")} value={values.emergency_contact_name ? `${values.emergency_contact_name} (${enumLabel(values.emergency_contact_relationship)})` : '-'} />
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-teal-50 to-cyan-50 rounded-xl border-2 border-teal-200 p-5">
+        <div className="ph-section ops-form-section">
           <div className="flex items-center gap-2 mb-4">
             <Shield className="h-5 w-5 text-teal-600" />
-            <h4 className="font-bold text-gray-900">BPJS & Asuransi</h4>
+            <h4 className="font-semibold text-gray-900">{t("BPJS & Asuransi")}</h4>
           </div>
           <div className="space-y-2 text-sm">
-            <SummaryItem label="BPJS TK" value={values.bpjs_ketenagakerjaan_number || '-'} />
-            <SummaryItem label="BPJS Kesehatan" value={values.bpjs_kesehatan_number || '-'} />
-            <SummaryItem label="JHT" value={values.jht_registered ? 'Terdaftar' : 'Tidak'} />
-            <SummaryItem label="JP" value={values.jp_registered ? 'Terdaftar' : 'Tidak'} />
-            <SummaryItem label="Asuransi Kesehatan" value={values.medical_insurance ? 'Ya' : 'Tidak'} />
-            <SummaryItem label="Asuransi Jiwa" value={values.life_insurance ? 'Ya' : 'Tidak'} />
+            <SummaryItem label={t("BPJS TK")} value={values.bpjs_ketenagakerjaan_number || '-'} />
+            <SummaryItem label={t("BPJS Kesehatan")} value={values.bpjs_kesehatan_number || '-'} />
+            <SummaryItem label={t("JHT")} value={values.jht_registered ? t('Terdaftar') : t('Tidak')} />
+            <SummaryItem label={t("JP")} value={values.jp_registered ? t('Terdaftar') : t('Tidak')} />
+            <SummaryItem label={t("Asuransi Kesehatan")} value={values.medical_insurance ? t('Ya') : t('Tidak')} />
+            <SummaryItem label={t("Asuransi Jiwa")} value={values.life_insurance ? t('Ya') : t('Tidak')} />
           </div>
         </div>
       </div>
 
-      <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
+      <div className="ops-record-block">
         <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
         <div>
-          <h5 className="font-bold text-amber-800">Please Review</h5>
-          <p className="text-sm text-amber-700 mt-1">
-            Make sure all information is correct before submitting. You can go back to any step to make changes.
-          </p>
+          <h5 className="font-semibold text-amber-800">{t("Please Review")}</h5>
+          <p className="text-sm text-amber-700 mt-1">{t("Make sure all information is correct before submitting. You can go back to any step to make changes.")} </p>
         </div>
       </div>
     </div>
@@ -2000,12 +1766,12 @@ function Step5Review({
 // ============================================================================
 
 const baseInput =
-  'block w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-4 focus:ring-blue-100 sm:text-sm transition-all';
+  'ops-input';
 
-function FieldLabel({ label, required, icon }: { label: string; required?: boolean; icon?: React.ReactNode }) {
+function FieldLabel({ label, required, name }: { label: string; required?: boolean; icon?: React.ReactNode; name?: string }) {
+  useLocale();
   return (
-    <label className="block text-sm font-bold text-gray-900 mb-2">
-      {icon && <span className="inline-flex mr-1">{icon}</span>}
+    <label htmlFor={name} className="employee-field-label">
       {label}
       {required && <span className="text-red-500 ml-1">*</span>}
     </label>
@@ -2013,17 +1779,18 @@ function FieldLabel({ label, required, icon }: { label: string; required?: boole
 }
 
 function FieldHint({ children }: { children: React.ReactNode }) {
+  useLocale();
   return (
-    <p className="mt-1 text-xs text-gray-500">
-      <AlertCircle className="h-3 w-3 inline mr-1" />
+    <p className="employee-field-hint">
       {children}
     </p>
   );
 }
 
 function FieldError({ msg }: { msg?: string }) {
+  useLocale();
   if (!msg) return null;
-  return <p className="mt-1 text-xs text-red-500">{msg}</p>;
+  return <p className="mt-1 text-xs text-red-500">{t(msg)}</p>;
 }
 
 type FieldName = keyof EmployeeFormInput;
@@ -2049,6 +1816,7 @@ function TextField({
   hint?: string;
   icon?: React.ReactNode;
 }) {
+  useLocale();
   // Numeric fields registered with valueAsNumber so Zod preprocess gets a number
   const isNumeric = type === 'number';
   const regOpts = isNumeric
@@ -2058,8 +1826,9 @@ function TextField({
 
   return (
     <div>
-      <FieldLabel label={label} required={required} icon={icon} />
+      <FieldLabel name={name} label={label} required={required} icon={icon} />
       <input
+        id={name}
         type={type}
         {...register(name, regOpts)}
         placeholder={placeholder}
@@ -2097,11 +1866,13 @@ function SelectField({
   hint?: string;
   valueAsNumber?: boolean;
 }) {
+  useLocale();
   const errMsg = (errors[name] as { message?: string } | undefined)?.message;
   return (
     <div>
-      <FieldLabel label={label} required={required} icon={icon} />
+      <FieldLabel name={name} label={label} required={required} icon={icon} />
       <select
+        id={name}
         {...register(name, valueAsNumber ? { setValueAs: (v) => (v === '' ? undefined : Number(v)) } : undefined)}
         className={baseInput}
       >
@@ -2134,11 +1905,13 @@ function TextareaField({
   required?: boolean;
   placeholder?: string;
 }) {
+  useLocale();
   const errMsg = (errors[name] as { message?: string } | undefined)?.message;
   return (
     <div>
-      <FieldLabel label={label} required={required} />
+      <FieldLabel name={name} label={label} required={required} />
       <textarea
+        id={name}
         {...register(name)}
         rows={rows}
         placeholder={placeholder}
@@ -2150,8 +1923,9 @@ function TextareaField({
 }
 
 function SummaryItem({ label, value }: { label: string; value: string }) {
+  useLocale();
   return (
-    <div className="flex justify-between">
+    <div className="ops-review-row">
       <span className="text-gray-600">{label}</span>
       <span className="font-medium text-gray-900">{value}</span>
     </div>

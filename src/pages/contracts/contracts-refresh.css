@@ -1,0 +1,78 @@
+/* Documents > Contracts follows the existing full-width HR workspace. */
+.contracts-refresh { color:#243b32; }
+.contracts-refresh :is(.ct-page-header,.ph-page-header) { margin-bottom:22px; }
+.contracts-refresh :is(.ct-page-header,.ph-page-header) h1 { font-size:28px; line-height:1.25; letter-spacing:-.8px; color:#163e2f; margin-bottom:8px; }
+.contracts-refresh :is(.ct-page-header,.ph-page-header) p { font-size:14px; color:#718077; }
+.contracts-refresh .ct-surface { border:1px solid #e1e8e3; border-radius:12px; background:#fff; overflow:hidden; }
+.contracts-refresh .ct-tabs { padding:0 24px; margin:0; gap:26px; background:#fbfcfa; border-color:#e8eee9; }
+.contracts-refresh .ct-tabs button { padding:16px 0; font-size:13px; }
+.contracts-refresh .ct-tabs button[aria-current] { color:#176b4a; border-color:#176b4a; }
+.contracts-refresh .ct-filters { padding:22px 24px 18px; gap:14px; border-bottom:1px solid #e8eee9; }
+.contracts-refresh .ct-field :is(input,select),.contracts-refresh .ct-search { min-height:40px; border-color:#e1e8e3; border-radius:8px; }
+.contracts-refresh .ct-button,.contracts-refresh-dialog .ct-button { border-radius:8px; min-height:38px; font-weight:500; }
+.contracts-refresh .ct-primary,.contracts-refresh-dialog .ct-primary { background:#176b4a; border-color:#176b4a; color:white; }
+.contracts-refresh .ct-primary:hover:not(:disabled),.contracts-refresh-dialog .ct-primary:hover:not(:disabled) { background:#115439; }
+.contracts-refresh .ct-toolbar { padding:16px 24px; }
+.contracts-refresh .ct-metrics { gap:12px 24px; }
+.contracts-refresh .ct-metrics strong { color:#163e2f; }
+.contracts-refresh .ct-table th { background:#f8faf8; padding:12px 20px; font-size:11px; color:#718077; border-color:#edf1ed; }
+.contracts-refresh .ct-table td { padding:18px 20px; border-color:#edf1ed; font-size:13px; }
+.contracts-refresh .ct-table :is(th,td):first-child { padding-left:24px; }
+.contracts-refresh .ct-table :is(th,td):last-child { padding-right:24px; }
+.contracts-refresh .ct-table strong { font-size:13px; font-weight:600; }
+.contracts-refresh .ct-table small { font-size:11px; }
+.contracts-refresh .ct-avatar { width:38px; height:38px; background:#edf3e7; color:#4f7149; font-size:12px; font-weight:600; }
+.contracts-refresh .ct-status { padding:4px 9px; border-radius:6px; }
+.contracts-refresh .ct-pagination { padding:16px 24px; }
+.contracts-refresh .ct-notice { margin:0; padding:16px 24px; background:#fbfcfa; border-top:1px solid #edf1ed; }
+.contracts-refresh-dialog.ph-account-dialog.ct-workflow { width:min(840px,calc(100vw - 32px)); border-radius:14px; }
+.contracts-refresh-dialog > header { padding:22px 26px; background:#fbfcfa; border-color:#e1e8e3; }
+.contracts-refresh-dialog h2 { font-size:21px; color:#163e2f; }
+.contracts-refresh-dialog .ct-dialog-body { padding:22px 26px; overscroll-behavior:contain; }
+.contracts-refresh-dialog .ct-dialog-footer { padding:16px 26px; background:#fbfcfa; border-color:#e1e8e3; }
+.contracts-refresh-dialog .ct-workflow-section h3 { font-size:14px; color:#386346; }
+.contracts-refresh-dialog .ct-detail-identity { padding-bottom:18px; border-color:#e8eee9; }
+.contracts-refresh-dialog .ct-detail-grid { gap:20px 24px; }
+.contracts-refresh-dialog .ct-detail-grid dd { font-size:13px; }
+.contracts-refresh-dialog .ct-detail-salary { background:#f3f8ef; border:1px solid #dce7d5; border-radius:9px; padding:18px; }
+.contracts-refresh-dialog .ct-detail-salary dd { font-size:22px; color:#176b4a; }
+.contracts-refresh-dialog .ct-field { font-size:12px; color:#496153; }
+.contracts-refresh-dialog .ct-field :is(input,select,textarea) { font-size:13px; border-color:#e1e8e3; border-radius:8px; }
+.contracts-refresh-dialog .ct-upload-form { display:block; }
+.contracts-refresh-dialog .ct-upload-context { padding:12px 16px; background:#f5f8f2; border-radius:8px; }
+.contracts-refresh-dialog .ct-upload-form .ct-workflow-section { grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px 22px; }
+.contracts-refresh-dialog .ct-upload-form .ct-workflow-section > :is(h3,.ct-form-grid) { grid-column:1/-1; }
+.contracts-refresh-dialog .ct-upload-form .ct-workflow-section:first-of-type { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.contracts-refresh-dialog .ct-employee-picker { display:contents; }
+.contracts-refresh-dialog .ct-employee-picker .ct-feedback { grid-column:2/-1; min-height:120px; padding:16px; }
+.contracts-refresh-dialog .ct-file-picker { padding:16px; border:1px dashed #cbdaca; border-radius:8px; background:#fbfcfa; align-self:stretch; justify-content:center; overflow-wrap:anywhere; }
+.contracts-refresh-dialog .ct-file-picker input { min-width:0; }
+.contracts-refresh .ct-group-summary { padding:22px 24px; background:#fbfcfa; border-top:0; border-color:#e8eee9; }
+.contracts-refresh .ct-group-summary dd { font-size:26px; color:#163e2f; }
+.contracts-refresh .ct-expiry-notice { margin:18px 24px 0; border-radius:8px; }
+.contracts-refresh .ct-surface > .ph-section { margin:0; padding:24px; border-color:#e8eee9; }
+.contracts-refresh .ct-section-heading h2 { color:#386346; font-size:16px; }
+.contracts-refresh .ct-group-ledgers { gap:0; }
+.contracts-refresh .ct-group-ledgers > .ph-section { margin:0; padding:24px; border:0; }
+.contracts-refresh .ct-group-ledgers > .ph-section + .ph-section { border-left:1px solid #e8eee9; }
+.contracts-refresh .ct-group-table thead th { background:#f8faf8; font-size:11px; }
+.contracts-refresh .ct-group-table :is(th,td) { font-size:13px; border-color:#edf1ed; }
+@container contract-register (max-width:680px) {
+  .contracts-refresh .ct-table tr { padding:18px 16px; }
+  .contracts-refresh .ct-table td,.contracts-refresh .ct-table td:last-child { padding:0; }
+  .contracts-refresh .ct-table td:first-child { padding:0 40px 0 0; }
+}
+@media(max-width:767px) {
+  .contracts-refresh :is(.ct-page-header,.ph-page-header) h1 { font-size:25px; }
+  .contracts-refresh :is(.ct-page-header,.ph-page-header) p { font-size:13px; }
+  .contracts-refresh :is(.ct-filters,.ct-toolbar,.ct-pagination,.ct-notice,.ct-group-summary),.contracts-refresh .ct-surface > .ph-section,.contracts-refresh .ct-group-ledgers > .ph-section { padding:16px; }
+  .contracts-refresh .ct-tabs { padding:0 16px; }
+  .contracts-refresh .ct-expiry-notice { margin:16px; }
+  .contracts-refresh-dialog > header,.contracts-refresh-dialog .ct-dialog-body { padding:18px; }
+  .contracts-refresh-dialog .ct-dialog-footer { padding:14px 18px; }
+}
+@media(max-width:680px) {
+  .contracts-refresh-dialog .ct-upload-form .ct-workflow-section,.contracts-refresh-dialog .ct-upload-form .ct-workflow-section:first-of-type { grid-template-columns:minmax(0,1fr); }
+  .contracts-refresh-dialog .ct-employee-picker .ct-feedback { grid-column:auto; }
+  .contracts-refresh .ct-group-ledgers > .ph-section + .ph-section { border-left:0; border-top:1px solid #e8eee9; }
+}

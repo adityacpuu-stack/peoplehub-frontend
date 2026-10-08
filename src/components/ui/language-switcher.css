@@ -1,0 +1,11 @@
+.ph-language { position: relative; flex: 0 0 auto; }
+.ph-language > [role="group"] { display: flex; padding: 2px; gap: 2px; border: 1px solid var(--ph-line, #dce4df); border-radius: 6px; background: white; }
+.ph-language button { min-width: 34px; min-height: 32px; padding: 4px 7px; border-radius: 4px; color: #64716b; font-size: 11px; font-weight: 650; }
+.ph-language button[aria-pressed="true"] { background: #e8f1eb; color: #174d34; }
+.ph-language button:focus-visible { outline: 2px solid #267449; outline-offset: 2px; }
+.ph-language button:disabled { cursor: wait; opacity: .6; }
+.ph-language-error { position: absolute; right: 0; top: calc(100% + 8px); z-index: 60; width: 240px; padding: 10px; border: 1px solid #efd0ce; background: #fff7f6; color: #922b22; font-size: 12px; border-radius: 6px; }
+.auth-language { position: absolute; top: 20px; right: 24px; z-index: 5; }
+@media (max-width: 640px) {
+  .ph-navbar .ess-navbar-title { display: block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}

@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/i18n';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
@@ -8,8 +9,8 @@ interface TableProps {
 
 export function Table({ children, className }: TableProps) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-gray-200">
-      <table className={cn('min-w-full divide-y divide-gray-200', className)}>
+    <div className="ph-table-scroll">
+      <table className={cn('min-w-full divide-y divide-[var(--ph-line)]', className)}>
         {children}
       </table>
     </div>
@@ -26,7 +27,7 @@ export function TableHeader({ children, className }: TableProps) {
 
 export function TableBody({ children, className }: TableProps) {
   return (
-    <tbody className={cn('divide-y divide-gray-200 bg-white', className)}>
+    <tbody className={cn('divide-y divide-[var(--ph-line)] bg-white', className)}>
       {children}
     </tbody>
   );
@@ -52,7 +53,7 @@ export function TableHead({ children, className, sortable, sorted, onSort }: Tab
   return (
     <th
       className={cn(
-        'px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500',
+        'px-4 py-3 text-left text-xs font-medium text-[var(--ph-muted)]',
         sortable && 'cursor-pointer select-none hover:text-gray-700',
         className
       )}
@@ -77,10 +78,11 @@ export function TableCell({ children, className }: TableProps) {
 }
 
 export function TableEmpty({ message = 'No data available' }: { message?: string }) {
+  useLocale();
   return (
     <tr>
       <td colSpan={100} className="px-4 py-8 text-center text-gray-500">
-        {message}
+        {t(message)}
       </td>
     </tr>
   );

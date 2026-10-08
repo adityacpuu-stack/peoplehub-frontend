@@ -10,26 +10,41 @@ interface AttendanceListParams extends PaginationParams {
   end_date?: string;
 }
 
-interface CheckInRequest {
+export interface CheckInRequest {
   latitude?: number;
   longitude?: number;
   notes?: string;
   photo?: string;
+  location_accuracy_meters?: number;
 }
 
-interface AttendanceSummary {
-  total_working_days: number;
+export interface AttendanceClockSession {
+  business_date: string;
+  server_time: string;
+  attendance: Attendance | null;
+  policy: { location_required: boolean; location_enabled: boolean; photo_check_in: boolean; photo_check_out: boolean; track_break: boolean; work_location: string | null };
+}
+
+export interface AttendanceSummary {
+  total_days: number;
   present_days: number;
   absent_days: number;
   late_days: number;
-  early_leave_days: number;
-  on_leave_days: number;
-  total_work_hours: number;
+  half_days: number;
+  leave_days: number;
+  holiday_days: number;
+  wfh_days: number;
+  total_hours: number;
   total_overtime_hours: number;
-  attendance_rate: number;
+  average_check_in: string | null;
+  average_check_out: string | null;
 }
 
 export const attendanceService = {
+  getMyClock: async (): Promise<AttendanceClockSession> => {
+    const response = await api.get<ApiResponse<AttendanceClockSession>>('/attendance/me/clock');
+    return response.data.data;
+  },
   // ==========================================
   // SELF-SERVICE ROUTES
   // ==========================================
@@ -41,13 +56,13 @@ export const attendanceService = {
   },
 
   // Get my attendance history
-  getMyAttendance: async (params?: { start_date?: string; end_date?: string; page?: number; limit?: number }): Promise<PaginatedResponse<Attendance>> => {
+  getMyAttendance: async (params?: { start_date?: string; end_date?: string; status?: string; page?: number; limit?: number }): Promise<PaginatedResponse<Attendance>> => {
     const response = await api.get<PaginatedResponse<Attendance>>('/attendance/me/history', { params });
     return response.data;
   },
 
   // Get my attendance summary
-  getMySummary: async (params?: { start_date?: string; end_date?: string }): Promise<AttendanceSummary> => {
+  getMySummary: async (params: { start_date: string; end_date: string }): Promise<AttendanceSummary> => {
     const response = await api.get<ApiResponse<AttendanceSummary>>('/attendance/me/summary', { params });
     return response.data.data;
   },
@@ -59,7 +74,7 @@ export const attendanceService = {
   },
 
   // Check-out
-  checkOut: async (data?: { notes?: string }): Promise<Attendance> => {
+  checkOut: async (data?: CheckInRequest): Promise<Attendance> => {
     const response = await api.post<ApiResponse<Attendance>>('/attendance/check-out', data);
     return response.data.data;
   },

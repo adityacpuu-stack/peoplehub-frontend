@@ -1,3 +1,5 @@
+import { t, getLocale } from '@/i18n';
+import { translateError } from '@/i18n/error-message';
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import toast from 'react-hot-toast';
 
@@ -14,6 +16,7 @@ export const api = axios.create({
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const token = localStorage.getItem('token');
+    config.headers['Accept-Language'] = getLocale();
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -80,6 +83,9 @@ const ACCOUNT_STATE_CODES = new Set([
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError<unknown>) => {
+    if (!error.response && error.code !== 'ERR_CANCELED' && typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('peoplehub:network-error'));
+    }
     // responseType:'blob' (payroll + employee Excel export) makes axios deliver
     // the JSON error body as a Blob. Re-parse it so the shapes below are visible.
     const raw = error.response?.data;
@@ -94,16 +100,19 @@ api.interceptors.response.use(
     }
 
     const data = error.response?.data;
-    const serverMessage = readServerMessage(data);
+    const originalMessage = readServerMessage(data);
+    const serverMessage = originalMessage ? translateError(originalMessage) : undefined;
     const serverCode = readServerCode(data);
 
     // Backfill ONLY a real server message. Never write error.message here: it
     // would override every page's `|| 'Gagal ...'` fallback with axios internals.
-    if (serverMessage && isPlainErrorBody(data) && !data.message) {
+    if (serverMessage && isPlainErrorBody(data)) {
       data.message = serverMessage;
+      if (data.error && typeof data.error === 'object') data.error.message = serverMessage;
+      else if (typeof data.error === 'string') data.error = serverMessage;
     }
 
-    const message = serverMessage || error.message || 'An error occurred';
+    const message = serverMessage || t(error.message || 'An error occurred');
     const requestUrl = error.config?.url || '';
 
     // Skip toast for auth endpoints - let the page own the message.
@@ -122,23 +131,23 @@ api.interceptors.response.use(
       toast.error(
         serverCode && ACCOUNT_STATE_CODES.has(serverCode) && serverMessage
           ? serverMessage
-          : 'Session expired. Please login again.',
+          : t("Session expired. Please login again."),
         { id: 'api-error' }
       );
     }
     // Handle 403 - Forbidden
     else if (error.response?.status === 403 && !isAuthEndpoint) {
-      toast.error(serverMessage || 'You do not have permission to perform this action.', {
+      toast.error(serverMessage || t('You do not have permission to perform this action.'), {
         id: 'api-error',
       });
     }
     // Handle 404 - Not Found
     else if (error.response?.status === 404 && !isAuthEndpoint) {
-      toast.error(serverMessage || 'Resource not found.', { id: 'api-error' });
+      toast.error(serverMessage || t('Resource not found.'), { id: 'api-error' });
     }
     // Handle 500 - Server Error
     else if (error.response?.status === 500 && !isAuthEndpoint) {
-      toast.error(serverMessage || 'Server error. Please try again later.', { id: 'api-error' });
+      toast.error(serverMessage || t('Server error. Please try again later.'), { id: 'api-error' });
     }
     // Handle other errors (skip for auth endpoints)
     else if (!isAuthEndpoint) {

@@ -5,38 +5,32 @@ import { AnnouncementPopup } from '@/components/AnnouncementPopup';
 import { useSidebarStore } from '@/stores/sidebar.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { usePresence } from '@/hooks/usePresence';
+import { useAuditActivity } from '@/hooks/useAuditActivity';
 import { cn } from '@/lib/utils';
+import { useIsMobile } from '@/hooks/useIsMobile';
+import './shell.css';
+import './ess-shell.css';
+import '@/pages/admin/admin-refresh.css';
+import { getNavigation } from './navigation';
 
 export function Layout() {
   const { isCollapsed, isOpen } = useSidebarStore();
+  const isMobile = useIsMobile();
   const token = useAuthStore(s => s.token);
+  const user = useAuthStore(s => s.user);
+  const { isEmployee, isHR, isManager, isCEO, isGroupCEO, isSuperAdmin } = getNavigation(user);
   usePresence(token);
+  useAuditActivity(token);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className={cn('ph-shell', isEmployee && 'ess-shell', isHR && 'hr-shell', isManager && 'manager-shell', (isCEO || isGroupCEO) && 'executive-shell', isSuperAdmin && 'admin-shell', isCollapsed && 'is-sidebar-compact')}>
       <Sidebar />
       <Header />
-      <main
-        className={cn(
-          'pt-16 transition-all duration-300',
-          // Desktop: add left padding for sidebar
-          // Mobile: no padding (sidebar is overlay)
-          'lg:pl-[280px]',
-          isCollapsed && 'lg:pl-20'
-        )}
-      >
-        <div className="p-4 md:p-6">
+      <main id="main-content" tabIndex={-1} className="ph-shell-main" inert={isMobile && isOpen}>
+        <div className="ph-shell-content">
           <Outlet />
         </div>
       </main>
-
-      {/* Mobile overlay when sidebar is open */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-30 lg:hidden"
-          onClick={() => useSidebarStore.getState().setOpen(false)}
-        />
-      )}
 
       {/* Announcement Popup */}
       <AnnouncementPopup />

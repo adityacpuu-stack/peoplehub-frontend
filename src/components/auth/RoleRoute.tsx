@@ -1,6 +1,7 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth.store';
 import { FullPageSpinner } from '@/components/ui';
+import { canAnyAction, type ActionKey } from '@/lib/actions';
 
 interface RoleRouteProps {
   children: React.ReactNode;
@@ -10,22 +11,22 @@ interface RoleRouteProps {
    */
   allowedRoles?: string[];
   /**
-   * If provided, user must have at least one of these permissions (dot-notation,
-   * e.g., 'payroll.view'). Either roles OR permissions matching allows access.
+   * If provided, user must ALSO be allowed at least one of these covered
+   * actions (server-resolved `effectiveActions`). This narrows the role check;
+   * stored permission names or roles never override an action denial.
    */
-  allowedPermissions?: string[];
+  actions?: readonly ActionKey[];
+  /** Self-service exemption (e.g. the user's own employee record): skips role and action checks. */
+  allowWhen?: boolean;
 }
 
 /**
- * Role-based route guard. Use INSIDE a `ProtectedRoute` to add role gating.
+ * Role/action route guard. Use INSIDE a `ProtectedRoute`.
  *
- * Defense in depth — backend RBAC is still the source of truth, but this
- * prevents accidental UI exposure where a low-privilege user navigates to
- * a privileged URL and sees the page render (even if the API calls 403).
- *
- * Super Admin always bypasses both checks.
+ * Defense in depth — backend authorization is still the source of truth, but
+ * this prevents a user navigating to a URL whose API calls would be refused.
  */
-export function RoleRoute({ children, allowedRoles, allowedPermissions }: RoleRouteProps) {
+export function RoleRoute({ children, allowedRoles, actions, allowWhen }: RoleRouteProps) {
   const { user, isLoading } = useAuthStore();
   const location = useLocation();
 
@@ -37,27 +38,15 @@ export function RoleRoute({ children, allowedRoles, allowedPermissions }: RoleRo
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Super Admin always passes
-  if (user.roles?.includes('Super Admin')) {
+  if (user.roles?.includes('Super Admin') || allowWhen === true) {
     return <>{children}</>;
   }
 
   const userRoles = user.roles ?? [];
-  const userPermissions = user.permissions ?? [];
+  const roleOk = !allowedRoles || allowedRoles.some((r) => userRoles.includes(r));
+  const actionOk = !actions || canAnyAction(user, actions);
 
-  const roleMatch = allowedRoles
-    ? allowedRoles.some((r) => userRoles.includes(r))
-    : false;
-  const permissionMatch = allowedPermissions
-    ? allowedPermissions.some((p) => userPermissions.includes(p))
-    : false;
-
-  // Neither check provided = open
-  if (!allowedRoles && !allowedPermissions) {
-    return <>{children}</>;
-  }
-
-  if (roleMatch || permissionMatch) {
+  if (roleOk && actionOk) {
     return <>{children}</>;
   }
 

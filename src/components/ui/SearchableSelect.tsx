@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
-import { Search, ChevronDown, X, Check, Loader2 } from 'lucide-react';
+import { t, useLocale } from '@/i18n';
+import { useState, useRef, useEffect, useMemo, useId, type KeyboardEvent } from 'react';
+import { ChevronDown, X, Check, Loader2 } from 'lucide-react';
 
 interface Option {
   value: string | number;
@@ -17,6 +18,7 @@ interface SearchableSelectProps {
   loading?: boolean;
   emptyMessage?: string;
   className?: string;
+  'aria-label'?: string;
 }
 
 export function SearchableSelect({
@@ -29,11 +31,16 @@ export function SearchableSelect({
   loading = false,
   emptyMessage = 'No results found',
   className = '',
+  'aria-label': ariaLabel,
 }: SearchableSelectProps) {
+  useLocale();
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const listId = useId();
+  const [activeIndex, setActiveIndex] = useState(0);
 
   // Filter options based on search
   const filteredOptions = useMemo(() => {
@@ -62,125 +69,72 @@ export function SearchableSelect({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Focus input when dropdown opens
+  useEffect(() => { if (isOpen) inputRef.current?.focus(); }, [isOpen]);
   useEffect(() => {
-    if (isOpen && inputRef.current) {
-      inputRef.current.focus();
-    }
-  }, [isOpen]);
+    if (isOpen) document.getElementById(`${listId}-${activeIndex}`)?.scrollIntoView({ block: 'nearest' });
+  }, [activeIndex, isOpen, listId]);
 
-  const handleSelect = (optionValue: string | number) => {
-    onChange(optionValue);
-    setIsOpen(false);
+  const close = () => { setIsOpen(false); setSearch(''); };
+  const open = () => {
     setSearch('');
+    setActiveIndex(Math.max(0, options.findIndex(opt => String(opt.value) === String(value))));
+    setIsOpen(true);
   };
-
-  const handleClear = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onChange('');
-    setSearch('');
+  const handleSelect = (optionValue: string | number) => {
+    onChange(optionValue); close(); triggerRef.current?.focus();
+  };
+  const handleClear = () => {
+    onChange(''); close(); triggerRef.current?.focus();
+  };
+  const navigate = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault(); event.stopPropagation(); close(); triggerRef.current?.focus();
+    } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      setActiveIndex(index => Math.max(0, Math.min(filteredOptions.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1))));
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      if (filteredOptions[activeIndex]) handleSelect(filteredOptions[activeIndex].value);
+    }
   };
 
   return (
-    <div ref={containerRef} className={`relative ${className}`}>
-      {/* Trigger Button */}
-      <div
-        onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`
-          w-full px-4 py-2 border border-gray-200 rounded-lg text-left
-          flex items-center justify-between gap-2 min-h-[52px] cursor-pointer
-          focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500
-          ${disabled ? 'bg-gray-100 cursor-not-allowed' : ''}
-          ${isOpen ? 'ring-2 ring-blue-500/20 border-blue-500' : ''}
-          bg-white
-        `}
-      >
-        <div className={`flex-1 min-w-0 ${selectedOption ? 'text-gray-900' : 'text-gray-500'}`}>
-          {loading ? (
-            <span className="flex items-center gap-2">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Loading...
-            </span>
-          ) : selectedOption ? (
-            <div className="flex flex-col">
-              <span className="truncate font-medium text-sm">{selectedOption.label}</span>
-              {selectedOption.sublabel && (
-                <span className="text-gray-500 text-xs truncate">{selectedOption.sublabel}</span>
-              )}
-            </div>
-          ) : (
-            <span>{placeholder}</span>
-          )}
-        </div>
-        <div className="flex items-center gap-1">
-          {selectedOption && !disabled && (
-            <button
-              type="button"
-              onClick={handleClear}
-              className="p-1 hover:bg-gray-100 rounded"
-            >
-              <X className="w-4 h-4 text-gray-400" />
-            </button>
-          )}
-          <ChevronDown
-            className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-          />
-        </div>
+    <div ref={containerRef} className={`ph-select ${className}`} onBlur={event => {
+      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) close();
+    }}>
+      <div className="ph-select-trigger" data-disabled={disabled}>
+        <button ref={triggerRef} type="button" disabled={disabled} aria-label={ariaLabel}
+          aria-haspopup="listbox" aria-expanded={isOpen} aria-controls={isOpen ? listId : undefined}
+          onClick={() => isOpen ? close() : open()}
+          onKeyDown={event => { if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); open(); } }}>
+          <span className="ph-select-value">
+            {loading ? <span className="flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />{t("Loading...")}</span>
+              : selectedOption ? <><span>{selectedOption.label}</span>{selectedOption.sublabel && <small>{selectedOption.sublabel}</small>}</>
+                : <span className="text-[var(--ph-muted)]">{t(placeholder)}</span>}
+          </span>
+          <ChevronDown className="w-4 h-4 shrink-0" aria-hidden="true" />
+        </button>
+        {selectedOption && !disabled && <button type="button" className="ph-select-clear" onClick={handleClear} aria-label={t('Clear {label}', { label: selectedOption.label })}><X className="w-4 h-4" /></button>}
       </div>
-
-      {/* Dropdown */}
-      {isOpen && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
-          {/* Search Input */}
-          <div className="p-2 border-b border-gray-100">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                ref={inputRef}
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder={searchPlaceholder}
-                className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-              />
-            </div>
-          </div>
-
-          {/* Options List */}
-          <div className="max-h-60 overflow-y-auto">
-            {filteredOptions.length === 0 ? (
-              <div className="px-4 py-8 text-center text-gray-500 text-sm">
-                {emptyMessage}
-              </div>
-            ) : (
-              filteredOptions.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => handleSelect(option.value)}
-                  className={`
-                    w-full px-4 py-2.5 text-left flex items-center justify-between
-                    hover:bg-blue-50 transition-colors
-                    ${String(option.value) === String(value) ? 'bg-blue-50' : ''}
-                  `}
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className={`truncate ${String(option.value) === String(value) ? 'text-blue-700 font-medium' : 'text-gray-900'}`}>
-                      {option.label}
-                    </p>
-                    {option.sublabel && (
-                      <p className="text-xs text-gray-500 truncate">{option.sublabel}</p>
-                    )}
-                  </div>
-                  {String(option.value) === String(value) && (
-                    <Check className="w-4 h-4 text-blue-600 flex-shrink-0 ml-2" />
-                  )}
-                </button>
-              ))
-            )}
-          </div>
+      {isOpen && <div className="ph-select-popover">
+        <div className="ph-select-search">
+          <input ref={inputRef} type="text" value={search} role="combobox" aria-label={searchPlaceholder}
+            aria-autocomplete="list" aria-expanded="true" aria-controls={listId}
+            aria-activedescendant={filteredOptions[activeIndex] ? `${listId}-${activeIndex}` : undefined}
+            onChange={event => { setSearch(event.target.value); setActiveIndex(0); }} onKeyDown={navigate}
+            placeholder={t(searchPlaceholder)} className="ph-control" />
         </div>
-      )}
+        <div className="ph-select-options" id={listId} role="listbox" aria-label={ariaLabel || placeholder}>
+          {filteredOptions.map((option, index) => <button key={option.value} id={`${listId}-${index}`}
+            type="button" role="option" tabIndex={-1} aria-selected={String(option.value) === String(value)}
+            data-highlighted={index === activeIndex} onMouseMove={() => setActiveIndex(index)}
+            onMouseDown={event => event.preventDefault()} onClick={() => handleSelect(option.value)}>
+            <span className="min-w-0"><span>{option.label}</span>{option.sublabel && <small>{option.sublabel}</small>}</span>
+            {String(option.value) === String(value) && <Check className="w-4 h-4 shrink-0 ml-2" aria-hidden="true" />}
+          </button>)}
+        </div>
+        {filteredOptions.length === 0 && <div className="ph-select-empty" role="status">{t(emptyMessage)}</div>}
+      </div>}
     </div>
   );
 }

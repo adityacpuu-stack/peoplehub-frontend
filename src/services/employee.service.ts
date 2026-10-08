@@ -1,5 +1,5 @@
 import api from './api';
-import type { ApiResponse, PaginatedResponse, Employee, CreateEmployeeRequest, PaginationParams } from '@/types';
+import type { ApiResponse, PaginatedResponse, Employee, CreateEmployeeRequest, UpdateEmployeeRequest, PaginationParams } from '@/types';
 
 interface EmployeeListParams extends PaginationParams {
   company_id?: number;
@@ -105,7 +105,7 @@ export const employeeService = {
   },
 
   // Update employee
-  update: async (id: number, data: Partial<CreateEmployeeRequest>): Promise<Employee> => {
+  update: async (id: number, data: UpdateEmployeeRequest): Promise<Employee> => {
     const response = await api.put<ApiResponse<Employee>>(`/employees/${id}`, data);
     return response.data.data;
   },

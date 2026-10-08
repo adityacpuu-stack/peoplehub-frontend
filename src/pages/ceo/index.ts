@@ -15,5 +15,4 @@ export { CEOLeadershipTeamPage } from './CEOLeadershipTeamPage';
 export { CEOSuccessionPlanningPage } from './CEOSuccessionPlanningPage';
 export { CEOPerformanceSummaryPage } from './CEOPerformanceSummaryPage';
 export { CEOTalentOverviewPage } from './CEOTalentOverviewPage';
-export { CEOAnnouncementsPage } from './CEOAnnouncementsPage';
 export { CEOPayrollReportPage } from './CEOPayrollReportPage';

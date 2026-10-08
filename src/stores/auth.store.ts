@@ -1,3 +1,4 @@
+import { syncAccountLocale } from '@/i18n';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { User } from '@/types';
@@ -13,11 +14,17 @@ interface AuthState {
   checkAuth: () => Promise<void>;
   setUser: (user: User) => void;
   refreshUser: () => Promise<void>;
+  /** Re-read /auth/me (role/action changes) if the last read is older than maxAgeMs. */
+  refreshUserIfStale: (maxAgeMs?: number) => Promise<void>;
 }
+
+// Shared across callers so focus/navigation/explicit refreshes never stack up.
+let inflightRefresh: Promise<void> | null = null;
+let lastRefreshAt = 0;
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: null,
       token: null,
       isAuthenticated: false,
@@ -25,6 +32,7 @@ export const useAuthStore = create<AuthState>()(
 
       login: async (email: string, password: string) => {
         const response = await authService.login({ email, password });
+        syncAccountLocale(response.user.language);
         localStorage.setItem('token', response.token);
         if (response.refreshToken) {
           localStorage.setItem('refreshToken', response.refreshToken);
@@ -34,6 +42,7 @@ export const useAuthStore = create<AuthState>()(
           token: response.token,
           isAuthenticated: true,
         });
+        lastRefreshAt = Date.now();
       },
 
       logout: async () => {
@@ -60,12 +69,14 @@ export const useAuthStore = create<AuthState>()(
 
         try {
           const user = await authService.me();
+          syncAccountLocale(user.language);
           set({
             user,
             token,
             isAuthenticated: true,
             isLoading: false,
           });
+          lastRefreshAt = Date.now();
         } catch {
           localStorage.removeItem('token');
           set({
@@ -78,6 +89,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       setUser: (user: User) => {
+        syncAccountLocale(user.language);
         set({ user });
       },
 
@@ -86,13 +98,29 @@ export const useAuthStore = create<AuthState>()(
         if (!token) {
           return;
         }
+        // One request at a time; concurrent callers share it.
+        if (inflightRefresh) return inflightRefresh;
+        inflightRefresh = (async () => {
+          try {
+            const user = await authService.me();
+            // Ignore a response that belongs to a session which has since been
+            // logged out or replaced (stale tab / concurrent logout).
+            if (localStorage.getItem('token') !== token || !get().isAuthenticated) return;
+            syncAccountLocale(user.language);
+            set({ user });
+            lastRefreshAt = Date.now();
+          } catch (error) {
+            console.error('Failed to refresh user:', error);
+          } finally {
+            inflightRefresh = null;
+          }
+        })();
+        return inflightRefresh;
+      },
 
-        try {
-          const user = await authService.me();
-          set({ user });
-        } catch (error) {
-          console.error('Failed to refresh user:', error);
-        }
+      refreshUserIfStale: async (maxAgeMs = 60_000) => {
+        if (!get().isAuthenticated || Date.now() - lastRefreshAt < maxAgeMs) return;
+        await get().refreshUser();
       },
     }),
     {

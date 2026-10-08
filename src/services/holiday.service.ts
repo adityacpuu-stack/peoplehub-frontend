@@ -35,7 +35,7 @@ export interface CreateHolidayDTO {
   name: string;
   date: string;
   type: string;
-  company_id?: number;
+  company_id?: number | null;
   description?: string;
   is_recurring?: boolean;
 }
@@ -88,48 +88,9 @@ class HolidayService {
     skipped: number;
     errors: string[];
   }> {
-    try {
-      // First try bulk create
-      const response = await api.post('/holidays/bulk', {
-        holidays,
-        company_id,
-        skip_duplicates: true  // Skip if holiday with same date already exists
-      });
-      return {
-        success: true,
-        created: response.data.created || holidays.length,
-        skipped: response.data.skipped || 0,
-        errors: response.data.errors || [],
-      };
-    } catch (error: any) {
-      console.error('Failed to sync holidays to backend:', error);
-
-      // If bulk fails, try seed endpoint as fallback
-      if (holidays.length > 0) {
-        const year = new Date(holidays[0].date).getFullYear();
-        try {
-          const seedResponse = await api.post(`/holidays/seed/${year}`);
-          return {
-            success: true,
-            created: seedResponse.data.created || 0,
-            skipped: 0,
-            errors: [],
-          };
-        } catch (seedError: any) {
-          console.error('Seed fallback also failed:', seedError);
-        }
-      }
-
-      return {
-        success: false,
-        created: 0,
-        skipped: 0,
-        // No `|| error.message` here: this string is rendered into the sync error
-        // LIST in the UI, so an axios internal ("Request failed with status code
-        // 400") would be shown to the user as if it were a real reason.
-        errors: [error.response?.data?.message || 'Failed to sync holidays'],
-      };
-    }
+    const response = await api.post('/holidays/bulk', { holidays, company_id });
+    const errors = (response.data.errorDetails ?? []).map((item: { error: string }) => item.error);
+    return { success: response.data.errors === 0, created: response.data.created ?? 0, skipped: response.data.skipped ?? 0, errors };
   }
 
   /**
@@ -161,45 +122,12 @@ class HolidayService {
   /**
    * Get holidays from backend database
    * Used to verify what's actually stored for payroll calculations
-   * Note: This uses fetch instead of axios to avoid global interceptor toasts
+   * Uses the authenticated API client and propagates failures to the page.
    */
   async getFromBackend(year: number, company_id?: number): Promise<Holiday[]> {
-    try {
-      const token = localStorage.getItem('token');
-      const baseUrl = import.meta.env.VITE_API_URL || '/api/v1';
-      const params = new URLSearchParams({ year: String(year) });
-      if (company_id) params.append('company_id', String(company_id));
-
-      const response = await fetch(`${baseUrl}/holidays/calendar?${params}`, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-        },
-      });
-
-      if (!response.ok) {
-        // Silently handle errors - don't throw, just return empty array
-        console.warn(`Holiday calendar returned ${response.status}`);
-        return [];
-      }
-
-      const data = await response.json();
-
-      // Backend returns { year, month, holidays, calendar, total }
-      // We need to extract the holidays array
-      if (data && Array.isArray(data.holidays)) {
-        return data.holidays;
-      }
-      // Fallback: if response is directly an array
-      if (Array.isArray(data)) {
-        return data;
-      }
-      return [];
-    } catch (error) {
-      // Silently handle network errors - database might be empty
-      console.warn('Failed to fetch holidays from backend:', error);
-      return [];
-    }
+    const response = await api.get('/holidays/calendar', { params: { year, company_id } });
+    if (!Array.isArray(response.data.holidays)) throw new Error('Respons kalender tidak valid');
+    return response.data.holidays.map((holiday: Holiday) => ({ ...holiday, date: holiday.date.split('T')[0] }));
   }
 
   async list(query: HolidayListQuery = {}): Promise<PaginatedResponse<Holiday>> {
@@ -334,7 +262,7 @@ class HolidayService {
       month,
       total_days: totalDays,
       working_days: workingDays,
-      holiday_count: monthHolidays.length,
+      holiday_count: workingDays - actualWorkingDays,
       actual_working_days: actualWorkingDays,
       holidays: monthHolidays,
     };
@@ -395,7 +323,7 @@ class HolidayService {
       month,
       total_days: totalDays,
       working_days: workingDays,
-      holiday_count: periodHolidays.length,
+      holiday_count: workingDays - actualWorkingDays,
       actual_working_days: actualWorkingDays,
       holidays: periodHolidays,
     };
@@ -412,32 +340,20 @@ class HolidayService {
    * This is the same API that Laravel HRIS uses
    */
   async fetchPublicHolidaysIndonesia(year: number): Promise<CreateHolidayDTO[]> {
-    try {
-      const response = await fetch(`${HOLIDAY_API_BASE}?year=${year}`);
-
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      // Filter only national holidays and map to our format
-      const holidays: CreateHolidayDTO[] = data
-        .filter((h: any) => h.is_national_holiday === true)
-        .map((h: any) => ({
-          name: h.holiday_name,
-          date: h.holiday_date,
-          type: this.detectHolidayType(h.holiday_name),
-          is_recurring: false,
-          description: undefined,
-        }));
-
-      return holidays;
-    } catch (error) {
-      console.error('Failed to fetch from public API:', error);
-      // Return fallback data if API fails
-      return this.getFallbackHolidays(year);
-    }
+    const response = await fetch(`${HOLIDAY_API_BASE}?year=${year}`);
+    if (!response.ok) throw new Error('Sumber hari libur tidak tersedia. Belum ada data yang diimpor.');
+    const data: unknown = await response.json();
+    if (!Array.isArray(data)) throw new Error('Respons sumber hari libur tidak valid');
+    return data.filter(h => h.is_national_holiday === true).map(h => {
+      if (typeof h.holiday_name !== 'string' || typeof h.holiday_date !== 'string') throw new Error('Data hari libur tidak valid');
+      const match = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(h.holiday_date);
+      if (!match) throw new Error('Tanggal hari libur tidak valid');
+      const [, y, m, d] = match;
+      const date = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+      const parsed = new Date(`${date}T00:00:00.000Z`);
+      if (Number(y) !== year || !Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) throw new Error('Tanggal hari libur tidak valid');
+      return { name: h.holiday_name, date, type: this.detectHolidayType(h.holiday_name), is_recurring: false };
+    });
   }
 
   /**
@@ -467,31 +383,6 @@ class HolidayService {
     return 'national';
   }
 
-  /**
-   * Fallback holiday data if API is unavailable
-   */
-  private getFallbackHolidays(year: number): CreateHolidayDTO[] {
-    const holidays2026 = [
-      { date: '2026-01-01', name: 'Tahun Baru Masehi', type: 'national' },
-      { date: '2026-02-17', name: 'Tahun Baru Imlek', type: 'religious' },
-      { date: '2026-03-19', name: 'Hari Raya Nyepi', type: 'religious' },
-      { date: '2026-03-20', name: 'Hari Raya Idul Fitri (Hari 1)', type: 'religious' },
-      { date: '2026-03-21', name: 'Hari Raya Idul Fitri (Hari 2)', type: 'religious' },
-      { date: '2026-04-03', name: 'Wafat Isa Almasih', type: 'religious' },
-      { date: '2026-05-01', name: 'Hari Buruh Internasional', type: 'national' },
-      { date: '2026-05-14', name: 'Kenaikan Isa Almasih', type: 'religious' },
-      { date: '2026-05-27', name: 'Hari Raya Idul Adha', type: 'religious' },
-      { date: '2026-06-01', name: 'Hari Lahir Pancasila', type: 'national' },
-      { date: '2026-06-01', name: 'Hari Raya Waisak', type: 'religious' },
-      { date: '2026-06-17', name: 'Tahun Baru Islam 1448 H', type: 'religious' },
-      { date: '2026-08-17', name: 'Hari Kemerdekaan RI', type: 'national' },
-      { date: '2026-08-26', name: 'Maulid Nabi Muhammad SAW', type: 'religious' },
-      { date: '2026-12-25', name: 'Hari Raya Natal', type: 'religious' },
-    ];
-
-    if (year === 2026) return holidays2026;
-    return [];
-  }
 }
 
 export const holidayService = new HolidayService();

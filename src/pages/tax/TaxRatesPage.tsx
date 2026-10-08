@@ -1,16 +1,8 @@
+import { insightNumber } from '@/pages/ceo/insight-display';
+import { t, useLocale, intlLocale } from '@/i18n';
+import './tax-workflows.css';
 import { useState } from 'react';
-import {
-  Percent,
-  Edit2,
-  Save,
-  X,
-  Info,
-  AlertTriangle,
-  CheckCircle,
-  History,
-  Calendar,
-  TrendingUp,
-} from 'lucide-react';
+import { Info, AlertTriangle, CheckCircle, History } from 'lucide-react';
 
 interface TaxBracket {
   id: string;
@@ -94,10 +86,11 @@ const bpjsRates: BPJSRate[] = [
 ];
 
 export function TaxRatesPage() {
+  useLocale();
   const [activeTab, setActiveTab] = useState<'pph21' | 'pph23' | 'bpjs'>('pph21');
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('id-ID', {
+    return new Intl.NumberFormat(intlLocale(), {
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0,
@@ -116,82 +109,44 @@ export function TaxRatesPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="ph-workflow tax-workflow">
       {/* Header */}
-      <div className="bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 rounded-2xl p-6 text-white">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm">
-              <Percent className="w-8 h-8" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold">Tax Rates</h1>
-              <p className="text-emerald-100">Tarif pajak PPh 21, PPh 23, dan BPJS</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 px-4 py-2 bg-white/20 rounded-lg backdrop-blur-sm">
-            <Calendar className="w-4 h-4" />
-            <span className="text-sm">Berlaku: Tahun Pajak 2024/2025</span>
-          </div>
-        </div>
-      </div>
+      <header className="ph-page-header tax-page-header"><div><h1>{t("Tax Rates")}</h1><p>{t("Tarif pajak PPh 21, PPh 23, dan BPJS")}</p></div><div className="ph-actions tax-header-actions"><span className="text-sm">{t("Berlaku: Tahun Pajak 2024/2025")}</span></div></header>
+      <p className="ph-callout tax-notice" role="note">{t("Referensi tarif pada halaman ini mengikuti periode yang tercantum. Halaman ini tidak mengubah konfigurasi atau perhitungan payroll.")}</p>
 
       {/* Info Alert */}
-      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+      <div className="ph-section tax-section tax-reference-note">
         <div className="flex items-start gap-3">
-          <div className="p-2 bg-blue-100 rounded-lg">
-            <Info className="w-5 h-5 text-blue-600" />
-          </div>
+          <Info className="w-5 h-5 text-blue-600" />
           <div>
-            <p className="font-medium text-blue-800">Informasi Tarif Pajak</p>
-            <p className="text-sm text-blue-600 mt-1">
-              Tarif pajak ini sesuai dengan peraturan perpajakan yang berlaku. Perubahan tarif akan diperbarui secara
-              otomatis berdasarkan regulasi terbaru dari Direktorat Jenderal Pajak.
-            </p>
+            <p className="font-medium text-blue-800">{t("Informasi Tarif Pajak")}</p>
+            <p className="text-sm text-blue-600 mt-1">{t("Tabel ini menampilkan referensi untuk periode yang tercantum. Tarif pada halaman ini tidak diperbarui otomatis dan tidak mengubah pengaturan perhitungan payroll.")} </p>
           </div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+      <div className="ph-section tax-section">
         <div className="border-b border-gray-100">
           <div className="flex">
-            <button
+            <button aria-pressed={activeTab === 'pph21'} type="button"
               onClick={() => setActiveTab('pph21')}
-              className={`flex-1 px-6 py-4 text-sm font-medium transition-colors relative ${
-                activeTab === 'pph21'
-                  ? 'text-emerald-600'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              PPh 21
-              {activeTab === 'pph21' && (
+              className="tax-tab"
+            >{t("PPh 21")} {activeTab === 'pph21' && (
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500"></div>
               )}
             </button>
-            <button
+            <button aria-pressed={activeTab === 'pph23'} type="button"
               onClick={() => setActiveTab('pph23')}
-              className={`flex-1 px-6 py-4 text-sm font-medium transition-colors relative ${
-                activeTab === 'pph23'
-                  ? 'text-emerald-600'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              PPh 23
-              {activeTab === 'pph23' && (
+              className="tax-tab"
+            >{t("PPh 23")} {activeTab === 'pph23' && (
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500"></div>
               )}
             </button>
-            <button
+            <button aria-pressed={activeTab === 'bpjs'} type="button"
               onClick={() => setActiveTab('bpjs')}
-              className={`flex-1 px-6 py-4 text-sm font-medium transition-colors relative ${
-                activeTab === 'bpjs'
-                  ? 'text-emerald-600'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              BPJS
-              {activeTab === 'bpjs' && (
+              className="tax-tab"
+            >{t("BPJS")} {activeTab === 'bpjs' && (
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500"></div>
               )}
             </button>
@@ -204,30 +159,20 @@ export function TaxRatesPage() {
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Tarif Progresif PPh 21</h3>
-                  <p className="text-sm text-gray-500 mt-1">Berdasarkan UU HPP No. 7 Tahun 2021</p>
+                  <h3 className="text-lg font-semibold text-gray-900">{t("Tarif Progresif PPh 21")}</h3>
+                  <p className="text-sm text-gray-500 mt-1">{t("Berdasarkan UU HPP No. 7 Tahun 2021")}</p>
                 </div>
-                <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-sm font-medium">
-                  Aktif
-                </span>
+                <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-sm font-medium">{t("Aktif")} </span>
               </div>
 
-              <div className="overflow-x-auto">
+              <div className="ph-table-scroll tax-table-scroll">
                 <table className="w-full">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                        Layer
-                      </th>
-                      <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                        Penghasilan Kena Pajak (PKP)
-                      </th>
-                      <th className="text-center px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                        Tarif
-                      </th>
-                      <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                        Keterangan
-                      </th>
+                      <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500">{t("Layer")} </th>
+                      <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500">{t("Penghasilan Kena Pajak (PKP)")} </th>
+                      <th className="text-center px-6 py-4 text-xs font-semibold text-gray-500">{t("Tarif")} </th>
+                      <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500">{t("Keterangan")} </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -235,7 +180,7 @@ export function TaxRatesPage() {
                       <tr key={bracket.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4">
                           <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 font-semibold text-sm">
-                            {index + 1}
+                            {insightNumber(index + 1)}
                           </span>
                         </td>
                         <td className="px-6 py-4">
@@ -245,10 +190,10 @@ export function TaxRatesPage() {
                         </td>
                         <td className="px-6 py-4 text-center">
                           <span className="inline-flex items-center px-3 py-1 rounded-full bg-blue-100 text-blue-700 font-bold">
-                            {bracket.rate}%
+                            {insightNumber(bracket.rate)}%
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-gray-500">{bracket.description}</td>
+                        <td className="px-6 py-4 text-gray-500">{t(bracket.description)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -256,15 +201,12 @@ export function TaxRatesPage() {
               </div>
 
               {/* TER Info */}
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mt-6">
+              <div className="ph-section tax-section">
                 <div className="flex items-start gap-3">
                   <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
                   <div>
-                    <p className="font-medium text-amber-800">Catatan TER (Tarif Efektif Rata-rata)</p>
-                    <p className="text-sm text-amber-600 mt-1">
-                      Mulai Januari 2024, pemotongan PPh 21 bulanan menggunakan TER (Tarif Efektif Rata-rata) sesuai PP
-                      58/2023. Tarif progresif di atas digunakan untuk perhitungan PPh 21 tahunan.
-                    </p>
+                    <p className="font-medium text-amber-800">{t("Catatan TER (Tarif Efektif Rata-rata)")}</p>
+                    <p className="text-sm text-amber-600 mt-1">{t("Mulai Januari 2024, pemotongan PPh 21 bulanan menggunakan TER (Tarif Efektif Rata-rata) sesuai PP 58/2023. Tarif progresif di atas digunakan untuk perhitungan PPh 21 tahunan.")} </p>
                   </div>
                 </div>
               </div>
@@ -276,34 +218,26 @@ export function TaxRatesPage() {
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Tarif PPh 23</h3>
-                  <p className="text-sm text-gray-500 mt-1">Pajak atas penghasilan dari modal, jasa, dan hadiah</p>
+                  <h3 className="text-lg font-semibold text-gray-900">{t("Tarif PPh 23")}</h3>
+                  <p className="text-sm text-gray-500 mt-1">{t("Pajak atas penghasilan dari modal, jasa, dan hadiah")}</p>
                 </div>
-                <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-sm font-medium">
-                  Aktif
-                </span>
+                <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-sm font-medium">{t("Aktif")} </span>
               </div>
 
-              <div className="overflow-x-auto">
+              <div className="ph-table-scroll tax-table-scroll">
                 <table className="w-full">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                        Jenis Penghasilan
-                      </th>
-                      <th className="text-center px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                        Tarif
-                      </th>
-                      <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                        Keterangan
-                      </th>
+                      <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500">{t("Jenis Penghasilan")} </th>
+                      <th className="text-center px-6 py-4 text-xs font-semibold text-gray-500">{t("Tarif")} </th>
+                      <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500">{t("Keterangan")} </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {pph23Rates.map((rate) => (
                       <tr key={rate.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4">
-                          <span className="font-medium text-gray-900">{rate.type}</span>
+                          <span className="font-medium text-gray-900">{t(rate.type)}</span>
                         </td>
                         <td className="px-6 py-4 text-center">
                           <span
@@ -313,10 +247,10 @@ export function TaxRatesPage() {
                                 : 'bg-blue-100 text-blue-700'
                             }`}
                           >
-                            {rate.rate}%
+                            {insightNumber(rate.rate)}%
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-gray-500">{rate.description}</td>
+                        <td className="px-6 py-4 text-gray-500">{t(rate.description)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -324,11 +258,9 @@ export function TaxRatesPage() {
               </div>
 
               {/* Note */}
-              <div className="bg-gray-50 rounded-xl p-4">
+              <div className="ph-section tax-section">
                 <p className="text-sm text-gray-600">
-                  <strong>Catatan:</strong> WP yang tidak memiliki NPWP dikenakan tarif lebih tinggi 100% dari tarif
-                  normal. Tarif PPh 23 atas jasa tertentu dapat berbeda sesuai dengan ketentuan yang berlaku.
-                </p>
+                  <strong>{t("Catatan:")}</strong>{t("WP yang tidak memiliki NPWP dikenakan tarif lebih tinggi 100% dari tarif normal. Tarif PPh 23 atas jasa tertentu dapat berbeda sesuai dengan ketentuan yang berlaku.")} </p>
               </div>
             </div>
           )}
@@ -338,33 +270,21 @@ export function TaxRatesPage() {
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Tarif Iuran BPJS</h3>
-                  <p className="text-sm text-gray-500 mt-1">BPJS Kesehatan dan BPJS Ketenagakerjaan</p>
+                  <h3 className="text-lg font-semibold text-gray-900">{t("Tarif Iuran BPJS")}</h3>
+                  <p className="text-sm text-gray-500 mt-1">{t("BPJS Kesehatan dan BPJS Ketenagakerjaan")}</p>
                 </div>
-                <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-sm font-medium">
-                  Aktif 2025
-                </span>
+                <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-sm font-medium">{t("Aktif 2025")} </span>
               </div>
 
-              <div className="overflow-x-auto">
+              <div className="ph-table-scroll tax-table-scroll">
                 <table className="w-full">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                        Program
-                      </th>
-                      <th className="text-center px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                        Karyawan
-                      </th>
-                      <th className="text-center px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                        Perusahaan
-                      </th>
-                      <th className="text-center px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                        Total
-                      </th>
-                      <th className="text-right px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                        Batas Gaji
-                      </th>
+                      <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500">{t("Program")} </th>
+                      <th className="text-center px-6 py-4 text-xs font-semibold text-gray-500">{t("Karyawan")} </th>
+                      <th className="text-center px-6 py-4 text-xs font-semibold text-gray-500">{t("Perusahaan")} </th>
+                      <th className="text-center px-6 py-4 text-xs font-semibold text-gray-500">{t("Total")} </th>
+                      <th className="text-right px-6 py-4 text-xs font-semibold text-gray-500">{t("Batas Gaji")} </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -372,30 +292,30 @@ export function TaxRatesPage() {
                       <tr key={rate.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4">
                           <div>
-                            <span className="font-medium text-gray-900">{rate.program}</span>
-                            <p className="text-sm text-gray-500">{rate.description}</p>
+                            <span className="font-medium text-gray-900">{t(rate.program)}</span>
+                            <p className="text-sm text-gray-500">{t(rate.description)}</p>
                           </div>
                         </td>
                         <td className="px-6 py-4 text-center">
                           <span className="inline-flex items-center px-3 py-1 rounded-full bg-blue-100 text-blue-700 font-bold">
-                            {rate.employeeRate}%
+                            {insightNumber(rate.employeeRate)}%
                           </span>
                         </td>
                         <td className="px-6 py-4 text-center">
                           <span className="inline-flex items-center px-3 py-1 rounded-full bg-purple-100 text-purple-700 font-bold">
-                            {rate.companyRate}%
+                            {insightNumber(rate.companyRate)}%
                           </span>
                         </td>
                         <td className="px-6 py-4 text-center">
                           <span className="inline-flex items-center px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 font-bold">
-                            {rate.employeeRate + rate.companyRate}%
+                            {insightNumber(rate.employeeRate + rate.companyRate)}%
                           </span>
                         </td>
                         <td className="px-6 py-4 text-right">
                           {rate.maxSalary ? (
                             <span className="text-gray-900">{formatCurrency(rate.maxSalary)}</span>
                           ) : (
-                            <span className="text-gray-400">Tidak ada</span>
+                            <span className="text-gray-400">{t("Tidak ada")}</span>
                           )}
                         </td>
                       </tr>
@@ -406,35 +326,35 @@ export function TaxRatesPage() {
 
               {/* Summary Cards */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-                <div className="bg-blue-50 rounded-xl p-4">
-                  <p className="text-sm text-gray-500">Total Iuran Karyawan</p>
+                <div className="ph-section tax-section">
+                  <p className="text-sm text-gray-500">{t("Total Iuran Karyawan")}</p>
                   <p className="text-2xl font-bold text-blue-600">4%</p>
-                  <p className="text-xs text-gray-400 mt-1">JHT 2% + JP 1% + Kes 1%</p>
+                  <p className="text-xs text-gray-400 mt-1">{t("JHT 2% + JP 1% + Kes 1%")}</p>
                 </div>
-                <div className="bg-purple-50 rounded-xl p-4">
-                  <p className="text-sm text-gray-500">Total Iuran Perusahaan</p>
+                <div className="ph-section tax-section">
+                  <p className="text-sm text-gray-500">{t("Total Iuran Perusahaan")}</p>
                   <p className="text-2xl font-bold text-purple-600">10.24%</p>
-                  <p className="text-xs text-gray-400 mt-1">JKK + JKM + JHT + JP + Kes</p>
+                  <p className="text-xs text-gray-400 mt-1">{t("JKK + JKM + JHT + JP + Kes")}</p>
                 </div>
-                <div className="bg-emerald-50 rounded-xl p-4">
-                  <p className="text-sm text-gray-500">Total Keseluruhan</p>
+                <div className="ph-section tax-section">
+                  <p className="text-sm text-gray-500">{t("Total Keseluruhan")}</p>
                   <p className="text-2xl font-bold text-emerald-600">14.24%</p>
-                  <p className="text-xs text-gray-400 mt-1">Karyawan + Perusahaan</p>
+                  <p className="text-xs text-gray-400 mt-1">{t("Karyawan + Perusahaan")}</p>
                 </div>
               </div>
 
               {/* JKK Categories Note */}
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+              <div className="ph-section tax-section">
                 <div className="flex items-start gap-3">
                   <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
                   <div>
-                    <p className="font-medium text-amber-800">Tarif JKK Berdasarkan Kategori Risiko</p>
+                    <p className="font-medium text-amber-800">{t("Tarif JKK Berdasarkan Kategori Risiko")}</p>
                     <div className="text-sm text-amber-600 mt-2 space-y-1">
-                      <p>• Kategori I (Sangat Rendah): 0.24%</p>
-                      <p>• Kategori II (Rendah): 0.54%</p>
-                      <p>• Kategori III (Sedang): 0.89%</p>
-                      <p>• Kategori IV (Tinggi): 1.27%</p>
-                      <p>• Kategori V (Sangat Tinggi): 1.74%</p>
+                      <p>{t("• Kategori I (Sangat Rendah): 0.24%")}</p>
+                      <p>{t("• Kategori II (Rendah): 0.54%")}</p>
+                      <p>{t("• Kategori III (Sedang): 0.89%")}</p>
+                      <p>{t("• Kategori IV (Tinggi): 1.27%")}</p>
+                      <p>{t("• Kategori V (Sangat Tinggi): 1.74%")}</p>
                     </div>
                   </div>
                 </div>
@@ -448,11 +368,11 @@ export function TaxRatesPage() {
       <div className="flex items-center justify-between text-sm text-gray-500">
         <div className="flex items-center gap-2">
           <History className="w-4 h-4" />
-          <span>Terakhir diperbarui: 1 Januari 2025</span>
+          <span>{t("Terakhir diperbarui: 1 Januari 2025")}</span>
         </div>
         <div className="flex items-center gap-2">
           <CheckCircle className="w-4 h-4 text-emerald-500" />
-          <span>Sesuai dengan peraturan perpajakan yang berlaku</span>
+          <span>{t("Referensi sesuai periode yang tercantum")}</span>
         </div>
       </div>
     </div>

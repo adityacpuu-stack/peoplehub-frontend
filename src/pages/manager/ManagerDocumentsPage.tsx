@@ -1,28 +1,10 @@
+import { isAxiosError } from 'axios';
+import { quantity } from '@/components/leave/presentation';
+import { t, useLocale, intlLocale } from '@/i18n';
+import '@/pages/employees/operations-workflows.css';
+import { Modal } from '@/components/ui/Modal';
 import { useState, useEffect, useRef } from 'react';
-import {
-  FileText,
-  Download,
-  Eye,
-  Search,
-  Filter,
-  Calendar,
-  FileSignature,
-  File,
-  FileSpreadsheet,
-  Upload,
-  Plus,
-  X,
-  CheckCircle,
-  AlertCircle,
-  Clock,
-  Loader2,
-  Trash2,
-  Shield,
-  FileImage,
-  FileArchive,
-  Building2,
-  FolderUp,
-} from 'lucide-react';
+import { FileText, Download, Eye, Search, Filter, Calendar, FileSignature, File, FileSpreadsheet, Upload, Plus, X, CheckCircle, Clock, Loader2, Trash2, Shield, FileImage, FileArchive, Building2, FolderUp } from 'lucide-react';
 import { documentService, EMPLOYEE_DOCUMENT_TYPES } from '@/services/document.service';
 import type { EmployeeDocument } from '@/services/document.service';
 import { useAuthStore } from '@/stores/auth.store';
@@ -31,6 +13,7 @@ import toast from 'react-hot-toast';
 type TabType = 'from-hr' | 'my-uploads';
 
 export function ManagerDocumentsPage() {
+  useLocale();
   const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState<TabType>('from-hr');
   const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
@@ -41,6 +24,8 @@ export function ManagerDocumentsPage() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState<EmployeeDocument | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [deletingDocument, setDeletingDocument] = useState<EmployeeDocument | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Upload form state
@@ -64,9 +49,9 @@ export function ManagerDocumentsPage() {
     try {
       const data = await documentService.getMyDocuments();
       setDocuments(data);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to fetch documents:', error);
-      toast.error(error.response?.data?.error?.message || 'Gagal memuat dokumen', { id: 'api-error' });
+      toast.error((isAxiosError(error) && error.response?.data?.error?.message) || t("Gagal memuat dokumen"), { id: 'api-error' });
     } finally {
       setIsLoading(false);
     }
@@ -135,11 +120,11 @@ export function ManagerDocumentsPage() {
 
   const getTypeLabel = (type: string) => {
     const found = EMPLOYEE_DOCUMENT_TYPES.find((t) => t.value === type);
-    return found?.label || type;
+    return found ? t(found.label) : type;
   };
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('id-ID', {
+    return new Date(dateStr).toLocaleDateString(intlLocale(), {
       day: 'numeric',
       month: 'short',
       year: 'numeric',
@@ -149,8 +134,8 @@ export function ManagerDocumentsPage() {
   const formatFileSize = (bytes?: number) => {
     if (!bytes) return '-';
     if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toLocaleString(intlLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })} KB`;
+    return `${(bytes / (1024 * 1024)).toLocaleString(intlLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB`;
   };
 
   const stats = {
@@ -173,7 +158,7 @@ export function ManagerDocumentsPage() {
     if (file) {
       // Validate file size (10MB max)
       if (file.size > 10 * 1024 * 1024) {
-        toast.error('Ukuran file maksimal 10MB');
+        toast.error(t("Ukuran file maksimal 10MB"));
         return;
       }
       setUploadForm((prev) => ({ ...prev, file }));
@@ -184,12 +169,12 @@ export function ManagerDocumentsPage() {
     e.preventDefault();
 
     if (!uploadForm.file) {
-      toast.error('Pilih file untuk diupload');
+      toast.error(t("Pilih file untuk diupload"));
       return;
     }
 
     if (!uploadForm.document_name.trim()) {
-      toast.error('Nama dokumen harus diisi');
+      toast.error(t("Nama dokumen harus diisi"));
       return;
     }
 
@@ -199,8 +184,7 @@ export function ManagerDocumentsPage() {
       const uploadResult = await documentService.uploadFile(uploadForm.file, 'documents');
 
       // Create document record
-      await documentService.createEmployeeDocument({
-        employee_id: user?.employee?.id || 0,
+      await documentService.uploadMyDocument({
         document_name: uploadForm.document_name,
         document_type: uploadForm.document_type,
         document_number: uploadForm.document_number || undefined,
@@ -214,13 +198,13 @@ export function ManagerDocumentsPage() {
         mime_type: uploadResult.mime_type,
       });
 
-      toast.success('Dokumen berhasil diupload');
+      toast.success(t("Dokumen berhasil diupload"));
       setShowUploadModal(false);
       resetUploadForm();
       fetchDocuments();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to upload document:', error);
-      toast.error(error.response?.data?.error?.message || 'Gagal mengupload dokumen', { id: 'api-error' });
+      toast.error((isAxiosError(error) && error.response?.data?.error?.message) || t("Gagal mengupload dokumen"), { id: 'api-error' });
     } finally {
       setIsUploading(false);
     }
@@ -247,26 +231,30 @@ export function ManagerDocumentsPage() {
     setShowDetailModal(true);
   };
 
-  const handleDownload = (doc: EmployeeDocument) => {
-    if (doc.file_path) {
-      // file_path is already full S3 URL
-      window.open(doc.file_path, '_blank');
+  const handleDownload = async (doc: EmployeeDocument) => {
+    if (!doc.file_path) return;
+    try {
+      await documentService.downloadFile(doc.file_path, doc.file_name || doc.document_name);
+    } catch {
+      toast.error(t("Gagal mengunduh dokumen"), { id: 'api-error' });
     }
   };
 
   const handleDelete = async (doc: EmployeeDocument) => {
-    if (!confirm(`Apakah Anda yakin ingin menghapus dokumen "${doc.document_name}"?`)) {
-      return;
-    }
+    if (isDeleting) return;
+    setIsDeleting(true);
 
     try {
-      await documentService.deleteEmployeeDocument(doc.id);
-      toast.success('Dokumen berhasil dihapus');
+      await documentService.deleteMyDocument(doc.id);
+      toast.success(t("Dokumen berhasil dihapus"));
+      setDeletingDocument(null);
       setShowDetailModal(false);
       fetchDocuments();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to delete document:', error);
-      toast.error(error.response?.data?.error?.message || 'Gagal menghapus dokumen', { id: 'api-error' });
+      toast.error((isAxiosError(error) && error.response?.data?.error?.message) || t("Gagal menghapus dokumen"), { id: 'api-error' });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -275,57 +263,32 @@ export function ManagerDocumentsPage() {
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
-          <p className="text-gray-500">Memuat dokumen...</p>
+          <p className="text-gray-500">{t("Memuat dokumen...")}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="ph-workflow ops-workflow ops-page">
       {/* Header Banner */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-700 rounded-2xl shadow-xl">
-        <div className="px-6 py-6 relative">
-          <div className="absolute inset-0 opacity-10">
-            <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
-              <defs>
-                <pattern id="docs-grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                  <path d="M 40 0 L 0 0 0 40" fill="none" stroke="white" strokeWidth="1"/>
-                </pattern>
-              </defs>
-              <rect width="100%" height="100%" fill="url(#docs-grid)" />
-            </svg>
-          </div>
-          <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-white/20 backdrop-blur-xl rounded-xl flex items-center justify-center shadow-lg border border-white/10">
-                <FileText className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl md:text-2xl font-bold text-white">My Documents</h1>
-                <p className="text-indigo-100 text-sm">View and manage your personal documents</p>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-500/20 backdrop-blur-xl rounded-lg text-sm text-blue-100 font-medium border border-blue-500/20">
+      <header className="ph-page-header ops-page-heading"><div>
+                <h1 className="ops-page-title">{t("My Documents")}</h1>
+                <p className="text-gray-500 text-sm">{t("View and manage your personal documents")}</p>
+              </div><div className="ph-actions"><div className="flex flex-wrap items-center gap-3">
+              <span className="ops-header-count">
                 <Building2 className="h-4 w-4" />
-                {stats.fromHR} From P&C
-              </span>
-              <span className="inline-flex items-center gap-2 px-3 py-1.5 bg-purple-500/20 backdrop-blur-xl rounded-lg text-sm text-purple-100 font-medium border border-purple-500/20">
+                {quantity(stats.fromHR)}{' '}{t("From P&C")} </span>
+              <span className="ops-header-count">
                 <FolderUp className="h-4 w-4" />
-                {stats.myUploads} Uploads
-              </span>
-              <span className="inline-flex items-center gap-2 px-3 py-1.5 bg-green-500/20 backdrop-blur-xl rounded-lg text-sm text-green-100 font-medium border border-green-500/20">
+                {quantity(stats.myUploads)}{' '}{t("Uploads")} </span>
+              <span className="inline-flex items-center gap-2 px-3 py-1.5 bg-green-500/20 rounded-lg text-sm text-green-100 font-medium border border-green-500/20">
                 <CheckCircle className="h-4 w-4" />
-                {stats.fromHRVerified + stats.myUploadsVerified} Verified
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
+                {stats.fromHRVerified + stats.myUploadsVerified}{' '}{t("Verified")} </span>
+            </div></div></header>
 
       {/* Main Content with Tabs */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="ph-section ops-section">
         {/* Tabs */}
         <div className="border-b border-gray-100">
           <nav className="flex -mb-px">
@@ -339,12 +302,12 @@ export function ManagerDocumentsPage() {
             >
               <div className="flex items-center justify-center gap-2">
                 <Building2 className="w-5 h-5" />
-                <span>From P&C</span>
+                <span>{t("From P&C")}</span>
                 {stats.fromHR > 0 && (
                   <span className={`px-2 py-0.5 rounded-full text-xs ${
                     activeTab === 'from-hr' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'
                   }`}>
-                    {stats.fromHR}
+                    {quantity(stats.fromHR)}
                   </span>
                 )}
               </div>
@@ -359,12 +322,12 @@ export function ManagerDocumentsPage() {
             >
               <div className="flex items-center justify-center gap-2">
                 <FolderUp className="w-5 h-5" />
-                <span>My Uploads</span>
+                <span>{t("My Uploads")}</span>
                 {stats.myUploads > 0 && (
                   <span className={`px-2 py-0.5 rounded-full text-xs ${
                     activeTab === 'my-uploads' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'
                   }`}>
-                    {stats.myUploads}
+                    {quantity(stats.myUploads)}
                   </span>
                 )}
               </div>
@@ -380,7 +343,7 @@ export function ManagerDocumentsPage() {
               <div className="relative flex-1 max-w-md">
                 <input
                   type="text"
-                  placeholder="Search documents..."
+                  placeholder={t("Search documents...")}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
@@ -394,10 +357,10 @@ export function ManagerDocumentsPage() {
                   onChange={(e) => setFilterType(e.target.value)}
                   className="px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                 >
-                  <option value="all">All Types</option>
+                  <option value="all">{t("All Types")}</option>
                   {EMPLOYEE_DOCUMENT_TYPES.map((type) => (
                     <option key={type.value} value={type.value}>
-                      {type.label}
+                      {t(type.label)}
                     </option>
                   ))}
                 </select>
@@ -407,14 +370,12 @@ export function ManagerDocumentsPage() {
               {activeTab === 'my-uploads' && (
                 <button
                   onClick={() => setShowUploadModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+                  className="ph-button ph-button-primary"
                 >
-                  <Upload className="w-4 h-4" />
-                  Upload
-                </button>
+                  <Upload className="w-4 h-4" />{t("Upload")} </button>
               )}
 
-              <span className="text-sm text-gray-500">{filteredDocuments.length} documents</span>
+              <span className="text-sm text-gray-500">{filteredDocuments.length}{' '}{t("documents")}</span>
             </div>
           </div>
 
@@ -430,21 +391,19 @@ export function ManagerDocumentsPage() {
                   )}
                 </div>
                 <h3 className="text-lg font-semibold text-gray-900">
-                  {activeTab === 'from-hr' ? 'No documents from P&C' : 'No uploaded documents'}
+                  {activeTab === 'from-hr' ? t("No documents from P&C") : t("No uploaded documents")}
                 </h3>
                 <p className="mt-1 text-gray-500">
                   {activeTab === 'from-hr'
-                    ? 'P&C has not uploaded any documents for you yet'
-                    : 'Upload your first document to get started'}
+                    ? t("P&C has not uploaded any documents for you yet")
+                    : t("Upload your first document to get started")}
                 </p>
                 {activeTab === 'my-uploads' && (
                   <button
                     onClick={() => setShowUploadModal(true)}
-                    className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+                    className="ph-button ph-button-primary"
                   >
-                    <Plus className="w-4 h-4" />
-                    Upload Document
-                  </button>
+                    <Plus className="w-4 h-4" />{t("Upload Document")} </button>
                 )}
               </div>
             ) : (
@@ -454,27 +413,23 @@ export function ManagerDocumentsPage() {
                   className="px-6 py-4 hover:bg-gray-50 transition-colors cursor-pointer"
                   onClick={() => handleViewDetail(doc)}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center">
+                  <div className="ops-document-row">
+                    <div className="ops-document-identity">
+                      <div className="ops-document-type-icon">
                         {getDocumentIcon(doc.document_type)}
                       </div>
                       <div>
-                        <div className="flex items-center gap-2">
+                        <div className="ops-document-title">
                           <p className="font-semibold text-gray-900">{doc.document_name}</p>
                           {doc.is_verified ? (
                             <span className="flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">
-                              <CheckCircle className="w-3 h-3" />
-                              Verified
-                            </span>
+                              <CheckCircle className="w-3 h-3" />{t("Verified")} </span>
                           ) : (
                             <span className="flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">
-                              <Clock className="w-3 h-3" />
-                              Pending
-                            </span>
+                              <Clock className="w-3 h-3" />{t("Pending")} </span>
                           )}
                         </div>
-                        <div className="flex items-center gap-3 mt-1">
+                        <div className="ops-document-meta">
                           <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getTypeBadgeColor(doc.document_type)}`}>
                             {getTypeLabel(doc.document_type)}
                           </span>
@@ -488,30 +443,28 @@ export function ManagerDocumentsPage() {
                               className={`text-xs ${
                                 new Date(doc.expiry_date) < new Date() ? 'text-red-500' : 'text-gray-500'
                               }`}
-                            >
-                              Expires: {formatDate(doc.expiry_date)}
+                            >{t("Expires:")} {formatDate(doc.expiry_date)}
                             </span>
                           )}
                         </div>
                         {activeTab === 'from-hr' && doc.uploader && (
-                          <p className="text-xs text-gray-400 mt-1">
-                            Uploaded by: {doc.uploader.name}
+                          <p className="text-xs text-gray-400 mt-1">{t("Uploaded by:")} {doc.uploader.name}
                           </p>
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                    <div className="ops-document-actions" onClick={(e) => e.stopPropagation()}>
                       <button
                         onClick={() => handleViewDetail(doc)}
                         className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                        title="View"
+                        title={t("View")}
                       >
                         <Eye className="w-5 h-5" />
                       </button>
                       <button
                         onClick={() => handleDownload(doc)}
                         className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                        title="Download"
+                        title={t("Download")}
                       >
                         <Download className="w-5 h-5" />
                       </button>
@@ -526,27 +479,17 @@ export function ManagerDocumentsPage() {
 
       {/* Upload Modal */}
       {showUploadModal && (
-        <>
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50" onClick={() => setShowUploadModal(false)} />
-          <div className="fixed inset-x-4 top-[5%] md:inset-x-auto md:left-1/2 md:-translate-x-1/2 md:w-full md:max-w-lg bg-white rounded-2xl shadow-2xl z-50 max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-semibold text-gray-900">Upload Document</h3>
-                <button
-                  onClick={() => {
+        <Modal isOpen={true} onClose={() => {
                     setShowUploadModal(false);
                     resetUploadForm();
-                  }}
-                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
+                  }} title={t("Upload Document")} size="xl" busy={isUploading} className="ph-workflow ops-workflow ops-modal">
+            <div className="p-6">
+
 
               <form onSubmit={handleUpload} className="space-y-4">
                 {/* File Upload */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">File</label>
+                  <label htmlFor="ops-managerdocuments-1" className="block text-sm font-medium text-gray-700 mb-2">{t("File")}</label>
                   <div
                     onClick={() => fileInputRef.current?.click()}
                     className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
@@ -560,8 +503,8 @@ export function ManagerDocumentsPage() {
                           <p className="font-medium text-gray-900">{uploadForm.file.name}</p>
                           <p className="text-sm text-gray-500">{formatFileSize(uploadForm.file.size)}</p>
                         </div>
-                        <button
-                          type="button"
+<button
+                          type="button" aria-label={t("Remove selected file")}
                           onClick={(e) => {
                             e.stopPropagation();
                             setUploadForm((prev) => ({ ...prev, file: null }));
@@ -571,16 +514,17 @@ export function ManagerDocumentsPage() {
                         >
                           <X className="w-4 h-4" />
                         </button>
+
                       </div>
                     ) : (
                       <>
                         <Upload className="w-10 h-10 text-gray-400 mx-auto mb-2" />
-                        <p className="text-sm text-gray-600">Click to select file or drag and drop</p>
-                        <p className="text-xs text-gray-400 mt-1">PDF, DOC, XLS, JPG, PNG (max 10MB)</p>
+                        <p className="text-sm text-gray-600">{t("Click to select file")}</p>
+                        <p className="text-xs text-gray-400 mt-1">{t("PDF, DOC, XLS, JPG, PNG (max 10MB)")}</p>
                       </>
                     )}
                   </div>
-                  <input
+                  <input id="ops-managerdocuments-1"
                     ref={fileInputRef}
                     type="file"
                     onChange={handleFileSelect}
@@ -591,21 +535,21 @@ export function ManagerDocumentsPage() {
 
                 {/* Document Name */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Document Name *</label>
-                  <input
+                  <label htmlFor="ops-managerdocuments-2" className="block text-sm font-medium text-gray-700 mb-2">{t("Document Name *")}</label>
+                  <input id="ops-managerdocuments-2"
                     type="text"
                     value={uploadForm.document_name}
                     onChange={(e) => setUploadForm((prev) => ({ ...prev, document_name: e.target.value }))}
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                    placeholder="e.g. KTP, NPWP, Ijazah S1"
+                    placeholder={t("e.g. KTP, NPWP, Ijazah S1")}
                     required
                   />
                 </div>
 
                 {/* Document Type */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Document Type *</label>
-                  <select
+                  <label htmlFor="ops-managerdocuments-3" className="block text-sm font-medium text-gray-700 mb-2">{t("Document Type *")}</label>
+                  <select id="ops-managerdocuments-3"
                     value={uploadForm.document_type}
                     onChange={(e) => setUploadForm((prev) => ({ ...prev, document_type: e.target.value }))}
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
@@ -613,7 +557,7 @@ export function ManagerDocumentsPage() {
                   >
                     {EMPLOYEE_DOCUMENT_TYPES.map((type) => (
                       <option key={type.value} value={type.value}>
-                        {type.label}
+                        {t(type.label)}
                       </option>
                     ))}
                   </select>
@@ -621,21 +565,21 @@ export function ManagerDocumentsPage() {
 
                 {/* Document Number */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Document Number</label>
-                  <input
+                  <label htmlFor="ops-managerdocuments-4" className="block text-sm font-medium text-gray-700 mb-2">{t("Document Number")}</label>
+                  <input id="ops-managerdocuments-4"
                     type="text"
                     value={uploadForm.document_number}
                     onChange={(e) => setUploadForm((prev) => ({ ...prev, document_number: e.target.value }))}
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                    placeholder="e.g. 3174xxxxxxxxx"
+                    placeholder={t("e.g. 3174xxxxxxxxx")}
                   />
                 </div>
 
                 {/* Issue & Expiry Date */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="ph-form-grid">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Issue Date</label>
-                    <input
+                    <label htmlFor="ops-managerdocuments-5" className="block text-sm font-medium text-gray-700 mb-2">{t("Issue Date")}</label>
+                    <input id="ops-managerdocuments-5"
                       type="date"
                       value={uploadForm.issue_date}
                       onChange={(e) => setUploadForm((prev) => ({ ...prev, issue_date: e.target.value }))}
@@ -643,8 +587,8 @@ export function ManagerDocumentsPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Expiry Date</label>
-                    <input
+                    <label htmlFor="ops-managerdocuments-6" className="block text-sm font-medium text-gray-700 mb-2">{t("Expiry Date")}</label>
+                    <input id="ops-managerdocuments-6"
                       type="date"
                       value={uploadForm.expiry_date}
                       onChange={(e) => setUploadForm((prev) => ({ ...prev, expiry_date: e.target.value }))}
@@ -655,32 +599,31 @@ export function ManagerDocumentsPage() {
 
                 {/* Issuing Authority */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Issuing Authority</label>
-                  <input
+                  <label htmlFor="ops-managerdocuments-7" className="block text-sm font-medium text-gray-700 mb-2">{t("Issuing Authority")}</label>
+                  <input id="ops-managerdocuments-7"
                     type="text"
                     value={uploadForm.issuing_authority}
                     onChange={(e) => setUploadForm((prev) => ({ ...prev, issuing_authority: e.target.value }))}
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                    placeholder="e.g. Dukcapil Jakarta Selatan"
+                    placeholder={t("e.g. Dukcapil Jakarta Selatan")}
                   />
                 </div>
 
                 {/* Description */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                  <textarea
+                  <label htmlFor="ops-managerdocuments-8" className="block text-sm font-medium text-gray-700 mb-2">{t("Description")}</label>
+                  <textarea id="ops-managerdocuments-8"
                     value={uploadForm.description}
                     onChange={(e) => setUploadForm((prev) => ({ ...prev, description: e.target.value }))}
                     rows={2}
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 resize-none"
-                    placeholder="Additional notes..."
+                    placeholder={t("Additional notes...")}
                   />
                 </div>
 
-                <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
+                <div className="ops-record-block">
                   <p className="text-sm text-indigo-800">
-                    <strong>Note:</strong> Documents will be reviewed by P&C before being marked as verified.
-                  </p>
+                    <strong>{t("Note:")}</strong>{' '}{t("Documents will be reviewed by P&C before being marked as verified.")} </p>
                 </div>
 
                 <div className="flex gap-3 pt-4">
@@ -690,106 +633,88 @@ export function ManagerDocumentsPage() {
                       setShowUploadModal(false);
                       resetUploadForm();
                     }}
-                    className="flex-1 px-4 py-2.5 border border-gray-200 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition-colors"
-                  >
-                    Cancel
-                  </button>
+                    className="ph-button"
+                  >{t("Cancel")} </button>
                   <button
                     type="submit"
                     disabled={isUploading || !uploadForm.file}
-                    className="flex-1 px-4 py-2.5 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                    className="ph-button ph-button-primary"
                   >
-                    {isUploading && <Loader2 className="h-4 w-4 animate-spin" />}
-                    Upload
-                  </button>
+                    {isUploading && <Loader2 className="h-4 w-4 animate-spin" />}{' '}{t("Upload")} </button>
                 </div>
               </form>
             </div>
-          </div>
-        </>
+          </Modal>
       )}
 
       {/* Detail Modal */}
       {showDetailModal && selectedDocument && (
-        <>
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50" onClick={() => setShowDetailModal(false)} />
-          <div className="fixed inset-x-4 top-[10%] md:inset-x-auto md:left-1/2 md:-translate-x-1/2 md:w-full md:max-w-lg bg-white rounded-2xl shadow-2xl z-50 max-h-[80vh] overflow-y-auto">
+        <Modal isOpen={true} onClose={() => setShowDetailModal(false)} title={selectedDocument.document_name} size="xl" busy={isUploading} className="ph-workflow ops-workflow ops-modal">
             <div className="p-6">
               <div className="flex items-start justify-between mb-6">
                 <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 bg-gray-100 rounded-xl flex items-center justify-center">
+                  <div className="ops-avatar">
                     {getDocumentIcon(selectedDocument.document_type)}
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold text-gray-900">{selectedDocument.document_name}</h3>
+
                     <div className="flex items-center gap-2 mt-1">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getTypeBadgeColor(selectedDocument.document_type)}`}>
                         {getTypeLabel(selectedDocument.document_type)}
                       </span>
                       {selectedDocument.is_verified ? (
                         <span className="flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">
-                          <CheckCircle className="w-3 h-3" />
-                          Verified
-                        </span>
+                          <CheckCircle className="w-3 h-3" />{t("Verified")} </span>
                       ) : (
                         <span className="flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">
-                          <Clock className="w-3 h-3" />
-                          Pending
-                        </span>
+                          <Clock className="w-3 h-3" />{t("Pending")} </span>
                       )}
                     </div>
                   </div>
                 </div>
-                <button
-                  onClick={() => setShowDetailModal(false)}
-                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
-                >
-                  <X className="h-5 w-5" />
-                </button>
+
               </div>
 
               <div className="space-y-4">
                 {selectedDocument.document_number && (
-                  <div className="bg-gray-50 rounded-xl p-4">
-                    <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Document Number</p>
+                  <div className="ops-record-block">
+                    <p className="text-xs text-gray-500 mb-1">{t("Document Number")}</p>
                     <p className="font-medium text-gray-900">{selectedDocument.document_number}</p>
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-gray-50 rounded-xl p-4">
-                    <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">File Size</p>
+                <div className="ph-form-grid">
+                  <div className="ops-record-block">
+                    <p className="text-xs text-gray-500 mb-1">{t("File Size")}</p>
                     <p className="font-medium text-gray-900">{formatFileSize(selectedDocument.file_size)}</p>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
-                    <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Uploaded</p>
+                  <div className="ops-record-block">
+                    <p className="text-xs text-gray-500 mb-1">{t("Uploaded")}</p>
                     <p className="font-medium text-gray-900">{formatDate(selectedDocument.created_at)}</p>
                   </div>
                 </div>
 
                 {selectedDocument.uploader && (
-                  <div className="bg-gray-50 rounded-xl p-4">
-                    <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Uploaded By</p>
+                  <div className="ops-record-block">
+                    <p className="text-xs text-gray-500 mb-1">{t("Uploaded By")}</p>
                     <p className="font-medium text-gray-900">{selectedDocument.uploader.name}</p>
                   </div>
                 )}
 
                 {(selectedDocument.issue_date || selectedDocument.expiry_date) && (
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="ph-form-grid">
                     {selectedDocument.issue_date && (
-                      <div className="bg-gray-50 rounded-xl p-4">
-                        <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Issue Date</p>
+                      <div className="ops-record-block">
+                        <p className="text-xs text-gray-500 mb-1">{t("Issue Date")}</p>
                         <p className="font-medium text-gray-900">{formatDate(selectedDocument.issue_date)}</p>
                       </div>
                     )}
                     {selectedDocument.expiry_date && (
                       <div className={`rounded-xl p-4 ${new Date(selectedDocument.expiry_date) < new Date() ? 'bg-red-50' : 'bg-gray-50'}`}>
-                        <p className={`text-xs uppercase tracking-wider mb-1 ${new Date(selectedDocument.expiry_date) < new Date() ? 'text-red-600' : 'text-gray-500'}`}>
-                          Expiry Date
-                        </p>
+                        <p className={`text-xs uppercase tracking-wider mb-1 ${new Date(selectedDocument.expiry_date) < new Date() ? 'text-red-600' : 'text-gray-500'}`}>{t("Expiry Date")} </p>
                         <p className={`font-medium ${new Date(selectedDocument.expiry_date) < new Date() ? 'text-red-700' : 'text-gray-900'}`}>
                           {formatDate(selectedDocument.expiry_date)}
-                          {new Date(selectedDocument.expiry_date) < new Date() && ' (Expired)'}
+                          {new Date(selectedDocument.expiry_date) < new Date() && t(" (Expired)")}
                         </p>
                       </div>
                     )}
@@ -797,24 +722,23 @@ export function ManagerDocumentsPage() {
                 )}
 
                 {selectedDocument.issuing_authority && (
-                  <div className="bg-gray-50 rounded-xl p-4">
-                    <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Issuing Authority</p>
+                  <div className="ops-record-block">
+                    <p className="text-xs text-gray-500 mb-1">{t("Issuing Authority")}</p>
                     <p className="font-medium text-gray-900">{selectedDocument.issuing_authority}</p>
                   </div>
                 )}
 
                 {selectedDocument.description && (
-                  <div className="bg-gray-50 rounded-xl p-4">
-                    <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Description</p>
+                  <div className="ops-record-block">
+                    <p className="text-xs text-gray-500 mb-1">{t("Description")}</p>
                     <p className="text-sm text-gray-700">{selectedDocument.description}</p>
                   </div>
                 )}
 
                 {selectedDocument.is_verified && selectedDocument.verifier && (
-                  <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-                    <p className="text-sm text-green-800">
-                      Verified by <strong>{selectedDocument.verifier.name}</strong>
-                      {selectedDocument.verified_at && ` on ${formatDate(selectedDocument.verified_at)}`}
+                  <div className="ops-record-block">
+                    <p className="text-sm text-green-800">{t("Verified by")} <strong>{selectedDocument.verifier.name}</strong>
+                      {selectedDocument.verified_at && t(' on {date}', { date: formatDate(selectedDocument.verified_at) })}
                     </p>
                     {selectedDocument.verification_notes && (
                       <p className="text-sm text-green-700 mt-1">{selectedDocument.verification_notes}</p>
@@ -823,29 +747,25 @@ export function ManagerDocumentsPage() {
                 )}
               </div>
 
-              <div className="mt-6 pt-6 border-t border-gray-200 flex gap-3">
+              <div className="ph-dialog-footer">
                 <button
                   onClick={() => handleDownload(selectedDocument)}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition-colors"
+                  className="ph-button ph-button-primary"
                 >
-                  <Download className="w-4 h-4" />
-                  Download
-                </button>
+                  <Download className="w-4 h-4" />{t("Download")} </button>
                 {/* Only show delete for my uploads and unverified docs */}
                 {activeTab === 'my-uploads' && !selectedDocument.is_verified && (
                   <button
-                    onClick={() => handleDelete(selectedDocument)}
-                    className="flex items-center justify-center gap-2 px-4 py-2.5 border border-red-200 text-red-600 font-medium rounded-xl hover:bg-red-50 transition-colors"
+                    onClick={() => setDeletingDocument(selectedDocument)}
+                    className="ph-button ops-danger"
                   >
-                    <Trash2 className="w-4 h-4" />
-                    Delete
-                  </button>
+                    <Trash2 className="w-4 h-4" />{t("Delete")} </button>
                 )}
               </div>
             </div>
-          </div>
-        </>
+          </Modal>
       )}
+      {deletingDocument && <Modal isOpen={true} title={t("Delete Document?")} size="md" busy={isDeleting} onClose={() => { if (!isDeleting) setDeletingDocument(null); }} className="ph-workflow ops-workflow ops-modal"><p>{t('Hapus dokumen "{name}"?', { name: deletingDocument.document_name })}</p><div className="ph-dialog-footer"><button className="ph-button" disabled={isDeleting} onClick={() => setDeletingDocument(null)}>{t("Cancel")}</button><button className="ph-button ops-danger" disabled={isDeleting} onClick={() => void handleDelete(deletingDocument)}>{isDeleting ? t("Deleting...") : t("Delete")}</button></div></Modal>}
     </div>
   );
 }

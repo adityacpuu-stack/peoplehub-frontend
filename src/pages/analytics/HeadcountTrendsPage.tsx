@@ -1,20 +1,8 @@
+import { insightPercent, insightNumber, insightFixed, insightMonth } from '@/pages/ceo/insight-display';
+import { t, useLocale } from '@/i18n';
+import { ReportPage, ReportHeader, ReportSection, ReportSummary } from '@/pages/dashboard/ReportingLayout';
 import { useState, useEffect } from 'react';
-import {
-  TrendingUp,
-  Users,
-  Building2,
-  Calendar,
-  Download,
-  BarChart3,
-  Activity,
-  Target,
-  ArrowUpRight,
-  ArrowDownRight,
-  Loader2,
-  Briefcase,
-  UserPlus,
-  UserMinus,
-} from 'lucide-react';
+import { TrendingUp, Building2, Calendar, Download, BarChart3, Target, ArrowUpRight, ArrowDownRight, Loader2, Briefcase } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { dashboardService, type GroupDashboard, type HeadcountAnalytics } from '@/services/dashboard.service';
 import toast from 'react-hot-toast';
@@ -26,6 +14,7 @@ const CHART_COLORS = [
 ];
 
 export function HeadcountTrendsPage() {
+  useLocale();
   const [isLoading, setIsLoading] = useState(true);
   const [data, setData] = useState<GroupDashboard | null>(null);
   const [analytics, setAnalytics] = useState<HeadcountAnalytics | null>(null);
@@ -47,7 +36,7 @@ export function HeadcountTrendsPage() {
       setData(response);
     } catch (error: any) {
       console.error('Failed to fetch headcount data:', error);
-      toast.error('Failed to load headcount trends');
+      toast.error(t("Failed to load headcount trends"));
     } finally {
       setIsLoading(false);
     }
@@ -89,76 +78,39 @@ export function HeadcountTrendsPage() {
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
-          <p className="text-gray-500">Loading headcount trends...</p>
+          <p className="text-gray-500">{t("Loading headcount trends...")}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 rounded-2xl shadow-xl">
-        <div className="px-6 py-6 relative">
-          <div className="absolute inset-0 opacity-10">
-            <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
-              <defs>
-                <pattern id="headcount-grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                  <path d="M 40 0 L 0 0 0 40" fill="none" stroke="white" strokeWidth="1"/>
-                </pattern>
-              </defs>
-              <rect width="100%" height="100%" fill="url(#headcount-grid)" />
-            </svg>
-          </div>
-          <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-white/20 backdrop-blur-xl rounded-xl flex items-center justify-center shadow-lg border border-white/10">
-                <Activity className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl md:text-2xl font-bold text-white">Headcount Trends</h1>
-                <p className="text-indigo-100 text-sm">Track workforce growth and projections</p>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="bg-white/20 backdrop-blur-xl rounded-xl px-4 py-2 border border-white/10">
-                <span className="text-indigo-100 text-xs">Current</span>
-                <p className="text-xl font-bold text-white">{currentHeadcount}</p>
-              </div>
-              <div className="bg-white/20 backdrop-blur-xl rounded-xl px-4 py-2 border border-white/10">
-                <span className="text-indigo-100 text-xs">Growth</span>
-                <p className="text-xl font-bold text-white flex items-center">
-                  {parseFloat(headcountGrowth) >= 0 ? '+' : ''}{headcountGrowth}%
+    <ReportPage>{/* Header */}<ReportHeader>
+<div className="report-heading"><h1 className="text-xl md:text-2xl font-bold">{t("Headcount Trends")}</h1><p className="text-sm">{t("Track workforce growth and projections")}</p></div>
+<div className="report-header-context"><div className="flex flex-wrap items-center gap-3">
+              <ReportSection><span className="text-xs">{t("Current")}</span><p className="text-xl font-bold">{insightNumber(currentHeadcount)}</p></ReportSection>
+              <ReportSection><span className="text-xs">{t("Growth")}</span><p className="text-xl font-bold flex items-center">
+                  {parseFloat(headcountGrowth) >= 0 ? '+' : ''}{insightFixed(Number(headcountGrowth), 1)}%
                   {parseFloat(headcountGrowth) >= 0 ? (
                     <ArrowUpRight className="h-4 w-4 ml-1" />
                   ) : (
                     <ArrowDownRight className="h-4 w-4 ml-1" />
                   )}
-                </p>
-              </div>
-              <div className="bg-white/20 backdrop-blur-xl rounded-xl px-4 py-2 border border-white/10">
-                <span className="text-indigo-100 text-xs">Net Change</span>
-                <p className="text-xl font-bold text-white">{netGrowth >= 0 ? '+' : ''}{netGrowth}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <div className="flex flex-col md:flex-row gap-4">
+                </p></ReportSection>
+              <ReportSection><span className="text-xs">{t("Net Change")}</span><p className="text-xl font-bold">{netGrowth >= 0 ? '+' : ''}{insightNumber(netGrowth)}</p></ReportSection>
+            </div></div>
+</ReportHeader>{/* Filters */}<ReportSection><div className="flex flex-col md:flex-row gap-4">
           <div className="flex items-center gap-2">
             <Calendar className="h-5 w-5 text-gray-400" />
             <select
               value={selectedPeriod}
               onChange={(e) => setSelectedPeriod(e.target.value)}
-              className="px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-white"
+              className="px-4 py-2.5 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-white"
             >
-              <option value="6_months">Last 6 Months</option>
-              <option value="12_months">Last 12 Months</option>
-              <option value="2_years">Last 2 Years</option>
-              <option value="all_time">All Time</option>
+              <option value="6_months">{t("Last 6 Months")}</option>
+              <option value="12_months">{t("Last 12 Months")}</option>
+              <option value="2_years">{t("Last 2 Years")}</option>
+              <option value="all_time">{t("All Time")}</option>
             </select>
           </div>
           <div className="flex items-center gap-2">
@@ -166,93 +118,46 @@ export function HeadcountTrendsPage() {
             <select
               value={selectedCompany}
               onChange={(e) => setSelectedCompany(e.target.value)}
-              className="px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-white"
+              className="px-4 py-2.5 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-white"
             >
-              <option value="all">All Companies</option>
+              <option value="all">{t("All Companies")}</option>
               {data?.companies?.map((company) => (
                 <option key={company.id} value={company.id}>{company.name}</option>
               ))}
             </select>
           </div>
-          <button className="ml-auto flex items-center gap-2 px-4 py-2.5 bg-indigo-50 text-indigo-700 rounded-xl hover:bg-indigo-100 transition-colors">
-            <Download className="h-4 w-4" />
-            Export Report
-          </button>
-        </div>
-      </div>
-
-      {/* Quick Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center">
-              <Users className="h-6 w-6 text-indigo-600" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Total Headcount</p>
-              <p className="text-2xl font-bold text-gray-900">{currentHeadcount}</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-              <UserPlus className="h-6 w-6 text-green-600" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Total Hires</p>
-              <p className="text-2xl font-bold text-gray-900">{totalHires}</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
-              <UserMinus className="h-6 w-6 text-red-600" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Total Exits</p>
-              <p className="text-2xl font-bold text-gray-900">{totalExits}</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-              <Target className="h-6 w-6 text-purple-600" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Year End Target</p>
-              <p className="text-2xl font-bold text-gray-900">{yearEndTarget || currentHeadcount}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Chart */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-6">
+          <button disabled title={t("Belum tersedia — preview UI")} className="ml-auto flex items-center gap-2 px-4 py-2.5 bg-indigo-50 text-indigo-700 rounded-md hover:bg-indigo-100 transition-colors">
+            <Download className="h-4 w-4" />{t("Export Report")} </button>
+        </div></ReportSection>{/* Quick Stats */}<ReportSummary><div className="report-metric"><div  className="report-metric-context"><div>
+              <p className="report-metric-label">{t("Total Headcount")}</p>
+              <p className="report-metric-value">{insightNumber(currentHeadcount)}</p>
+            </div></div></div><div className="report-metric"><div  className="report-metric-context"><div>
+              <p className="report-metric-label">{t("Total Hires")}</p>
+              <p className="report-metric-value">{insightNumber(totalHires)}</p>
+            </div></div></div><div className="report-metric"><div  className="report-metric-context"><div>
+              <p className="report-metric-label">{t("Total Exits")}</p>
+              <p className="report-metric-value">{insightNumber(totalExits)}</p>
+            </div></div></div><div className="report-metric"><div  className="report-metric-context"><div>
+              <p className="report-metric-label">{t("Year End Target")}</p>
+              <p className="report-metric-value">{insightNumber(yearEndTarget || currentHeadcount)}</p>
+            </div></div></div></ReportSummary>{/* Main Chart */}<ReportSection><div className="flex items-center justify-between mb-6">
           <div>
-            <h3 className="text-lg font-semibold text-gray-900">Headcount Over Time</h3>
-            <p className="text-sm text-gray-500">Monthly workforce size with hires and exits</p>
+            <h3 className="text-lg font-semibold text-gray-900">{t("Headcount Over Time")}</h3>
+            <p className="text-sm text-gray-500">{t("Monthly workforce size with hires and exits")}</p>
           </div>
           <BarChart3 className="h-5 w-5 text-gray-400" />
-        </div>
-
-        {headcountTrend.length === 0 ? (
-          <div className="flex items-center justify-center h-64 text-gray-500">
-            No headcount trend data available
-          </div>
+        </div>{headcountTrend.length === 0 ? (
+          <div className="flex items-center justify-center h-64 text-gray-500">{t("No headcount trend data available")} </div>
         ) : (
         <>
         {/* Line Chart Representation */}
         <div className="relative h-64">
           {/* Y-axis */}
           <div className="absolute left-0 top-0 bottom-8 w-12 flex flex-col justify-between text-xs text-gray-400">
-            <span>{maxHeadcount}</span>
-            <span>{Math.round(maxHeadcount * 0.75)}</span>
-            <span>{Math.round(maxHeadcount * 0.5)}</span>
-            <span>{Math.round(maxHeadcount * 0.25)}</span>
+            <span>{insightNumber(maxHeadcount)}</span>
+            <span>{insightNumber(Math.round(maxHeadcount * 0.75))}</span>
+            <span>{insightNumber(Math.round(maxHeadcount * 0.5))}</span>
+            <span>{insightNumber(Math.round(maxHeadcount * 0.25))}</span>
             <span>0</span>
           </div>
 
@@ -278,7 +183,7 @@ export function HeadcountTrendsPage() {
                 d={`M 0 200 ${headcountTrend.map((point, i) =>
                   `L ${i * 60 + 30} ${200 - (point.headcount / maxHeadcount) * 180}`
                 ).join(' ')} L ${(headcountTrend.length - 1) * 60 + 30} 200 Z`}
-                fill="url(#gradient)"
+                fill="#187451" fillOpacity={0.12}
                 opacity="0.2"
               />
 
@@ -307,20 +212,15 @@ export function HeadcountTrendsPage() {
                 />
               ))}
 
-              <defs>
-                <linearGradient id="gradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" stopColor="#6366F1" />
-                  <stop offset="100%" stopColor="#6366F1" stopOpacity="0" />
-                </linearGradient>
-              </defs>
+
             </svg>
           </div>
 
           {/* X-axis labels */}
           <div className="ml-14 flex justify-between mt-2">
             {headcountTrend.map((point) => (
-              <span key={point.month} className="text-xs text-gray-500 w-12 text-center">
-                {point.month}
+              <span key={insightMonth(point.month)} className="text-xs text-gray-500 w-12 text-center">
+                {insightMonth(point.month)}
               </span>
             ))}
           </div>
@@ -331,46 +231,38 @@ export function HeadcountTrendsPage() {
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 bg-indigo-500 rounded-full" />
-              <span className="text-sm text-gray-600">Headcount</span>
+              <span className="text-sm text-gray-600">{t("Headcount")}</span>
             </div>
           </div>
           <div className="flex items-center gap-4 text-sm">
-            <span className="text-gray-500">Start: <span className="font-semibold text-gray-700">{previousHeadcount}</span></span>
-            <span className="text-gray-500">Current: <span className="font-semibold text-gray-700">{currentHeadcount}</span></span>
+            <span className="text-gray-500">{t("Start:")} <span className="font-semibold text-gray-700">{insightNumber(previousHeadcount)}</span></span>
+            <span className="text-gray-500">{t("Current:")} <span className="font-semibold text-gray-700">{insightNumber(currentHeadcount)}</span></span>
             <span className={cn(
               "font-semibold",
               parseFloat(headcountGrowth) >= 0 ? "text-green-600" : "text-red-600"
             )}>
-              {parseFloat(headcountGrowth) >= 0 ? '+' : ''}{headcountGrowth}%
+              {parseFloat(headcountGrowth) >= 0 ? '+' : ''}{insightFixed(Number(headcountGrowth), 1)}%
             </span>
           </div>
         </div>
         </>
-        )}
-      </div>
-
-      {/* Two Column Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        )}</ReportSection>{/* Two Column Layout */}<div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Department Distribution */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-6">
+        <ReportSection><div className="flex items-center justify-between mb-6">
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">Department Distribution</h3>
-              <p className="text-sm text-gray-500">Headcount by department</p>
+              <h3 className="text-lg font-semibold text-gray-900">{t("Department Distribution")}</h3>
+              <p className="text-sm text-gray-500">{t("Headcount by department")}</p>
             </div>
             <Briefcase className="h-5 w-5 text-gray-400" />
-          </div>
-          {departmentHeadcount.length === 0 ? (
-            <div className="flex items-center justify-center h-40 text-gray-500">
-              No department data available
-            </div>
+          </div>{departmentHeadcount.length === 0 ? (
+            <div className="flex items-center justify-center h-40 text-gray-500">{t("No department data available")} </div>
           ) : (
           <div className="space-y-3">
             {departmentHeadcount.map((dept, index) => (
               <div key={dept.name}>
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-sm font-medium text-gray-700">{dept.name}</span>
-                  <span className="text-sm text-gray-500">{dept.employees} ({dept.percentage}%)</span>
+                  <span className="text-sm text-gray-500">{insightNumber(dept.employees)} ({insightNumber(dept.percentage)}%)</span>
                 </div>
                 <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                   <div
@@ -384,22 +276,17 @@ export function HeadcountTrendsPage() {
               </div>
             ))}
           </div>
-          )}
-        </div>
+          )}</ReportSection>
 
         {/* Quarterly Comparison */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-6">
+        <ReportSection><div className="flex items-center justify-between mb-6">
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">Quarterly Comparison</h3>
-              <p className="text-sm text-gray-500">Quarter-over-quarter growth</p>
+              <h3 className="text-lg font-semibold text-gray-900">{t("Quarterly Comparison")}</h3>
+              <p className="text-sm text-gray-500">{t("Quarter-over-quarter growth")}</p>
             </div>
             <TrendingUp className="h-5 w-5 text-gray-400" />
-          </div>
-          {quarterlyComparison.length === 0 ? (
-            <div className="flex items-center justify-center h-40 text-gray-500">
-              No quarterly data available
-            </div>
+          </div>{quarterlyComparison.length === 0 ? (
+            <div className="flex items-center justify-center h-40 text-gray-500">{t("No quarterly data available")} </div>
           ) : (
           <div className="space-y-4">
             {(() => {
@@ -415,35 +302,32 @@ export function HeadcountTrendsPage() {
                       backgroundColor: CHART_COLORS[index % CHART_COLORS.length],
                     }}
                   >
-                    <span className="text-xs font-bold text-white">{q.headcount}</span>
+                    <span className="text-xs font-bold text-white">{insightNumber(q.headcount)}</span>
                   </div>
                 </div>
                 <span className={cn(
                   "text-sm font-medium w-14 text-right",
                   q.growth >= 0 ? "text-green-600" : "text-red-600"
                 )}>
-                  {q.growth >= 0 ? '+' : ''}{q.growth}%
+                  {q.growth >= 0 ? '+' : ''}{insightNumber(q.growth)}%
                 </span>
               </div>
             ));
             })()}
           </div>
-          )}
-        </div>
+          )}</ReportSection>
 
         {/* Company Headcount */}
         {headcountByCompany.length > 0 && (
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-6">
+          <ReportSection><div className="flex items-center justify-between mb-6">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Company Headcount</h3>
-                <p className="text-sm text-gray-500">Distribution across companies</p>
+                <h3 className="text-lg font-semibold text-gray-900">{t("Company Headcount")}</h3>
+                <p className="text-sm text-gray-500">{t("Distribution across companies")}</p>
               </div>
               <Building2 className="h-5 w-5 text-gray-400" />
-            </div>
-            <div className="space-y-4">
+            </div><div className="space-y-4">
               {headcountByCompany.map((company, index) => (
-                <div key={company.name} className="flex items-center gap-4 p-3 bg-gray-50 rounded-xl">
+                <div key={company.name} className="flex items-center gap-4 p-3 bg-gray-50 rounded-md">
                   <div
                     className="w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold"
                     style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}
@@ -452,36 +336,31 @@ export function HeadcountTrendsPage() {
                   </div>
                   <div className="flex-1">
                     <p className="text-sm font-medium text-gray-900">{company.name}</p>
-                    <p className="text-xs text-gray-500">+{company.hires} new this month</p>
+                    <p className="text-xs text-gray-500">+{insightNumber(company.hires)}{' '}{t("new this month")}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-lg font-bold text-gray-900">{company.headcount}</p>
+                    <p className="text-lg font-bold text-gray-900">{insightNumber(company.headcount)}</p>
                     <p className={cn(
                       "text-xs font-medium",
                       parseFloat(company.growth) >= 0 ? "text-green-600" : "text-red-600"
                     )}>
-                      {parseFloat(company.growth) >= 0 ? '+' : ''}{company.growth}%
+                      {parseFloat(company.growth) >= 0 ? '+' : ''}{insightPercent(company.growth)}%
                     </p>
                   </div>
                 </div>
               ))}
-            </div>
-          </div>
+            </div></ReportSection>
         )}
 
         {/* Forecast */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-6">
+        <ReportSection><div className="flex items-center justify-between mb-6">
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">Headcount Forecast</h3>
-              <p className="text-sm text-gray-500">Projected growth for next 6 months</p>
+              <h3 className="text-lg font-semibold text-gray-900">{t("Headcount Forecast")}</h3>
+              <p className="text-sm text-gray-500">{t("Projected growth for next 6 months")}</p>
             </div>
             <Target className="h-5 w-5 text-gray-400" />
-          </div>
-          {headcountForecast.length === 0 ? (
-            <div className="flex items-center justify-center h-40 text-gray-500">
-              No forecast data available
-            </div>
+          </div>{headcountForecast.length === 0 ? (
+            <div className="flex items-center justify-center h-40 text-gray-500">{t("No forecast data available")} </div>
           ) : (
           <>
           <div className="space-y-3">
@@ -490,8 +369,8 @@ export function HeadcountTrendsPage() {
               const maxVal = Math.max(...headcountForecast.map(f => f.upper));
               const range = maxVal - minVal || 1;
               return headcountForecast.map((f) => (
-              <div key={f.month} className="flex items-center gap-4">
-                <span className="text-sm font-medium text-gray-600 w-12">{f.month}</span>
+              <div key={insightMonth(f.month)} className="flex items-center gap-4">
+                <span className="text-sm font-medium text-gray-600 w-12">{insightMonth(f.month)}</span>
                 <div className="flex-1 relative h-6">
                   {/* Range bar */}
                   <div
@@ -507,7 +386,7 @@ export function HeadcountTrendsPage() {
                     style={{ left: `${((f.projected - minVal) / range) * 100}%` }}
                   />
                 </div>
-                <span className="text-sm font-semibold text-indigo-600 w-12 text-right">{f.projected}</span>
+                <span className="text-sm font-semibold text-indigo-600 w-12 text-right">{insightNumber(f.projected)}</span>
               </div>
             ));
             })()}
@@ -516,44 +395,35 @@ export function HeadcountTrendsPage() {
             <div className="flex items-center gap-4 text-xs text-gray-500">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-2 bg-indigo-100 rounded-full" />
-                <span>Confidence Range</span>
+                <span>{t("Confidence Range")}</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 bg-indigo-600 rounded-full" />
-                <span>Projected</span>
+                <span>{t("Projected")}</span>
               </div>
             </div>
           </div>
           </>
-          )}
-        </div>
-      </div>
-
-      {/* Progress to Target */}
-      {yearEndTarget > 0 && (
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-4">
+          )}</ReportSection>
+      </div>{/* Progress to Target */}{yearEndTarget > 0 && (
+      <ReportSection><div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="text-lg font-semibold text-gray-900">Progress to Year-End Target</h3>
-            <p className="text-sm text-gray-500">Current: {currentHeadcount} / Target: {yearEndTarget}</p>
+            <h3 className="text-lg font-semibold text-gray-900">{t("Progress to Year-End Target")}</h3>
+            <p className="text-sm text-gray-500">{t("Current:")} {insightNumber(currentHeadcount)}{' '}{t("/ Target:")} {insightNumber(yearEndTarget)}</p>
           </div>
-          <span className="text-2xl font-bold text-indigo-600">{Math.round((currentHeadcount / yearEndTarget) * 100)}%</span>
-        </div>
-        <div className="h-4 bg-gray-100 rounded-full overflow-hidden">
+          <span className="text-2xl font-bold text-indigo-600">{insightNumber(Math.round((currentHeadcount / yearEndTarget) * 100))}%</span>
+        </div><div className="h-4 bg-gray-100 rounded-full overflow-hidden">
           <div
-            className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-500"
+            className="h-full rounded-full transition-all duration-500 bg-[#f5f6f7] text-[#24302b]"
             style={{ width: `${Math.min((currentHeadcount / yearEndTarget) * 100, 100)}%` }}
           />
-        </div>
-        <div className="flex justify-between mt-2 text-xs text-gray-500">
+        </div><div className="flex justify-between mt-2 text-xs text-gray-500">
           <span>0</span>
-          <span>{Math.round(yearEndTarget * 0.25)}</span>
-          <span>{Math.round(yearEndTarget * 0.5)}</span>
-          <span>{Math.round(yearEndTarget * 0.75)}</span>
-          <span>{yearEndTarget}</span>
-        </div>
-      </div>
-      )}
-    </div>
+          <span>{insightNumber(Math.round(yearEndTarget * 0.25))}</span>
+          <span>{insightNumber(Math.round(yearEndTarget * 0.5))}</span>
+          <span>{insightNumber(Math.round(yearEndTarget * 0.75))}</span>
+          <span>{insightNumber(yearEndTarget)}</span>
+        </div></ReportSection>
+      )}</ReportPage>
   );
 }

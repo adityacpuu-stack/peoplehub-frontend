@@ -1,0 +1,28 @@
+.manager-home-grid { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 24px; margin-bottom: 24px; }
+.manager-home-grid[data-with-approvals='true'] { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); }
+.manager-team-list, .manager-approval-list { flex: 1; }
+.manager-team-list li { display: flex; align-items: center; gap: 13px; padding: 17px 0; border-top: 1px solid #edf1ed; }
+.manager-team-list li:first-child, .manager-approval-list li:first-child { border-top: 0; padding-top: 0; }
+.manager-person-avatar { flex-shrink: 0; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: #eef3e8; color: #526e4c; font-size: 12px; font-weight: 600; }
+.manager-person-info { flex: 1; min-width: 0; }
+.manager-person-info strong, .manager-approval-list strong { font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
+.manager-person-info > span { display: block; font-size: 11px; color: #728278; margin-top: 5px; overflow-wrap: anywhere; }
+.manager-person-status { text-align: right; flex-shrink: 0; }
+.manager-person-status small { display: block; font-size: 10px; color: #728278; margin-top: 6px; }
+.manager-status { display: inline-flex; padding: 4px 8px; border-radius: 5px; background: #f1f4f1; color: #586d60; font-size: 10px; white-space: nowrap; }
+.manager-status[data-status='present'] { background: #edf5ef; color: #276746; }
+.manager-status:is([data-status='pending'], [data-status='late']) { background: #fcf3df; color: #856320; }
+.manager-status[data-status='absent'] { background: #fcf0ed; color: #965342; }
+.manager-approval-list li { padding: 19px 0; border-top: 1px solid #edf1ed; }
+.manager-approval-list li > div { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.manager-approval-list p { font-size: 12px; color: #657b6c; margin-top: 8px; line-height: 1.6; }
+.manager-approval-list time { display: block; font-size: 11px; color: #738477; margin-top: 5px; }
+.manager-approval-list .manager-approval-reason { color: #7b897f; font-size: 11px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.manager-approvals-empty svg { margin-bottom: 14px; color: #62876b; }
+@media (max-width: 1199px) { .manager-home-grid[data-with-approvals='true'] { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 479px) {
+  .manager-team-list li { flex-wrap: wrap; gap: 10px; }
+  .manager-person-info { min-width: calc(100% - 50px); }
+  .manager-person-status { display: flex; align-items: center; gap: 10px; margin-left: 48px; text-align: left; }
+  .manager-person-status small { margin-top: 0; }
+}

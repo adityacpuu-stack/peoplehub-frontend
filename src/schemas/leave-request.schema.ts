@@ -1,10 +1,11 @@
+import { t } from '@/i18n';
 import { z } from 'zod';
 
 /**
  * Zod schema for the "create leave request" form on LeaveRequestsPage.
  *
- * PFI policy: leave is always full-day (no half-day option). Wave 6 removed
- * the `is_half_day` / `half_day_session` UI toggle since BE has no column for it.
+ * PFI policy: leave is always full-day (no half-day option). The backend also
+ * rejects half-day inputs; legacy DB fields remain only to preserve history.
  *
  * Fields:
  * - employee_id: optional (P&C may submit on behalf of an employee, otherwise backend uses requester)
@@ -17,17 +18,17 @@ import { z } from 'zod';
 
 const dateString = z
   .string()
-  .min(1, 'Date is required')
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format');
+  .min(1, { error: () => t('Date is required') })
+  .regex(/^\d{4}-\d{2}-\d{2}$/, { error: () => t('Invalid date format') });
 
 export const leaveRequestSchema = z
   .object({
     employee_id: z.string().optional(),
     leave_type_id: z
       .string()
-      .min(1, 'Leave type is required')
+      .min(1, { error: () => t('Leave type is required') })
       .refine((v) => !Number.isNaN(Number(v)) && Number(v) > 0, {
-        message: 'Leave type is required',
+        error: () => t('Leave type is required'),
       }),
     start_date: dateString,
     end_date: dateString,
@@ -35,12 +36,12 @@ export const leaveRequestSchema = z
       .string()
       .optional()
       .refine((v) => v === undefined || v === '' || v.length >= 3, {
-        message: 'Reason must be at least 3 characters',
+        error: () => t('Reason must be at least 3 characters'),
       }),
     attachment: z.instanceof(File).optional(),
   })
   .refine((d) => d.end_date >= d.start_date, {
-    message: 'End date must be on or after start date',
+    error: () => t('End date must be on or after start date'),
     path: ['end_date'],
   });
 

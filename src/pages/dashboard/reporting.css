@@ -1,0 +1,68 @@
+.report-page { min-width: 0; color: #24302b; display: flex; flex-direction: column; gap: 24px; }
+.report-page > * { min-width: 0; margin-top: 0; margin-bottom: 0; }
+.report-header { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px 28px; padding-bottom: 20px; border-bottom: 1px solid #e4e9e6; }
+.report-header h1 { margin: 0; font-size: 26px; line-height: 1.25; font-weight: 600; color: #24302b; }
+.report-header p { margin: 6px 0 0; color: #65716b; font-size: 14px; max-width: 76ch; }
+.report-header-context { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; min-width: 0; }
+.report-header-context .report-section { padding: 0; border: 0; }
+.report-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 0; border-bottom: 1px solid #e4e9e6; padding: 0 0 16px; }
+.report-metric { min-width: 0; padding: 8px 20px; border-left: 1px solid #e4e9e6; display: flex; flex-direction: column; gap: 4px; }
+.report-metric:first-child { padding-left: 0; border-left: 0; }
+.report-metric p { margin: 0; overflow-wrap: anywhere; }
+.report-metric > svg { display: none; }
+.report-metric .report-metric-context { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #65716b; min-height: 0; }
+.report-metric .report-metric-context:empty { display: none; }
+.report-metric-value { font-size: 23px; font-weight: 600; line-height: 1.35; font-variant-numeric: tabular-nums; }
+.report-metric-label { font-size: 12px; color: #65716b; }
+.report-section { min-width: 0; margin: 0; padding: 18px 0; border: 0; border-top: 1px solid #e4e9e6; background: #fff; border-radius: 0; box-shadow: none; }
+.report-section h2, .report-section h3 { color: #24302b; font-size: 16px; font-weight: 600; }
+.report-section h4, .report-section h5 { font-weight: 600; }
+.report-section > header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 14px; }
+.report-section-body { min-width: 0; padding: 16px 0; }
+.report-record { min-width: 0; padding: 16px 0; border-bottom: 1px solid #e4e9e6; background: white; }
+.report-record:last-child { border-bottom: 0; }
+.report-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 0 0 16px; }
+.report-toolbar > * { min-width: 0; }
+.report-page .report-search > input { padding-left: 36px; }
+.report-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; min-width: 0; }
+.report-filters > .report-search { flex: 1 1 220px; min-width: 0; }
+.report-filters > select, .report-filters > .flex > select { width: auto; }
+.report-filters > .ph-table-scroll { flex: 0 1 auto; width: auto; }
+.report-filters > .flex { min-width: 0; }
+.report-filters svg { flex-shrink: 0; }
+.report-page button:disabled { opacity: .5; cursor: not-allowed; }
+.report-budget-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; }
+.report-budget-records { min-width: 0; }
+@media (min-width: 1024px) {
+  .report-budget-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
+}
+.report-inline-note { padding: 10px 0; color: #65716b; border-bottom: 1px solid #e4e9e6; }
+.report-identity { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.report-avatar { display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: #65716b; background: #f5f6f7; border-radius: 6px; }
+.report-page .ph-table-scroll { min-width: 0; width: 100%; max-width: 100%; overflow-x: auto; }
+.report-page th { text-transform: none; letter-spacing: 0; font-weight: 600; }
+.report-page td, .report-page th { font-variant-numeric: tabular-nums; }
+.report-page :where(input, select, textarea) { max-width: 100%; font-size: 14px; border-radius: 6px; }
+.report-page :where(button, a):focus-visible { outline: 2px solid #187451; outline-offset: 3px; }
+.report-chart-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.report-chart-grid > * { min-width: 0; }
+.report-payslip { color: #24302b; }
+.report-payslip .ph-section { padding: 16px 0; border-top: 1px solid #e4e9e6; }
+.report-payslip .report-total { padding: 16px 0; border-block: 1px solid #e4e9e6; font-variant-numeric: tabular-nums; }
+@media (max-width: 640px) {
+  .report-page { gap: 20px; }
+  .report-header { padding-bottom: 16px; gap: 12px; }
+  .report-header h1 { font-size: 26px; }
+  .report-header-context { width: 100%; }
+  .report-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 16px; }
+  .report-metric { padding: 0 12px; }
+  .report-metric:nth-child(odd) { border-left: 0; padding-left: 0; }
+  .report-metric-value { font-size: 20px; }
+  .report-chart-grid { grid-template-columns: minmax(0, 1fr); }
+  .report-section > header { align-items: flex-start; }
+  .report-toolbar > .relative, .report-toolbar select { max-width: 100%; }
+  .report-filters > .report-search { flex-basis: 100%; }
+  .report-filters > select, .report-filters > .flex { width: 100%; }
+  .report-filters > .flex > select { flex: 1; }
+  .report-payslip .flex.justify-between { gap: 16px; flex-wrap: wrap; }
+}

@@ -1,31 +1,19 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { payrollNumber } from '@/components/payroll/localization';
+import { payrollEnumLabel } from '@/components/payroll/localization';
+import { t, useLocale, intlLocale } from '@/i18n';
+import { useAuthStore } from '@/stores/auth.store';
+import { useDomainConfirmation } from '@/pages/leave/useDomainConfirmation';
+import '@/pages/leave/domain-workflows.css';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
-import {
-  MinusCircle,
-  Plus,
-  Search,
-  Edit2,
-  Trash2,
-  X,
-  Building,
-  Users,
-  Download,
-  ChevronLeft,
-  ChevronRight,
-  Loader2,
-  Check,
-  XCircle,
-  AlertTriangle,
-  Banknote,
-  Receipt,
-  CreditCard,
-  Wallet,
-} from 'lucide-react';
+import { isAxiosError } from 'axios';
+import { MinusCircle, Plus, Edit2, Trash2, Loader2, Check, XCircle, AlertTriangle, Banknote, Receipt, Wallet } from 'lucide-react';
 import { deductionService, DEDUCTION_TYPES } from '../../services/deduction.service';
-import type { PayrollAdjustment, DeductionListQuery } from '../../services/deduction.service';
+import type { PayrollAdjustment, DeductionListQuery, CreateDeductionDTO } from '../../services/deduction.service';
 import { companyService } from '../../services/company.service';
 import { employeeService } from '../../services/employee.service';
-import { SearchableSelect } from '../../components/ui/SearchableSelect';
+import { CompensationWorkspace, CompensationStatus, CompensationEmpty, CompensationDialog, CompensationEmployeeSelect } from '@/components/compensation/CompensationWorkspace';
+import { collectPages } from '@/services/master-data';
 
 interface Company {
   id: number;
@@ -45,6 +33,18 @@ interface Employee {
 }
 
 export function DeductionsPage() {
+  useLocale();
+  const { requestDecision, decisionDialog } = useDomainConfirmation('compensation-refresh-dialog');
+  const user = useAuthStore(state => state.user);
+  // Match the existing allowance/payroll-adjustment write routes.
+  const canManage = user?.roles.some(role => ['Super Admin', 'HR Manager', 'HR Staff'].includes(role)) ?? false;
+  const canApprove = user?.roles.some(role => ['Super Admin', 'HR Manager', 'Finance Manager'].includes(role)) ?? false;
+  const dataRequest = useRef(0);
+  const employeeRequest = useRef(0);
+  const [loadError, setLoadError] = useState(false);
+  const [companiesError, setCompaniesError] = useState(false);
+  const [employeesError, setEmployeesError] = useState(false);
+  useEffect(() => () => { dataRequest.current++; employeeRequest.current++; }, []);
   const [deductions, setDeductions] = useState<PayrollAdjustment[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -83,6 +83,8 @@ export function DeductionsPage() {
 
   // Fetch deductions from API
   const fetchDeductions = useCallback(async () => {
+    const request = ++dataRequest.current;
+    setLoadError(false);
     setLoading(true);
     try {
       const query: DeductionListQuery = {
@@ -99,6 +101,7 @@ export function DeductionsPage() {
       }
 
       const response = await deductionService.list(query);
+      if (request !== dataRequest.current) return;
       // Filter to only show deduction types
       const deductionData = response.data.filter(d =>
         DEDUCTION_TYPES.includes(d.type as typeof DEDUCTION_TYPES[number])
@@ -107,25 +110,32 @@ export function DeductionsPage() {
       setTotalPages(response.pagination.totalPages);
       setTotalItems(response.pagination.total);
     } catch (error) {
+      if (request !== dataRequest.current) return;
+      setLoadError(true);
+      setDeductions([]);
       console.error('Failed to fetch deductions:', error);
-      toast.error('Gagal memuat data potongan');
     } finally {
-      setLoading(false);
+      if (request === dataRequest.current) setLoading(false);
     }
   }, [page, search, filterStatus, filterCompany, filterType]);
 
   // Fetch companies
   const fetchCompanies = useCallback(async () => {
     try {
-      const response = await companyService.getAll({ limit: 100 });
-      setCompanies(response.data);
+      setCompaniesError(false);
+      const rows = await collectPages((page, limit) => companyService.getAll({ page, limit }));
+      setCompanies(rows);
     } catch (error) {
       console.error('Failed to fetch companies:', error);
+      setCompaniesError(true);
     }
   }, []);
 
   // Fetch employees (filtered by company if selected)
   const fetchEmployees = useCallback(async (companyId?: number) => {
+    const request = ++employeeRequest.current;
+    setEmployeesError(false);
+    setEmployees([]);
     setLoadingEmployees(true);
     try {
       const params: { page: number; limit: number; company_id?: number; employment_status?: string } = {
@@ -136,8 +146,9 @@ export function DeductionsPage() {
       if (companyId) {
         params.company_id = companyId;
       }
-      const response = await employeeService.getAll(params);
-      setEmployees(response.data
+      const rows = await collectPages((page, limit) => employeeService.getAll({ ...params, page, limit }));
+      if (request !== employeeRequest.current) return;
+      setEmployees(rows
         .filter(emp => emp.employment_status === 'active' || emp.employment_status === 'resigned')
         .map(emp => ({
           id: emp.id,
@@ -148,10 +159,12 @@ export function DeductionsPage() {
           department: emp.department || undefined,
         })));
     } catch (error) {
+      if (request !== employeeRequest.current) return;
+      setEmployeesError(true);
       console.error('Failed to fetch employees:', error);
       setEmployees([]);
     } finally {
-      setLoadingEmployees(false);
+      if (request === employeeRequest.current) setLoadingEmployees(false);
     }
   }, []);
 
@@ -226,21 +239,6 @@ export function DeductionsPage() {
     }
   };
 
-  const getIconColor = (type: string) => {
-    switch (type) {
-      case 'deduction':
-        return 'from-red-500 to-red-600';
-      case 'penalty':
-        return 'from-orange-500 to-orange-600';
-      case 'loan':
-        return 'from-blue-500 to-blue-600';
-      case 'advance':
-        return 'from-purple-500 to-purple-600';
-      default:
-        return 'from-gray-500 to-gray-600';
-    }
-  };
-
   const handleOpenModal = (deduction?: PayrollAdjustment) => {
     if (deduction) {
       setEditingDeduction(deduction);
@@ -307,25 +305,25 @@ export function DeductionsPage() {
     const isLoan = formData.type === 'loan' || formData.type === 'advance';
 
     if (!formData.employee_id) {
-      toast.error('Karyawan harus dipilih');
+      toast.error(t("Karyawan harus dipilih"), { id: 'api-error', toasterId: 'compensation-dialog' });
       return;
     }
 
     if (isLoan) {
       if (!formData.total_loan_amount || !formData.installment_amount) {
-        toast.error('Total pinjaman dan cicilan per bulan harus diisi');
+        toast.error(t("Total pinjaman dan cicilan per bulan harus diisi"), { id: 'api-error', toasterId: 'compensation-dialog' });
         return;
       }
     } else {
       if (!formData.amount) {
-        toast.error('Jumlah harus diisi');
+        toast.error(t("Jumlah harus diisi"), { id: 'api-error', toasterId: 'compensation-dialog' });
         return;
       }
     }
 
     setSubmitting(true);
     try {
-      const payload: any = {
+      const payload: CreateDeductionDTO = {
         employee_id: Number(formData.employee_id),
         type: formData.type,
         category: formData.category || undefined,
@@ -350,62 +348,62 @@ export function DeductionsPage() {
 
       if (editingDeduction) {
         await deductionService.update(editingDeduction.id, payload);
-        toast.success('Potongan berhasil diperbarui');
+        toast.success(t("Potongan berhasil diperbarui"));
       } else {
         await deductionService.create(payload);
-        toast.success('Potongan berhasil ditambahkan');
+        toast.success(t("Potongan berhasil ditambahkan"));
       }
 
       handleCloseModal();
       fetchDeductions();
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to save deduction:', error);
-      toast.error(error.response?.data?.error?.message || error.response?.data?.message || 'Gagal menyimpan potongan', { id: 'api-error' });
+      toast.error((isAxiosError(error) ? error.response?.data?.error?.message || error.response?.data?.message : undefined) || t('Gagal menyimpan potongan'), { id: 'api-error', toasterId: 'compensation-dialog' });
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Yakin ingin menghapus potongan ini?')) return;
+    if (!(await requestDecision({ title: t('Hapus potongan'), message: t('Yakin ingin menghapus potongan ini?'), confirmLabel: t('Hapus') }))) return;
 
     try {
       await deductionService.delete(id);
-      toast.success('Potongan berhasil dihapus');
+      toast.success(t("Potongan berhasil dihapus"));
       fetchDeductions();
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to delete deduction:', error);
-      toast.error(error.response?.data?.error?.message || error.response?.data?.message || 'Gagal menghapus potongan', { id: 'api-error' });
+      toast.error((isAxiosError(error) ? error.response?.data?.error?.message || error.response?.data?.message : undefined) || t('Gagal menghapus potongan'), { id: 'api-error' });
     }
   };
 
   const handleApprove = async (id: number) => {
     try {
       await deductionService.approve(id);
-      toast.success('Potongan berhasil disetujui');
+      toast.success(t("Potongan berhasil disetujui"));
       fetchDeductions();
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to approve:', error);
-      toast.error(error.response?.data?.error?.message || error.response?.data?.message || 'Gagal menyetujui', { id: 'api-error' });
+      toast.error((isAxiosError(error) ? error.response?.data?.error?.message || error.response?.data?.message : undefined) || t('Gagal menyetujui'), { id: 'api-error' });
     }
   };
 
   const handleReject = async (id: number) => {
-    const reason = prompt('Alasan penolakan:');
+    const reason = (await requestDecision({ title: t('Tolak potongan'), message: t('Alasan ini akan disimpan bersama penolakan.'), confirmLabel: t('Tolak'), reasonLabel: t('Alasan penolakan:') }));
     if (!reason) return;
 
     try {
       await deductionService.reject(id, reason);
-      toast.success('Potongan berhasil ditolak');
+      toast.success(t("Potongan berhasil ditolak"));
       fetchDeductions();
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to reject:', error);
-      toast.error(error.response?.data?.error?.message || error.response?.data?.message || 'Gagal menolak', { id: 'api-error' });
+      toast.error((isAxiosError(error) ? error.response?.data?.error?.message || error.response?.data?.message : undefined) || t('Gagal menolak'), { id: 'api-error' });
     }
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('id-ID', {
+    return new Intl.NumberFormat(intlLocale(), {
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0,
@@ -413,378 +411,46 @@ export function DeductionsPage() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header Banner */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-red-500 via-rose-500 to-pink-500 rounded-2xl shadow-lg">
-        <div className="absolute inset-0 bg-grid-white/10 [mask-image:linear-gradient(0deg,transparent,rgba(255,255,255,0.5))]"></div>
-        <div className="absolute -top-24 -right-24 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
-        <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-red-400/20 rounded-full blur-3xl"></div>
+    <>
+      <CompensationWorkspace title={t("Deductions")} description={t("Kelola potongan, pinjaman, dan cicilan karyawan.")}
+        actions={canManage && <button className="cp-button cp-primary" onClick={() => handleOpenModal()}><Plus size={17} />{t("Tambah Potongan")}</button>}
+        filters={<>
+          <label className="cp-field">{t("company")}<select aria-label={t("Filter company")} value={filterCompany} onChange={event => { setFilterCompany(event.target.value); setPage(1); }}><option value="all">{t("Semua company")}</option>{companies.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}</select></label>
+            {companiesError && <p className="cp-filter-error" role="alert">{t("Daftar company gagal dimuat.")} <button onClick={fetchCompanies}>{t("Coba lagi")}</button></p>}
+          <label className="cp-field">{t("tipe")}<select aria-label={t("Filter tipe")} value={filterType} onChange={event => { setFilterType(event.target.value); setPage(1); }}><option value="all">{t("Semua tipe")}</option>{DEDUCTION_TYPES.map(type => <option key={type} value={type}>{payrollEnumLabel(type)}</option>)}</select></label>
+          <label className="cp-field">{t("status")}<select aria-label={t("Filter status")} value={filterStatus} onChange={event => { setFilterStatus(event.target.value); setPage(1); }}><option value="all">{t("Semua status")}</option><option value="pending">{t("Pending")}</option><option value="approved">{t("Approved")}</option><option value="rejected">{t("Rejected")}</option><option value="processed">{t("Processed")}</option></select></label>
+          <button className="cp-reset" onClick={() => { setSearch(''); setFilterCompany('all'); setFilterType('all'); setFilterStatus('all'); setPage(1); }}>{t("Reset filter")}</button>
+          <p className="cp-filter-note">{t("Lihat status persetujuan dan sisa cicilan sebelum memperbarui potongan.")}</p>
+        </>}
+        metrics={[
+          { label: t('Potongan ditampilkan'), value: payrollNumber(deductions.length), note: t('Pada halaman ini') },
+          { label: t('Menunggu persetujuan'), value: payrollNumber(stats.pendingCount), note: t('Pada halaman ini') },
+          { label: t('Nominal disetujui'), value: formatCurrency(stats.totalAmount), note: t('Pada halaman ini') },
+        ]}
+        search={search} onSearch={value => { setSearch(value); setPage(1); }} searchLabel={t("Cari potongan…")}
+        loading={loading} error={loadError} onRetry={fetchDeductions}
+        page={page} totalPages={totalPages} onPage={setPage} count={t("{value0} potongan di halaman ini", { value0: payrollNumber(deductions.length) })}>
+        {!deductions.length ? <CompensationEmpty /> : <table className="cp-table cp-deductions"><thead><tr><th>{t("Potongan / Karyawan")}</th><th>{t("Nominal / Cicilan")}</th><th>{t("Periode")}</th><th>{t("Status")}</th><th><span className="sr-only">{t("Aksi")}</span></th></tr></thead>
+          <tbody>{deductions.map(deduction => <tr key={deduction.id}>
+            <td><div className="cp-record-title"><span className="cp-record-icon">{getIcon(deduction.type)}</span><div><strong>{deduction.employee?.name || t('Karyawan')}</strong><small>{deduction.employee?.employee_id} · {payrollEnumLabel(deduction.type)}</small></div></div>
+              <p className="cp-description">{deduction.description || deduction.category || t('Potongan karyawan')}</p>{deduction.employee?.department && <small>{deduction.employee.department.name}</small>}
+              {deduction.rejection_reason && <p className="cp-rejection">{t("Ditolak:")} {deduction.rejection_reason}</p>}</td>
+            <td data-label={t("Nominal / Cicilan")} className="cp-money"><strong>{formatCurrency(Number(deduction.amount))}</strong>
+              {(deduction.type === 'loan' || deduction.type === 'advance') && deduction.total_installments ? <div className="cp-installment"><small>{t("Cicilan")} {payrollNumber(Number(deduction.current_installment || 0))} / {payrollNumber(Number(deduction.total_installments))}</small><progress aria-label={t("Progress cicilan")} value={deduction.current_installment || 0} max={deduction.total_installments} /><small>{t("Sisa")} {formatCurrency(Number(deduction.remaining_balance || 0))}</small><small>{t("Total")} {formatCurrency(Number(deduction.total_loan_amount || 0))}</small></div> : <small>{deduction.is_recurring ? t("Berulang") : t("Sekali bayar")}</small>}</td>
+            <td data-label={t("Periode")}><strong>{deduction.effective_date ? new Date(deduction.effective_date).toLocaleDateString(intlLocale()) : '—'}</strong><small>{deduction.pay_period || t('Periode belum ditentukan')}</small>{deduction.is_recurring && <span className="cp-tag">{t("Recurring")}</span>}</td>
+            <td data-label={t("Status")}><CompensationStatus status={deduction.status} /></td>
+            <td className="cp-row-actions">{canApprove && deduction.status === 'pending' && <><button className="cp-icon-button" aria-label={t("Approve potongan {value0}", { value0: deduction.id })} onClick={() => handleApprove(deduction.id)}><Check size={16} /></button><button className="cp-icon-button cp-danger" aria-label={t("Reject potongan {value0}", { value0: deduction.id })} onClick={() => handleReject(deduction.id)}><XCircle size={16} /></button></>}{canManage && <><button className="cp-icon-button" aria-label={t("Edit potongan {value0}", { value0: deduction.id })} onClick={() => handleOpenModal(deduction)}><Edit2 size={16} /></button><button className="cp-icon-button cp-danger" aria-label={t("Hapus potongan {value0}", { value0: deduction.id })} onClick={() => handleDelete(deduction.id)}><Trash2 size={16} /></button></>}</td>
+          </tr>)}</tbody></table>}
+      </CompensationWorkspace>
+      {showModal && canManage && <CompensationDialog title={editingDeduction ? t("Edit Potongan") : t("Tambah Potongan")} subtitle={t("Tentukan karyawan, jenis potongan, dan periode berlakunya.")} busy={submitting} onClose={handleCloseModal}>
+        {employeesError && <p className="cp-form-error" role="alert">{t("Daftar karyawan gagal dimuat.")} <button type="button" onClick={() => fetchEmployees(formData.company_id ? Number(formData.company_id) : undefined)}>{t("Coba lagi")}</button></p>}
+        <form onSubmit={handleSubmit} className="ph-workflow dw-form">
+                <div><div className="dw-form-content"><section className="ph-section dw-section"><h3>{t("Karyawan")}</h3><div className="dw-fields"><div className="dw-fields">
 
-        <div className="relative px-6 py-8 sm:px-8 sm:py-10">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-14 h-14 bg-white/20 backdrop-blur-xl rounded-2xl flex items-center justify-center shadow-lg">
-                  <MinusCircle className="w-7 h-7 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-                    Deductions Management
-                  </h1>
-                  <p className="text-red-100 text-sm mt-1">
-                    Kelola potongan gaji karyawan
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => toast.success('Export feature coming soon')}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-white/20 backdrop-blur-xl text-white rounded-xl border border-white/30 hover:bg-white/30 transition-all duration-200 font-semibold"
-              >
-                <Download className="w-5 h-5" />
-                <span>Export</span>
-              </button>
-              <button
-                onClick={() => handleOpenModal()}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-red-600 rounded-xl hover:bg-red-50 transition-all duration-200 font-semibold shadow-lg"
-              >
-                <Plus className="w-5 h-5" />
-                <span>Tambah Potongan</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-red-500 to-rose-600 rounded-xl flex items-center justify-center shadow-lg">
-              <Receipt className="w-6 h-6 text-white" />
-            </div>
-          </div>
-          <p className="text-3xl font-bold text-gray-900 mb-1">{stats.totalItems}</p>
-          <p className="text-sm text-gray-500">Total Potongan</p>
-        </div>
-
-        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-xl flex items-center justify-center shadow-lg">
-              <AlertTriangle className="w-6 h-6 text-white" />
-            </div>
-            <span className="inline-flex items-center px-2 py-1 bg-yellow-50 text-yellow-700 text-xs font-bold rounded-lg">
-              Pending
-            </span>
-          </div>
-          <p className="text-3xl font-bold text-gray-900 mb-1">{stats.pendingCount}</p>
-          <p className="text-sm text-gray-500">Menunggu Persetujuan</p>
-        </div>
-
-        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center shadow-lg">
-              <Check className="w-6 h-6 text-white" />
-            </div>
-            <span className="inline-flex items-center px-2 py-1 bg-green-50 text-green-700 text-xs font-bold rounded-lg">
-              Approved
-            </span>
-          </div>
-          <p className="text-3xl font-bold text-gray-900 mb-1">{stats.approvedCount}</p>
-          <p className="text-sm text-gray-500">Disetujui</p>
-        </div>
-
-        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
-              <CreditCard className="w-6 h-6 text-white" />
-            </div>
-          </div>
-          <p className="text-2xl font-bold text-gray-900 mb-1">{formatCurrency(stats.totalAmount)}</p>
-          <p className="text-sm text-gray-500">Total Potongan (Approved)</p>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-        {/* Filters */}
-        <div className="px-6 py-4 border-b border-gray-100">
-          <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Cari potongan..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
-              />
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
-              >
-                <option value="all">Semua Status</option>
-                <option value="pending">Pending</option>
-                <option value="approved">Approved</option>
-                <option value="rejected">Rejected</option>
-                <option value="processed">Processed</option>
-              </select>
-
-              <select
-                value={filterType}
-                onChange={(e) => setFilterType(e.target.value)}
-                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
-              >
-                <option value="all">Semua Tipe</option>
-                {DEDUCTION_TYPES.map(type => (
-                  <option key={type} value={type}>{deductionService.getTypeLabel(type)}</option>
-                ))}
-              </select>
-
-              <select
-                value={filterCompany}
-                onChange={(e) => setFilterCompany(e.target.value)}
-                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
-              >
-                <option value="all">Semua Perusahaan</option>
-                {companies.map(company => (
-                  <option key={company.id} value={company.id}>{company.name}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Deduction Cards Grid */}
-        <div className="p-6">
-          {loading ? (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="w-8 h-8 text-red-500 animate-spin" />
-            </div>
-          ) : deductions.length === 0 ? (
-            <div className="text-center py-16">
-              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <MinusCircle className="w-8 h-8 text-gray-400" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900">Tidak ada potongan</h3>
-              <p className="mt-1 text-gray-500">Coba sesuaikan filter pencarian</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {deductions.map(deduction => (
-                <div
-                  key={deduction.id}
-                  className={`relative overflow-hidden bg-white rounded-xl border p-5 transition-all hover:shadow-md ${
-                    deduction.status === 'approved' ? 'border-green-200' :
-                    deduction.status === 'pending' ? 'border-yellow-200' :
-                    deduction.status === 'rejected' ? 'border-red-200' :
-                    'border-gray-200'
-                  }`}
-                >
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white shadow-lg bg-gradient-to-br ${getIconColor(deduction.type)}`}>
-                        {getIcon(deduction.type)}
-                      </div>
+                    <div className="ph-form-grid dw-form-grid">
                       <div>
-                        <h3 className="font-semibold text-gray-900">{deductionService.getTypeLabel(deduction.type)}</h3>
-                        <p className="text-xs text-gray-500">{deduction.category || 'Umum'}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {deduction.status === 'pending' && (
-                        <>
-                          <button
-                            onClick={() => handleApprove(deduction.id)}
-                            className="p-1.5 text-green-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                            title="Approve"
-                          >
-                            <Check className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleReject(deduction.id)}
-                            className="p-1.5 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Reject"
-                          >
-                            <XCircle className="w-4 h-4" />
-                          </button>
-                        </>
-                      )}
-                      <button
-                        onClick={() => handleOpenModal(deduction)}
-                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(deduction.id)}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {deduction.description && (
-                    <p className="text-sm text-gray-600 mb-4 line-clamp-2">{deduction.description}</p>
-                  )}
-
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    <span className={`px-2 py-0.5 text-xs font-medium rounded ${deductionService.getStatusColor(deduction.status)}`}>
-                      {deductionService.getStatusLabel(deduction.status)}
-                    </span>
-                    {deduction.is_recurring && (
-                      <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-medium rounded">
-                        Recurring
-                      </span>
-                    )}
-                    {deduction.pay_period && (
-                      <span className="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs font-medium rounded">
-                        {deduction.pay_period}
-                      </span>
-                    )}
-                    {(deduction.type === 'loan' || deduction.type === 'advance') && deduction.total_installments && (
-                      <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">
-                        Cicilan {deduction.current_installment || 0}/{deduction.total_installments}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Loan Progress */}
-                  {(deduction.type === 'loan' || deduction.type === 'advance') && deduction.total_loan_amount && deduction.total_installments && (
-                    <div className="mb-4">
-                      <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-                        <span>Progress Cicilan</span>
-                        <span>{Math.round(((deduction.current_installment || 0) / deduction.total_installments) * 100)}%</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div
-                          className="bg-blue-500 h-2 rounded-full transition-all"
-                          style={{ width: `${Math.min(100, ((deduction.current_installment || 0) / deduction.total_installments) * 100)}%` }}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between text-xs text-gray-500 mt-1">
-                        <span>Sisa: {formatCurrency(Number(deduction.remaining_balance || 0))}</span>
-                        <span>Total: {formatCurrency(Number(deduction.total_loan_amount || 0))}</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {deduction.employee && (
-                    <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-3">
-                      <Users className="w-3.5 h-3.5" />
-                      <span>{deduction.employee.name}</span>
-                      {deduction.employee.department && (
-                        <span className="text-gray-400">({deduction.employee.department.name})</span>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="border-t border-gray-100 pt-3 mt-3">
-                    <div className="flex items-center justify-between text-sm">
-                      <div>
-                        <p className="text-gray-500">Jumlah</p>
-                        <p className="font-bold text-red-600 text-lg">
-                          {formatCurrency(Number(deduction.amount))}
-                        </p>
-                      </div>
-                      {deduction.effective_date && (
-                        <div className="text-right">
-                          <p className="text-gray-500">Efektif</p>
-                          <p className="font-medium text-gray-900">
-                            {new Date(deduction.effective_date).toLocaleDateString('id-ID')}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {deduction.rejection_reason && (
-                    <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-red-600 bg-red-50 p-2 rounded">
-                      <strong>Alasan Penolakan:</strong> {deduction.rejection_reason}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between">
-            <p className="text-sm text-gray-500">
-              Menampilkan {deductions.length} dari {totalItems} potongan
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="p-2 text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-              <span className="text-sm text-gray-600">
-                Halaman {page} dari {totalPages}
-              </span>
-              <button
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="p-2 text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Add/Edit Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex min-h-screen items-center justify-center p-4">
-            <div className="fixed inset-0 bg-black/50 transition-opacity" onClick={handleCloseModal} />
-
-            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden">
-              <div className="bg-gradient-to-br from-red-500 via-rose-500 to-pink-500 px-6 py-5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-white/20 backdrop-blur-xl rounded-xl flex items-center justify-center">
-                      <MinusCircle className="w-6 h-6 text-white" />
-                    </div>
-                    <div>
-                      <h2 className="text-xl font-bold text-white">
-                        {editingDeduction ? 'Edit Potongan' : 'Tambah Potongan'}
-                      </h2>
-                      <p className="text-red-100 text-sm">
-                        {editingDeduction ? 'Perbarui data potongan' : 'Buat potongan baru'}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={handleCloseModal}
-                    className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center text-white hover:bg-white/30 transition-colors"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-
-              <form onSubmit={handleSubmit} className="p-6 max-h-[70vh] overflow-y-auto">
-                <div className="space-y-4">
-                  {/* Company & Employee Selection */}
-                  <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                    <p className="text-sm font-medium text-blue-800 mb-3">Pilih Karyawan</p>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Perusahaan</label>
-                        <select
+                        <label className="block text-sm font-medium text-gray-700 mb-2">{t("Perusahaan")}</label>
+                        <select aria-label={t("Perusahaan")}
                           value={formData.company_id}
                           onChange={(e) => {
                             setFormData(prev => ({ ...prev, company_id: e.target.value, employee_id: '' }));
@@ -792,17 +458,16 @@ export function DeductionsPage() {
                           }}
                           className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 bg-white"
                         >
-                          <option value="">Semua Perusahaan</option>
+                          <option value="">{t("Semua Perusahaan")}</option>
                           {companies.map(company => (
                             <option key={company.id} value={company.id}>{company.name}</option>
                           ))}
                         </select>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Karyawan <span className="text-red-500">*</span>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">{t("Karyawan")} <span className="text-red-500">*</span>
                         </label>
-                        <SearchableSelect
+                        <CompensationEmployeeSelect
                           options={employees.map(emp => ({
                             value: emp.id,
                             label: emp.name,
@@ -815,21 +480,19 @@ export function DeductionsPage() {
                             const emp = employees.find(emp => emp.id === Number(employeeId));
                             setSelectedEmployee(emp || null);
                           }}
-                          placeholder="Cari karyawan..."
-                          searchPlaceholder="Ketik nama atau ID..."
+                          placeholder={t("Cari karyawan...")}
+                          searchPlaceholder={t("Ketik nama atau ID...")}
                           disabled={loadingEmployees}
                           loading={loadingEmployees}
-                          emptyMessage="Tidak ada karyawan"
+                          emptyMessage={t("Tidak ada karyawan")}
                         />
                       </div>
                     </div>
 
                     {selectedEmployee && (
-                      <div className="mt-3 bg-white rounded-lg p-3 border border-gray-200">
+                      <div className="dw-context">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
-                            <Users className="w-5 h-5 text-red-600" />
-                          </div>
+
                           <div>
                             <p className="font-medium text-gray-900">{selectedEmployee.name}</p>
                             <p className="text-xs text-gray-500">
@@ -840,15 +503,11 @@ export function DeductionsPage() {
                         </div>
                       </div>
                     )}
-                  </div>
-
-                  {/* Deduction Type & Amount */}
-                  <div className={`grid ${isLoanType ? 'grid-cols-1' : 'grid-cols-2'} gap-4`}>
+                  </div></div></section><section className="ph-section dw-section"><h3>{t("Potongan & cicilan")}</h3><div className="dw-fields"><div className={isLoanType ? 'dw-fields' : 'ph-form-grid dw-form-grid'}>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Tipe Potongan <span className="text-red-500">*</span>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">{t("Tipe Potongan")} <span className="text-red-500">*</span>
                       </label>
-                      <select
+                      <select aria-label={t("Tipe Potongan *")}
                         value={formData.type}
                         onChange={(e) => setFormData(prev => ({
                           ...prev,
@@ -863,16 +522,15 @@ export function DeductionsPage() {
                         required
                       >
                         {DEDUCTION_TYPES.map(type => (
-                          <option key={type} value={type}>{deductionService.getTypeLabel(type)}</option>
+                          <option key={type} value={type}>{payrollEnumLabel(type)}</option>
                         ))}
                       </select>
                     </div>
                     {!isLoanType && (
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Jumlah (Rp) <span className="text-red-500">*</span>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">{t("Jumlah (Rp)")} <span className="text-red-500">*</span>
                         </label>
-                        <input
+                        <input aria-label={t("Jumlah (Rp) *")}
                           type="number"
                           value={formData.amount}
                           onChange={(e) => setFormData(prev => ({ ...prev, amount: Number(e.target.value) }))}
@@ -883,90 +541,82 @@ export function DeductionsPage() {
                       </div>
                     )}
                   </div>
-
-                  {/* Loan/Kasbon Details */}
-                  {isLoanType && (
-                    <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                      <p className="text-sm font-medium text-blue-800 mb-3">Detail Pinjaman / Kasbon</p>
-                      <div className="grid grid-cols-2 gap-4">
+{isLoanType && (
+                    <div className="dw-fields">
+                      <h3 className="dw-section-heading">{t("Detail Pinjaman / Kasbon")}</h3>
+                      <div className="ph-form-grid dw-form-grid">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Total Pinjaman (Rp) <span className="text-red-500">*</span>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">{t("Total Pinjaman (Rp)")} <span className="text-red-500">*</span>
                           </label>
-                          <input
+                          <input aria-label={t("Total Pinjaman (Rp) *")}
                             type="number"
                             value={formData.total_loan_amount || ''}
                             onChange={(e) => setFormData(prev => ({ ...prev, total_loan_amount: Number(e.target.value) }))}
                             className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
-                            placeholder="e.g. 4000000"
+                            placeholder={t("e.g. 4000000")}
                             required
                           />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Cicilan per Bulan (Rp) <span className="text-red-500">*</span>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">{t("Cicilan per Bulan (Rp)")} <span className="text-red-500">*</span>
                           </label>
-                          <input
+                          <input aria-label={t("Cicilan per Bulan (Rp) *")}
                             type="number"
                             value={formData.installment_amount || ''}
                             onChange={(e) => setFormData(prev => ({ ...prev, installment_amount: Number(e.target.value) }))}
                             className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
-                            placeholder="e.g. 500000"
+                            placeholder={t("e.g. 500000")}
                             required
                           />
                         </div>
                       </div>
                       {computedInstallments > 0 && (
-                        <div className="mt-3 text-sm text-blue-700">
-                          Jumlah Cicilan: <strong>{computedInstallments} bulan</strong>
+                        <div className="dw-note">{t("Jumlah Cicilan:")} <strong>{payrollNumber(Number(computedInstallments))}{' '}{t("bulan")}</strong>
                         </div>
                       )}
 
                       {/* Loan Summary Preview */}
                       {formData.total_loan_amount > 0 && formData.installment_amount > 0 && computedInstallments > 0 && (
-                        <div className="mt-4 bg-white rounded-lg p-4 border border-blue-200">
-                          <p className="text-sm font-semibold text-gray-900 mb-2">Ringkasan Pinjaman</p>
-                          <div className="space-y-1 text-sm text-gray-700">
-                            <div className="flex justify-between">
-                              <span>Total Pinjaman</span>
-                              <span className="font-medium">{formatCurrency(formData.total_loan_amount)}</span>
+                        <div className="dw-context">
+                          <h3 className="dw-section-heading">{t("Ringkasan Pinjaman")}</h3>
+                          <dl className="dw-kv">
+                            <div>
+                              <dt>{t("Total Pinjaman")}</dt>
+                              <dd>{formatCurrency(formData.total_loan_amount)}</dd>
                             </div>
-                            <div className="flex justify-between">
-                              <span>Cicilan</span>
-                              <span className="font-medium">
-                                {formatCurrency(formData.installment_amount)} x {computedInstallments} bulan
-                              </span>
+                            <div>
+                              <dt>{t("Cicilan")}</dt>
+                              <dd>
+                                {formatCurrency(formData.installment_amount)}{' '}{t("x")} {payrollNumber(Number(computedInstallments))}{' '}{t("bulan")} </dd>
                             </div>
                             {formData.effective_date && computedEndDate && (
-                              <div className="flex justify-between">
-                                <span>Periode</span>
-                                <span className="font-medium">
-                                  {new Date(formData.effective_date).toLocaleDateString('id-ID', { month: 'short', year: 'numeric' })}
+                              <div>
+                                <dt>{t("Periode")}</dt>
+                                <dd>
+                                  {new Date(formData.effective_date).toLocaleDateString(intlLocale(), { month: 'short', year: 'numeric' })}
                                   {' - '}
-                                  {new Date(computedEndDate).toLocaleDateString('id-ID', { month: 'short', year: 'numeric' })}
-                                </span>
+                                  {new Date(computedEndDate).toLocaleDateString(intlLocale(), { month: 'short', year: 'numeric' })}
+                                </dd>
                               </div>
                             )}
-                          </div>
+                          </dl>
                         </div>
                       )}
                     </div>
-                  )}
-
-                  <div className="grid grid-cols-2 gap-4">
+                  )}</div></section><section className="ph-section dw-section"><h3>{t("Periode & keterangan")}</h3><div className="dw-fields"><div className="ph-form-grid dw-form-grid">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Kategori</label>
-                      <input
+                      <label className="block text-sm font-medium text-gray-700 mb-2">{t("Kategori")}</label>
+                      <input aria-label={t("Kategori")}
                         type="text"
                         value={formData.category}
                         onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
                         className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
-                        placeholder="e.g., Cicilan, Denda"
+                        placeholder={t("e.g., Cicilan, Denda")}
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Periode Gaji</label>
-                      <input
+                      <label className="block text-sm font-medium text-gray-700 mb-2">{t("Periode Gaji")}</label>
+                      <input aria-label={t("Periode Gaji")}
                         type="month"
                         value={formData.pay_period}
                         onChange={(e) => setFormData(prev => ({ ...prev, pay_period: e.target.value }))}
@@ -974,22 +624,20 @@ export function DeductionsPage() {
                       />
                     </div>
                   </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Keterangan</label>
-                    <textarea
+<div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">{t("Keterangan")}</label>
+                    <textarea aria-label={t("Keterangan")}
                       value={formData.description}
                       onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                       className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
                       rows={2}
-                      placeholder="Keterangan potongan..."
+                      placeholder={t("Keterangan potongan...")}
                     />
                   </div>
-
-                  <div className="grid grid-cols-2 gap-4">
+<div className="ph-form-grid dw-form-grid">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Tanggal Efektif</label>
-                      <input
+                      <label className="block text-sm font-medium text-gray-700 mb-2">{t("Tanggal Efektif")}</label>
+                      <input aria-label={t("Tanggal Efektif")}
                         type="date"
                         value={formData.effective_date}
                         onChange={(e) => setFormData(prev => ({ ...prev, effective_date: e.target.value }))}
@@ -997,20 +645,18 @@ export function DeductionsPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">No. Referensi</label>
-                      <input
+                      <label className="block text-sm font-medium text-gray-700 mb-2">{t("No. Referensi")}</label>
+                      <input aria-label={t("No. Referensi")}
                         type="text"
                         value={formData.reference_number}
                         onChange={(e) => setFormData(prev => ({ ...prev, reference_number: e.target.value }))}
                         className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
-                        placeholder="e.g., LOAN-2024-001"
+                        placeholder={t("e.g., LOAN-2024-001")}
                       />
                     </div>
                   </div>
-
-                  {/* Recurring Options - hidden for loan types (auto-managed) */}
-                  {!isLoanType && (
-                    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+{!isLoanType && (
+                    <div className="dw-fields">
                       <label className="flex items-center gap-2 cursor-pointer mb-3">
                         <input
                           type="checkbox"
@@ -1018,26 +664,26 @@ export function DeductionsPage() {
                           onChange={(e) => setFormData(prev => ({ ...prev, is_recurring: e.target.checked }))}
                           className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
                         />
-                        <span className="text-sm font-medium text-gray-700">Potongan Berulang (Recurring)</span>
+                        <span className="text-sm font-medium text-gray-700">{t("Potongan Berulang (Recurring)")}</span>
                       </label>
 
                       {formData.is_recurring && (
                         <div className="grid grid-cols-2 gap-4 mt-3">
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Frekuensi</label>
-                            <select
+                            <label className="block text-sm font-medium text-gray-700 mb-2">{t("Frekuensi")}</label>
+                            <select aria-label={t("Frekuensi")}
                               value={formData.recurring_frequency}
                               onChange={(e) => setFormData(prev => ({ ...prev, recurring_frequency: e.target.value }))}
                               className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
                             >
-                              <option value="monthly">Bulanan</option>
-                              <option value="quarterly">Per Kuartal</option>
-                              <option value="yearly">Tahunan</option>
+                              <option value="monthly">{t("Bulanan")}</option>
+                              <option value="quarterly">{t("Per Kuartal")}</option>
+                              <option value="yearly">{t("Tahunan")}</option>
                             </select>
                           </div>
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Berakhir Pada</label>
-                            <input
+                            <label className="block text-sm font-medium text-gray-700 mb-2">{t("Berakhir Pada")}</label>
+                            <input aria-label={t("Berakhir Pada")}
                               type="date"
                               value={formData.recurring_end_date}
                               onChange={(e) => setFormData(prev => ({ ...prev, recurring_end_date: e.target.value }))}
@@ -1047,44 +693,36 @@ export function DeductionsPage() {
                         </div>
                       )}
                     </div>
-                  )}
-
-                  {/* Preview */}
-                  {!isLoanType && formData.amount > 0 && (
-                    <div className="bg-red-50 rounded-lg p-4 border border-red-200">
+                  )}</div></section>{!isLoanType && formData.amount > 0 && (
+                    <div className="dw-inline">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-red-700">Total Potongan</span>
-                        <span className="text-lg font-bold text-red-700">
+                        <span className="text-sm text-red-700">{t("Total Potongan")}</span>
+                        <span className="dw-money">
                           {formatCurrency(formData.amount)}
                         </span>
                       </div>
                     </div>
-                  )}
-                </div>
+                  )}</div></div>
 
-                <div className="flex items-center gap-3 mt-6">
+                <div className="ph-form-actions dw-actions">
                   <button
                     type="button"
                     onClick={handleCloseModal}
                     disabled={submitting}
-                    className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
-                  >
-                    Batal
-                  </button>
+                    className="ph-button"
+                  >{t("Batal")} </button>
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="flex-1 px-4 py-2.5 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                    className="ph-button ph-button-primary"
                   >
                     {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                    {editingDeduction ? 'Perbarui' : 'Simpan'}
+                    {editingDeduction ? t("Perbarui") : t("Simpan")}
                   </button>
                 </div>
               </form>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+      </CompensationDialog>}
+    {decisionDialog}
+</>
   );
 }

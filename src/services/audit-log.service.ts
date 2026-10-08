@@ -1,6 +1,7 @@
 import api from './api';
 
 export interface AuditLog {
+  context?: { request_id?: string; related_request_id?: string; source?: string; outcome?: string; status_code?: number; duration_ms?: number; error_code?: string; error_name?: string; attempted_action?: string; reported?: boolean } | null;
   id: number;
   user_id: number | null;
   user_email: string | null;
@@ -37,6 +38,9 @@ export interface AuditLogListQuery {
   start_date?: string;
   end_date?: string;
   ip_address?: string;
+  search?: string;
+  category?: 'auth' | 'access' | 'changes' | 'approval' | 'errors';
+  outcome?: 'success' | 'failure';
 }
 
 export interface AuditLogPagination {
@@ -86,7 +90,7 @@ export const auditLogService = {
   },
 
   // GET /audit-logs/statistics → { success, data }
-  getStatistics: async (query?: { start_date?: string; end_date?: string }): Promise<AuditStatistics> => {
+  getStatistics: async (query?: AuditLogListQuery): Promise<AuditStatistics> => {
     const response = await api.get('/audit-logs/statistics', { params: query });
     return response.data.data;
   },

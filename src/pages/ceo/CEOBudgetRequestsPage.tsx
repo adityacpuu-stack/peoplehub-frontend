@@ -1,14 +1,8 @@
+import { insightEnum, insightNumber, insightFixed } from '@/pages/ceo/insight-display';
+import { t, useLocale, intlLocale } from '@/i18n';
+import { ReportPage, ReportHeader, ReportSummary, ReportSection } from '@/pages/dashboard/ReportingLayout';
 import { useState } from 'react';
-import {
-  Wallet,
-  Clock,
-  CheckCircle,
-  User,
-  Building2,
-  DollarSign,
-  Search,
-  PieChart as PieChartIcon,
-} from 'lucide-react';
+import { Wallet, User, Building2, DollarSign, Search } from 'lucide-react';
 import { PreviewBanner } from '@/components/ui';
 import {
   PieChart,
@@ -92,6 +86,7 @@ const categoryColors: Record<string, string> = {
 };
 
 export function CEOBudgetRequestsPage() {
+  useLocale();
   const [filter, setFilter] = useState<string>('pending');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -104,7 +99,7 @@ export function CEOBudgetRequestsPage() {
     );
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('id-ID', {
+    return new Intl.NumberFormat(intlLocale(), {
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0,
@@ -114,10 +109,10 @@ export function CEOBudgetRequestsPage() {
 
   const formatCompactCurrency = (value: number) => {
     if (value >= 1000000000) {
-      return `Rp ${(value / 1000000000).toFixed(1)}B`;
+      return `Rp ${insightFixed((value / 1000000000), 1)}${t('billion short')}`;
     }
     if (value >= 1000000) {
-      return `Rp ${(value / 1000000).toFixed(0)}M`;
+      return `Rp ${insightFixed((value / 1000000), 0)}${t('million short')}`;
     }
     return formatCurrency(value);
   };
@@ -151,90 +146,15 @@ export function CEOBudgetRequestsPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <PreviewBanner message="Budget requests belum terintegrasi dengan workflow real. Data adalah contoh untuk preview UI." />
-      {/* Header */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-900 to-slate-900 rounded-2xl shadow-xl overflow-hidden">
-        <div className="px-4 md:px-8 py-6 md:py-8 relative">
-          <div className="absolute inset-0 opacity-5">
-            <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
-              <defs>
-                <pattern id="budget-pattern" width="60" height="60" patternUnits="userSpaceOnUse">
-                  <path d="M 60 0 L 0 0 0 60" fill="none" stroke="white" strokeWidth="1"/>
-                </pattern>
-              </defs>
-              <rect width="100%" height="100%" fill="url(#budget-pattern)" />
-            </svg>
-          </div>
-
-          <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 md:w-14 md:h-14 bg-gradient-to-br from-green-400 to-emerald-600 rounded-2xl flex items-center justify-center shadow-lg">
-                <Wallet className="h-6 w-6 md:h-7 md:w-7 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl md:text-2xl font-bold text-white">Budget Requests</h1>
-                <p className="text-slate-400 text-xs md:text-sm mt-1">Review and approve budget allocations</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur-xl rounded-xl text-sm text-white font-medium border border-white/10">
+    <ReportPage><PreviewBanner message={t("Budget requests belum terintegrasi dengan workflow real. Data adalah contoh untuk preview UI.")} />{/* Header */}<ReportHeader>
+<div className="report-heading"><h1 className="text-xl md:text-2xl font-bold">{t("Budget Requests")}</h1><p className="text-xs md:text-sm mt-1">{t("Review and approve budget allocations")}</p></div>
+<div className="report-header-context"><div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium border">
                 <DollarSign className="h-4 w-4" />
-                {formatCompactCurrency(totalPendingAmount)} Pending
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Stats Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl flex items-center justify-center shadow-md">
-              <Clock className="h-5 w-5 text-white" />
-            </div>
-          </div>
-          <p className="text-xl md:text-2xl font-bold text-gray-900">{pendingRequests.length}</p>
-          <p className="text-xs text-gray-500">Pending Requests</p>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-rose-600 rounded-xl flex items-center justify-center shadow-md">
-              <DollarSign className="h-5 w-5 text-white" />
-            </div>
-          </div>
-          <p className="text-lg md:text-2xl font-bold text-gray-900">{formatCompactCurrency(totalPendingAmount)}</p>
-          <p className="text-xs text-gray-500">Pending Amount</p>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-md">
-              <CheckCircle className="h-5 w-5 text-white" />
-            </div>
-          </div>
-          <p className="text-lg md:text-2xl font-bold text-gray-900">{formatCompactCurrency(totalApprovedAmount)}</p>
-          <p className="text-xs text-gray-500">Approved YTD</p>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-violet-600 rounded-xl flex items-center justify-center shadow-md">
-              <PieChartIcon className="h-5 w-5 text-white" />
-            </div>
-          </div>
-          <p className="text-xl md:text-2xl font-bold text-gray-900">{budgetByCategory.length}</p>
-          <p className="text-xs text-gray-500">Categories</p>
-        </div>
-      </div>
-
-      {/* Budget by Category Chart */}
-      <div className="grid lg:grid-cols-3 gap-6">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-6">
-          <h3 className="text-base md:text-lg font-bold text-gray-900 mb-4">Budget by Category</h3>
-          <div className="h-48">
+                {formatCompactCurrency(totalPendingAmount)}{' '}{t("Pending")} </span>
+            </div></div>
+</ReportHeader>{/* Stats Row */}<ReportSummary><div className="report-metric"><div  className="report-metric-context"></div><p className="report-metric-value">{insightNumber(pendingRequests.length)}</p><p className="report-metric-label">{t("Pending Requests")}</p></div><div className="report-metric"><div  className="report-metric-context"></div><p className="report-metric-value">{formatCompactCurrency(totalPendingAmount)}</p><p className="report-metric-label">{t("Pending Amount")}</p></div><div className="report-metric"><div  className="report-metric-context"></div><p className="report-metric-value">{formatCompactCurrency(totalApprovedAmount)}</p><p className="report-metric-label">{t("Approved YTD")}</p></div><div className="report-metric"><div  className="report-metric-context"></div><p className="report-metric-value">{insightNumber(budgetByCategory.length)}</p><p className="report-metric-label">{t("Categories")}</p></div></ReportSummary>{/* Budget by Category Chart */}<div className="report-budget-layout">
+        <ReportSection><h3 className="text-base md:text-lg font-bold text-gray-900 mb-4">{t("Budget by Category")}</h3><div className="h-48">
             {budgetByCategory.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -256,12 +176,9 @@ export function CEOBudgetRequestsPage() {
                 </PieChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-full text-gray-500">
-                No data available
-              </div>
+              <div className="flex items-center justify-center h-full text-gray-500">{t("No data available")} </div>
             )}
-          </div>
-          <div className="mt-4 space-y-2">
+          </div><div className="mt-4 space-y-2">
             {budgetByCategory.map((item, index) => (
               <div key={index} className="flex items-center justify-between text-sm">
                 <div className="flex items-center gap-2">
@@ -271,49 +188,42 @@ export function CEOBudgetRequestsPage() {
                 <span className="font-medium text-gray-900">{formatCompactCurrency(item.value)}</span>
               </div>
             ))}
-          </div>
-        </div>
+          </div></ReportSection>
 
         {/* Search and Filter */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="flex flex-col md:flex-row gap-3">
-            <div className="relative flex-1">
+        <div className="report-budget-records space-y-4">
+          <div className="report-filters">
+            <div className="relative flex-1 report-search">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search budget requests..."
+                placeholder={t("Search budget requests...")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               />
             </div>
-            <div className="flex items-center gap-2 overflow-x-auto pb-1">
-              {['pending', 'approved', 'rejected', 'all'].map((status) => (
+            <div  className="ph-table-scroll flex items-center gap-2 overflow-x-auto pb-1">{['pending', 'approved', 'rejected', 'all'].map((status) => (
                 <button
                   key={status}
                   onClick={() => setFilter(status)}
                   className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors whitespace-nowrap ${
                     filter === status
-                      ? 'bg-indigo-600 text-white'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      ? "bg-indigo-600 text-white"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                   }`}
                 >
-                  {status.charAt(0).toUpperCase() + status.slice(1)}
+                  {insightEnum(status)}
                 </button>
-              ))}
-            </div>
+              ))}</div>
           </div>
 
           {/* Requests List */}
           <div className="space-y-4">
             {filteredRequests.map((request) => (
-              <div
-                key={request.id}
-                className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-5 hover:shadow-lg transition-shadow"
-              >
-                <div className="flex flex-col md:flex-row md:items-center gap-4">
+              <ReportSection key={request.id}><div className="flex flex-col md:flex-row md:items-center gap-4">
                   <div
-                    className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
+                    className="w-12 h-12 rounded-md flex items-center justify-center flex-shrink-0"
                     style={{ backgroundColor: `${categoryColors[request.category]}15` }}
                   >
                     <Wallet className="h-6 w-6" style={{ color: categoryColors[request.category] }} />
@@ -334,34 +244,24 @@ export function CEOBudgetRequestsPage() {
                         {request.company}
                       </span>
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold ${getStatusColor(request.status)}`}>
-                        {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
+                        {insightEnum(request.status)}
                       </span>
                     </div>
                   </div>
                   {request.status === 'pending' && (
                     <div className="flex items-center gap-2">
-                      <button className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium transition-colors">
-                        Approve
-                      </button>
-                      <button className="px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium transition-colors">
-                        Reject
-                      </button>
+                      <button disabled title={t("Belum tersedia — preview UI")} className="ph-button ph-button-primary px-3 py-1.5 rounded-lg text-sm font-medium transition-colors">{t("Approve")} </button>
+                      <button disabled title={t("Belum tersedia — preview UI")} className="px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium transition-colors">{t("Reject")} </button>
                     </div>
                   )}
-                </div>
-              </div>
+                </div></ReportSection>
             ))}
           </div>
 
           {filteredRequests.length === 0 && (
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-12 text-center">
-              <Wallet className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">No requests found</h3>
-              <p className="text-gray-500">Try changing the filter or search criteria.</p>
-            </div>
+            <ReportSection><Wallet className="h-12 w-12 text-gray-300 mx-auto mb-4" /><h3 className="text-lg font-semibold text-gray-900 mb-2">{t("No requests found")}</h3><p className="text-gray-500">{t("Try changing the filter or search criteria.")}</p></ReportSection>
           )}
         </div>
-      </div>
-    </div>
+      </div></ReportPage>
   );
 }

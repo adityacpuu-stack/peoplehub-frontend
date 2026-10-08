@@ -2,6 +2,7 @@ import api from './api';
 
 export interface User {
   id: number;
+  credentials_sent?: boolean;
   email: string;
   is_active: boolean;
   email_verified_at: string | null;
@@ -65,7 +66,7 @@ export interface UserListQuery {
 
 export interface CreateUserDTO {
   email: string;
-  password: string;
+  password?: string;
   employee_id?: number;
   role_ids?: number[];
   is_active?: boolean;

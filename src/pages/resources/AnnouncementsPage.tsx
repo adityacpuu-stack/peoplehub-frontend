@@ -1,1098 +1,283 @@
-import { useState, useEffect, useCallback } from 'react';
-import {
-  Search,
-  Plus,
-  Filter,
-  MoreVertical,
-  Edit2,
-  Trash2,
-  Eye,
-  Pin,
-  PinOff,
-  Megaphone,
-  Building2,
-  Clock,
-  Calendar,
-  Users,
-  AlertCircle,
-  CheckCircle,
-  X,
-  Bell,
-  Send,
-  Globe,
-  Lock,
-  Loader2,
-} from 'lucide-react';
+import { ApplicationCopy } from '@/components/leave/ApplicationCopy';
+import type { ReactElement } from 'react';
+import { t, useLocale, intlLocale } from '@/i18n';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { Building2, Eye, Loader2, Megaphone, Pencil, Pin, Plus, Search, Trash2, X } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { useResourceConfirmation } from './ResourceConfirmation';
+import { AccountDialog } from '@/components/ui/AccountDialog';
 import { useAuthStore } from '@/stores/auth.store';
 import {
-  announcementService,
-  type Announcement,
-  type AnnouncementCategory,
-  type AnnouncementPriority,
-  type AnnouncementVisibility,
-  type AnnouncementStatistics,
-  type CreateAnnouncementRequest,
+  announcementService, ANNOUNCEMENT_CATEGORIES, ANNOUNCEMENT_PRIORITIES,
+  getAnnouncementCategoryLabel, getPriorityLabel, getVisibilityLabel,
+  type Announcement, type AnnouncementOptions, type AnnouncementCategory,
+  type AnnouncementPriority, type AnnouncementVisibility, type CreateAnnouncementRequest, type UpdateAnnouncementRequest,
 } from '@/services/announcement.service';
-import { companyService, type Company } from '@/services/company.service';
+import './announcements.css';
+import './resources.css';
+import './resources-refresh.css';
 
-
-const categories = [
-  { value: 'all', label: 'All Categories' },
-  { value: 'general', label: 'General' },
-  { value: 'policy', label: 'Policy Update' },
-  { value: 'event', label: 'Event' },
-  { value: 'hr', label: 'P&C Notice' },
-  { value: 'urgent', label: 'Urgent' },
-];
-
-const priorities = [
-  { value: 'all', label: 'All Priorities' },
-  { value: 'low', label: 'Low' },
-  { value: 'normal', label: 'Normal' },
-  { value: 'high', label: 'High' },
-  { value: 'urgent', label: 'Urgent' },
-];
+const errorMessage = (error: unknown, fallback: string) => (error as { response?: { data?: { error?: { message?: string } } } } | null)?.response?.data?.error?.message || <ApplicationCopy source={fallback} />;
+const emptyOptions: AnnouncementOptions = { can_create: false, can_publish_global: false, companies: [], roles: [], departments: [] };
+const dateLabel = (date: string | null) => date ? new Date(date).toLocaleString(intlLocale(), { timeZone: 'Asia/Jakarta', dateStyle: 'medium', timeStyle: 'short' }) + ' WIB' : '—';
+const expired = (row: Announcement) => !!row.expires_at && new Date(row.expires_at).getTime() < Date.now();
+const scopeLabel = (row: Announcement) => row.is_global ? t('Semua entity') : row.target_company_ids?.length ? t('{count} company', { count: row.target_company_ids.length.toLocaleString(intlLocale()) }) : row.company?.name || t('Company');
+const destinations = (row: Announcement) => row.is_global ? t('Semua entity') : [...new Set([...(row.company_id ? [row.company_id] : []), ...(row.target_company_ids || [])])]
+  .map(id => row.target_companies?.find(company => company.id === id)?.name || (row.company?.id === id ? row.company.name : t('Company #{id}', { id }))).join(', ');
+const initialForm = {
+  title: '', content: '', category: 'general' as AnnouncementCategory, priority: 'normal' as AnnouncementPriority,
+  visibility: 'all' as AnnouncementVisibility, target_ids: [] as number[], scope: 'single' as 'single' | 'multiple' | 'global',
+  company_ids: [] as number[], is_pinned: false, is_published: false, expires_at: '',
+};
+type Form = typeof initialForm;
+function wibInput(date: string | null) {
+  if (!date) return '';
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(date));
+  const part = (type: string) => parts.find(item => item.type === type)?.value;
+  return `${part('year')}-${part('month')}-${part('day')}T${part('hour')}:${part('minute')}`;
+}
 
 export function AnnouncementsPage() {
-  const { user } = useAuthStore();
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [selectedCompanyId, setSelectedCompanyId] = useState<number | undefined>(undefined);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [selectedPriority, setSelectedPriority] = useState('all');
-  const [showFilters, setShowFilters] = useState(false);
-  const [showModal, setShowModal] = useState(false);
-  const [showDetailModal, setShowDetailModal] = useState(false);
-  const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
-  const [activeDropdown, setActiveDropdown] = useState<number | null>(null);
-  const [viewMode, setViewMode] = useState<'all' | 'published' | 'draft'>('all');
+  useLocale();
+  const user = useAuthStore(state => state.user);
+  return <AnnouncementLibrary key={JSON.stringify([user?.id, user?.roles, user?.accessibleCompanyIds, user?.employee?.company_id])} />;
+}
 
-  // Data states
-  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
-  const [statistics, setStatistics] = useState<AnnouncementStatistics | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-
-  // Form states
-  const [formData, setFormData] = useState<{
-    title: string;
-    content: string;
-    category: AnnouncementCategory;
-    priority: AnnouncementPriority;
-    visibility: AnnouncementVisibility;
-    target_audience: string;
-    is_pinned: boolean;
-    expires_at: string;
-    target_scope: 'single' | 'multiple' | 'global';
-    target_company_ids: number[];
-  }>({
-    title: '',
-    content: '',
-    category: 'general',
-    priority: 'normal',
-    visibility: 'all',
-    target_audience: '',
-    is_pinned: false,
-    expires_at: '',
-    target_scope: 'single',
-    target_company_ids: [],
-  });
-
-  // Fetch companies on mount
+function AnnouncementLibrary() {
+  useLocale();
+  const { confirm, confirmation } = useResourceConfirmation();
+  const [options, setOptions] = useState(emptyOptions);
+  const [optionsState, setOptionsState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [optionsRevision, setOptionsRevision] = useState(0);
   useEffect(() => {
-    const fetchCompanies = async () => {
+    let cancelled = false;
+    setOptionsState('loading');
+    announcementService.getOptions().then(data => { if (!cancelled) { setOptions(data); setOptionsState('ready'); } })
+      .catch(() => { if (!cancelled) setOptionsState('error'); });
+    return () => { cancelled = true; };
+  }, [optionsRevision]);
+  const [query, setQuery] = useState('');
+  const [category, setCategory] = useState('');
+  const [priority, setPriority] = useState('');
+  const [status, setStatus] = useState('published');
+  const [company, setCompany] = useState('');
+  const [page, setPage] = useState(1);
+  const [revision, setRevision] = useState(0);
+  const refresh = () => setRevision(value => value + 1);
+  const [result, setResult] = useState({ key: '', rows: [] as Announcement[], total: 0, pages: 1, error: '' as string | ReactElement, loading: true });
+  const key = JSON.stringify([query.trim(), category, priority, status, company, page, revision, options.can_create]);
+  const current = result.key === key ? result : { ...result, rows: [], error: '', loading: true };
+  useEffect(() => {
+    let cancelled = false;
+    const timer = setTimeout(async () => {
       try {
-        const response = await companyService.getAll({ page: 1, limit: 100, is_active: true });
-        const activeCompanies = response.data;
-        setCompanies(activeCompanies);
-        if (activeCompanies.length > 0 && !selectedCompanyId) {
-          setSelectedCompanyId(activeCompanies[0].id);
-        }
-      } catch (err) {
-        console.error('Failed to fetch companies:', err);
+        const data = await announcementService.getAll({ page, limit: 20, search: query.trim() || undefined,
+          category: category as AnnouncementCategory || undefined, priority: priority as AnnouncementPriority || undefined,
+          company_id: company ? Number(company) : undefined,
+          is_published: !options.can_create ? true : status === 'all' ? undefined : status === 'published',
+          sort_by: 'published_at', sort_order: 'desc' });
+        if (cancelled) return;
+        const pages = Math.max(1, data.pagination.totalPages);
+        if (page > pages) { setPage(pages); return; }
+        setResult({ key, rows: data.data, total: data.pagination.total, pages, loading: false, error: '' });
+      } catch (error) {
+        if (!cancelled) setResult({ key, rows: [], total: 0, pages: 1, loading: false, error: errorMessage(error, 'Pengumuman gagal dimuat.') });
       }
-    };
-    fetchCompanies();
-  }, []);
+    }, query.trim() ? 300 : 0);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [key]);
 
-  // Fetch announcements
-  const fetchAnnouncements = useCallback(async () => {
-    if (!selectedCompanyId) return;
-
-    try {
-      setLoading(true);
-      setError(null);
-
-      const isPublishedFilter = viewMode === 'published' ? true : viewMode === 'draft' ? false : undefined;
-
-      const [announcementsRes, statsRes] = await Promise.all([
-        announcementService.getAll({
-          page: 1,
-          company_id: selectedCompanyId,
-          search: searchQuery || undefined,
-          category: selectedCategory !== 'all' ? selectedCategory as AnnouncementCategory : undefined,
-          priority: selectedPriority !== 'all' ? selectedPriority as AnnouncementPriority : undefined,
-          is_published: isPublishedFilter,
-          limit: 100,
-        }),
-        announcementService.getStatistics(selectedCompanyId),
-      ]);
-      setAnnouncements(announcementsRes.data);
-      setStatistics(statsRes);
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch announcements');
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedCompanyId, searchQuery, selectedCategory, selectedPriority, viewMode]);
-
+  const [detailId, setDetailId] = useState<number | null>(null);
+  const [detail, setDetail] = useState<Announcement | null>(null);
+  const [detailError, setDetailError] = useState<string | ReactElement>('');
+  const [detailRevision, setDetailRevision] = useState(0);
   useEffect(() => {
-    fetchAnnouncements();
-  }, [fetchAnnouncements]);
-
-  // Stats from real data
-  const stats = {
-    total: statistics?.total || 0,
-    published: statistics?.published || 0,
-    pinned: statistics?.pinned || 0,
-    urgent: statistics?.urgent || 0,
+    if (detailId === null) return;
+    let cancelled = false;
+    setDetail(null); setDetailError('');
+    announcementService.getById(detailId).then(data => { if (!cancelled) setDetail(data); })
+      .catch(error => { if (!cancelled) setDetailError(errorMessage(error, 'Pengumuman tidak tersedia.')); });
+    return () => { cancelled = true; };
+  }, [detailId, detailRevision]);
+  const openDetail = (row: Announcement) => {
+    setDetail(null); setDetailError(''); setDetailId(row.id);
+    // Count a deliberate open, outside effects so StrictMode cannot double it.
+    announcementService.trackView(row.id).catch(() => {});
   };
 
-  const getCategoryBadge = (category: Announcement['category']) => {
-    const styles = {
-      general: 'bg-blue-100 text-blue-700',
-      policy: 'bg-purple-100 text-purple-700',
-      event: 'bg-green-100 text-green-700',
-      hr: 'bg-amber-100 text-amber-700',
-      urgent: 'bg-red-100 text-red-700',
-    };
-    const labels = {
-      general: 'General',
-      policy: 'Policy',
-      event: 'Event',
-      hr: 'P&C Notice',
-      urgent: 'Urgent',
-    };
-    return (
-      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${styles[category]}`}>
-        {labels[category]}
-      </span>
-    );
+  const [form, setForm] = useState<Form>(initialForm);
+  const originalForm = useRef<Form>(initialForm);
+  const [editing, setEditing] = useState<Announcement | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [formError, setFormError] = useState<string | ReactElement>('');
+  const [busy, setBusy] = useState(false);
+  const writing = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const showEditor = (row: Announcement | null) => {
+    const next: Form = row ? {
+      title: row.title, content: row.content, category: row.category, priority: row.priority,
+      visibility: row.visibility, target_ids: row.target_ids || [],
+      scope: row.is_global ? 'global' : row.target_company_ids?.length ? 'multiple' : 'single',
+      company_ids: row.target_company_ids?.length ? row.target_company_ids : row.company_id ? [row.company_id] : [],
+      is_pinned: row.is_pinned, is_published: row.is_published, expires_at: wibInput(row.expires_at),
+    } : { ...initialForm, company_ids: options.companies.length === 1 ? [options.companies[0].id] : [] };
+    setForm(next); originalForm.current = next; setEditing(row); setFormError(''); setShowForm(true);
   };
-
-  const getPriorityBadge = (priority: Announcement['priority']) => {
-    const styles = {
-      low: 'bg-gray-100 text-gray-600',
-      normal: 'bg-blue-100 text-blue-600',
-      high: 'bg-orange-100 text-orange-600',
-      urgent: 'bg-red-100 text-red-600 animate-pulse',
-    };
-    return (
-      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${styles[priority]}`}>
-        {priority.charAt(0).toUpperCase() + priority.slice(1)}
-      </span>
-    );
-  };
-
-  const getVisibilityIcon = (visibility: Announcement['visibility']) => {
-    switch (visibility) {
-      case 'all':
-        return <Globe className="h-4 w-4 text-green-500" />;
-      case 'department':
-        return <Users className="h-4 w-4 text-blue-500" />;
-      case 'role':
-        return <Lock className="h-4 w-4 text-amber-500" />;
-    }
-  };
-
-  const handleView = async (announcement: Announcement) => {
-    setSelectedAnnouncement(announcement);
-    setShowDetailModal(true);
-    setActiveDropdown(null);
-    // Track view
+  const edit = async (row: Announcement) => {
+    if (writing.current || !row.permissions?.can_edit) return;
+    writing.current = true; setBusy(true);
     try {
-      await announcementService.trackView(announcement.id);
-    } catch (err) {
-      console.error('Failed to track view:', err);
-    }
+      const full = await announcementService.getById(row.id);
+      if (mounted.current && full.permissions?.can_edit) showEditor(full);
+    } catch (error) { toast.error(errorMessage(error, 'Formulir gagal dimuat.'), { id: 'api-error' }); }
+    finally { writing.current = false; if (mounted.current) setBusy(false); }
   };
-
-  const handleEdit = (announcement: Announcement) => {
-    setSelectedAnnouncement(announcement);
-    // Determine target scope from existing data
-    let targetScope: 'single' | 'multiple' | 'global' = 'single';
-    if (announcement.is_global) {
-      targetScope = 'global';
-    } else if (announcement.target_company_ids && announcement.target_company_ids.length > 0) {
-      targetScope = 'multiple';
-    }
-    setFormData({
-      title: announcement.title,
-      content: announcement.content,
-      category: announcement.category,
-      priority: announcement.priority,
-      visibility: announcement.visibility,
-      target_audience: announcement.target_audience || '',
-      is_pinned: announcement.is_pinned,
-      expires_at: announcement.expires_at ? announcement.expires_at.split('T')[0] : '',
-      target_scope: targetScope,
-      target_company_ids: announcement.target_company_ids || [],
-    });
-    setShowModal(true);
-    setActiveDropdown(null);
+  const closeForm = async () => {
+    if (writing.current) return;
+    if (JSON.stringify(form) !== JSON.stringify(originalForm.current) && !await confirm(() => t("Buang perubahan pengumuman yang belum disimpan?"))) return;
+    if (!mounted.current || writing.current) return;
+    setShowForm(false);
   };
-
-  const handleDelete = async (announcement: Announcement) => {
-    if (!confirm(`Are you sure you want to delete "${announcement.title}"?`)) return;
-
+  const selectedDepartments = options.departments.filter(item => item.company_id === null || form.scope === 'global' || form.company_ids.includes(item.company_id));
+  const audienceOptions = form.visibility === 'role' ? options.roles : selectedDepartments;
+  const updateTarget = (patch: Partial<Form>) => setForm({ ...form, ...patch, target_ids: [] });
+  const save = async (event: FormEvent) => {
+    event.preventDefault();
+    if (writing.current || (editing ? !editing.permissions?.can_edit : !options.can_create)) return;
+    if (!form.title.trim() || !form.content.trim()) { setFormError(<ApplicationCopy source="Judul dan isi pengumuman wajib diisi." />); return; }
+    if (!editing && (form.scope === 'global' ? !options.can_publish_global : !form.company_ids.length)) { setFormError(<ApplicationCopy source="Pilih company tujuan." />); return; }
+    if (form.visibility !== 'all' && !form.target_ids.length) { setFormError(<ApplicationCopy source="Pilih minimal satu target pembaca." />); return; }
+    const expiry = form.expires_at ? new Date(`${form.expires_at}:00+07:00`) : null;
+    if (expiry && (!Number.isFinite(expiry.getTime()) || (form.expires_at !== originalForm.current.expires_at && expiry.getTime() <= Date.now()))) { setFormError(<ApplicationCopy source="Waktu berakhir harus setelah waktu sekarang (WIB)." />); return; }
+    const labels = audienceOptions.filter(item => form.target_ids.includes(item.id)).map(item => item.name);
+    const audienceLabel = labels.join(', ');
+    writing.current = true; setBusy(true); setFormError('');
     try {
-      await announcementService.delete(announcement.id);
-      fetchAnnouncements();
-    } catch (err: any) {
-      alert(err.message || 'Failed to delete announcement');
-    }
-    setActiveDropdown(null);
-  };
-
-  const handleTogglePin = async (announcement: Announcement) => {
-    try {
-      await announcementService.togglePin(announcement.id);
-      fetchAnnouncements();
-    } catch (err: any) {
-      alert(err.message || 'Failed to toggle pin');
-    }
-    setActiveDropdown(null);
-  };
-
-  const handlePublish = async (announcement: Announcement) => {
-    try {
-      await announcementService.publish(announcement.id);
-      fetchAnnouncements();
-    } catch (err: any) {
-      alert(err.message || 'Failed to publish announcement');
-    }
-    setActiveDropdown(null);
-  };
-
-  const _handleUnpublish = async (announcement: Announcement) => {
-    try {
-      await announcementService.unpublish(announcement.id);
-      fetchAnnouncements();
-    } catch (err: any) {
-      alert(err.message || 'Failed to unpublish announcement');
-    }
-    setActiveDropdown(null);
-  };
-
-  const handleSubmit = async (publish: boolean) => {
-    try {
-      setSubmitting(true);
-
-      if (selectedAnnouncement) {
-        // Update existing announcement
-        await announcementService.update(selectedAnnouncement.id, {
-          title: formData.title,
-          content: formData.content,
-          category: formData.category,
-          priority: formData.priority,
-          visibility: formData.visibility,
-          target_audience: formData.visibility !== 'all' ? formData.target_audience : undefined,
-          is_pinned: formData.is_pinned,
-          expires_at: formData.expires_at || null,
-        });
-
-        if (publish && !selectedAnnouncement.is_published) {
-          await announcementService.publish(selectedAnnouncement.id);
+      const data = { title: form.title.trim(), content: form.content.trim(), category: form.category, priority: form.priority,
+        visibility: form.visibility, target_ids: form.visibility === 'all' ? [] : form.target_ids,
+        target_audience: form.visibility === 'all' ? '' : audienceLabel.length <= 500 ? audienceLabel : `${form.target_ids.length} target dipilih`, is_pinned: form.is_pinned,
+        expires_at: expiry?.toISOString() || null };
+      if (editing) {
+        // Send actual changes only: preserve legacy audiences and timestamps
+        // when editing unrelated text, including expired announcements.
+        const changes: UpdateAnnouncementRequest = {};
+        for (const field of ['title', 'content', 'category', 'priority', 'is_pinned'] as const) {
+          if (data[field] !== editing[field]) Object.assign(changes, { [field]: data[field] });
         }
-      } else {
-        // Create new announcement
-        const createData: CreateAnnouncementRequest = {
-          title: formData.title,
-          content: formData.content,
-          category: formData.category,
-          priority: formData.priority,
-          visibility: formData.visibility,
-          target_audience: formData.visibility !== 'all' ? formData.target_audience : undefined,
-          is_pinned: formData.is_pinned,
-          is_published: publish,
-          expires_at: formData.expires_at || undefined,
-        };
-
-        // Set target based on scope
-        if (formData.target_scope === 'global') {
-          createData.is_global = true;
-        } else if (formData.target_scope === 'multiple') {
-          createData.target_company_ids = formData.target_company_ids;
-        } else {
-          createData.company_id = selectedCompanyId;
+        if (form.visibility !== originalForm.current.visibility || JSON.stringify(form.target_ids) !== JSON.stringify(originalForm.current.target_ids)) {
+          Object.assign(changes, { visibility: data.visibility, target_ids: data.target_ids, target_audience: data.target_audience });
         }
-
-        await announcementService.create(createData);
+        if (form.expires_at !== originalForm.current.expires_at) changes.expires_at = data.expires_at;
+        if (Object.keys(changes).length) await announcementService.update(editing.id, changes);
       }
-
-      setShowModal(false);
-      resetForm();
-      fetchAnnouncements();
-    } catch (err: any) {
-      alert(err.message || 'Failed to save announcement');
-    } finally {
-      setSubmitting(false);
-    }
+      else {
+        const payload: CreateAnnouncementRequest = { ...data, expires_at: data.expires_at || undefined, is_published: form.is_published,
+          ...(form.scope === 'global' ? { is_global: true } : form.scope === 'multiple' ? { target_company_ids: form.company_ids } : { company_id: form.company_ids[0] }) };
+        await announcementService.create(payload);
+      }
+      if (mounted.current) { setShowForm(false); if (!editing) { setStatus(form.is_published ? 'published' : 'draft'); setPage(1); } refresh(); toast.success(t("Pengumuman disimpan.")); }
+    } catch (error) { if (mounted.current) setFormError(errorMessage(error, 'Pengumuman gagal disimpan. Silakan coba lagi.')); }
+    finally { writing.current = false; if (mounted.current) setBusy(false); }
+  };
+  const mutate = async (row: Announcement, action: 'delete' | 'publish' | 'unpublish' | 'togglePin') => {
+    if (writing.current || !row.permissions?.can_edit || (action === 'delete' && !row.permissions?.can_delete)) return;
+    const labels = { delete: 'Hapus', publish: 'Terbitkan', unpublish: 'Tarik publikasi', togglePin: 'Ubah pin' };
+    if (action !== 'togglePin' && !await confirm(() => t('{action} pengumuman "{title}"?', { action: t(labels[action]), title: row.title }))) return;
+    if (!mounted.current || writing.current) return;
+    writing.current = true; setBusy(true);
+    try { await announcementService[action](row.id); if (mounted.current) { refresh(); toast.success(t("Pengumuman diperbarui.")); } }
+    catch (error) { toast.error(errorMessage(error, 'Perubahan gagal disimpan.'), { id: 'api-error' }); }
+    finally { writing.current = false; if (mounted.current) setBusy(false); }
   };
 
-  const resetForm = () => {
-    setFormData({
-      title: '',
-      content: '',
-      category: 'general',
-      priority: 'normal',
-      visibility: 'all',
-      target_audience: '',
-      is_pinned: false,
-      expires_at: '',
-      target_scope: 'single',
-      target_company_ids: [],
-    });
-    setSelectedAnnouncement(null);
-  };
+  return <div className="ph-announcements resources-refresh">
+    <header className="ph-announcement-heading"><div><h1>{t("Announcements")}</h1><p>{t("Pengumuman dan informasi terbaru untuk Anda.")}</p></div>
+      {options.can_create && <button className="ph-announcement-primary" disabled={busy || optionsState !== 'ready'} onClick={() => showEditor(null)}><Plus size={17} />{t("Buat pengumuman")}</button>}
+    </header>
+    {optionsState === 'error' && <p className="ph-announcement-notice" role="alert">{t("Pilihan pengelolaan gagal dimuat.")} <button onClick={() => setOptionsRevision(value => value + 1)}>{t("Coba lagi")}</button></p>}
+    <div className="ph-resource-workspace">
+    <section className="ph-resource-filters ph-announcement-filters" aria-label={t("Filter announcements")}>
+      <label className="ph-announcement-search"><Search size={18} aria-hidden="true" /><input aria-label={t("Cari pengumuman")} maxLength={200} placeholder={t("Cari judul atau isi pengumuman…")} value={query} onChange={event => { setQuery(event.target.value); setPage(1); }} /></label>
+      <label>{t("Kategori")}<select aria-label={t("Kategori pengumuman")} value={category} onChange={event => { setCategory(event.target.value); setPage(1); }}><option value="">{t("Semua kategori")}</option>{ANNOUNCEMENT_CATEGORIES.map(item => <option key={item} value={item}>{t(getAnnouncementCategoryLabel(item))}</option>)}</select></label>
+      <label>{t("Prioritas")}<select aria-label={t("Prioritas pengumuman")} value={priority} onChange={event => { setPriority(event.target.value); setPage(1); }}><option value="">{t("Semua prioritas")}</option>{ANNOUNCEMENT_PRIORITIES.map(item => <option key={item} value={item}>{t(getPriorityLabel(item))}</option>)}</select></label>
+      {options.can_create && <><label>{t("Status publikasi")}<select aria-label={t("Status pengumuman")} value={status} onChange={event => { setStatus(event.target.value); setPage(1); }}><option value="published">{t("Terbit")}</option><option value="draft">{t("Draft")}</option><option value="all">{t("Semua status")}</option></select></label>
+        <label>{t("Company")}<select aria-label={t("Filter company")} value={company} onChange={event => { setCompany(event.target.value); setPage(1); }}><option value="">{t("Semua yang dapat diakses")}</option>{options.companies.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label></>}
+      {(query || category || priority || company || status !== 'published') && <button className="ph-resource-reset" onClick={() => { setQuery(''); setCategory(''); setPriority(''); setCompany(''); setStatus('published'); setPage(1); }}>{t("Reset filter")}</button>}
+    </section>
+    <div className="ph-resource-results">
 
-  const openCreateModal = () => {
-    resetForm();
-    setShowModal(true);
-  };
-
-  return (
-    <div className="space-y-6">
-      {/* Header - Compact */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-orange-500 via-amber-500 to-yellow-500 rounded-xl p-4">
-        <div className="absolute inset-0 bg-grid-white/10" />
-        <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          {/* Title & Company Selector */}
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
-                <Megaphone className="h-5 w-5 text-white" />
-              </div>
-              <div>
-                <h1 className="text-lg font-bold text-white">Announcements</h1>
-                <p className="text-orange-100 text-xs">Stay updated with latest news</p>
-              </div>
-            </div>
-
-            {/* Company Selector - Mobile */}
-            {companies.length > 1 && (
-              <select
-                value={selectedCompanyId}
-                onChange={(e) => setSelectedCompanyId(Number(e.target.value))}
-                className="md:hidden bg-white/20 backdrop-blur-sm border border-white/30 text-white text-sm rounded-lg px-2 py-1.5 focus:outline-none"
-              >
-                {companies.map((company: Company) => (
-                  <option key={company.id} value={company.id} className="text-gray-900">
-                    {company.name}
-                  </option>
-                ))}
-              </select>
-            )}
+      <div className="ph-resource-results-heading"><h2>{t("Papan pengumuman")}</h2><span>{current.loading ? t("Memuat…") : current.error ? t("Daftar belum tersedia") : t('{count} pengumuman ditemukan', { count: current.total.toLocaleString(intlLocale()) })}</span></div>
+    <section className="ph-announcement-library" aria-label={t("Daftar pengumuman")} aria-busy={current.loading}>
+      {current.loading ? <div className="ph-announcement-empty" role="status"><Loader2 className="animate-spin" size={22} />{t("Memuat pengumuman…")}</div>
+        : current.error ? <div className="ph-announcement-empty" role="alert"><p>{current.error}</p><button onClick={refresh}>{t("Coba lagi")}</button></div>
+        : !current.rows.length ? <div className="ph-announcement-empty"><Megaphone size={26} /><p>{t("Belum ada pengumuman yang sesuai.")}</p></div>
+        : <ul>{current.rows.map(row => <li key={row.id} data-priority={row.priority} data-pinned={row.is_pinned}>
+          <div className="ph-announcement-copy"><h2>{row.title}</h2><div className="ph-announcement-meta">
+            <time dateTime={row.published_at || row.created_at}>{dateLabel(row.published_at || row.created_at)}</time>
+            <span className="ph-announcement-category">{t(getAnnouncementCategoryLabel(row.category))}</span><span><Building2 size={12} aria-hidden="true" />{scopeLabel(row)}</span>
+            {row.is_pinned && <span><Pin size={12} />{t("Disematkan")}</span>}
+            {['urgent', 'high'].includes(row.priority) && <span className="ph-announcement-urgent">{t(getPriorityLabel(row.priority))}</span>}
+            {!row.is_published ? <span className="ph-announcement-draft">{t("Draft")}</span> : expired(row) ? <span className="ph-announcement-draft">{t("Kedaluwarsa")}</span> : null}
+          </div><p className="ph-announcement-excerpt">{row.content}</p>
+            {row.creator?.name && <p className="ph-announcement-date">{row.creator.name}</p>}
           </div>
-
-          {/* Stats - Inline */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
-            <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur-sm rounded-lg px-2.5 py-1.5 flex-shrink-0">
-              <Bell className="h-3.5 w-3.5 text-white" />
-              <span className="text-sm font-bold text-white">{stats.total}</span>
-              <span className="text-xs text-orange-100">Total</span>
-            </div>
-            <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur-sm rounded-lg px-2.5 py-1.5 flex-shrink-0">
-              <CheckCircle className="h-3.5 w-3.5 text-white" />
-              <span className="text-sm font-bold text-white">{stats.published}</span>
-              <span className="text-xs text-orange-100">Published</span>
-            </div>
-            <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur-sm rounded-lg px-2.5 py-1.5 flex-shrink-0">
-              <Pin className="h-3.5 w-3.5 text-white" />
-              <span className="text-sm font-bold text-white">{stats.pinned}</span>
-              <span className="text-xs text-orange-100">Pinned</span>
-            </div>
-            <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur-sm rounded-lg px-2.5 py-1.5 flex-shrink-0">
-              <AlertCircle className="h-3.5 w-3.5 text-white" />
-              <span className="text-sm font-bold text-white">{stats.urgent}</span>
-              <span className="text-xs text-orange-100">Urgent</span>
-            </div>
-
-            {/* Company Selector - Desktop */}
-            {companies.length > 1 && (
-              <select
-                value={selectedCompanyId}
-                onChange={(e) => setSelectedCompanyId(Number(e.target.value))}
-                className="hidden md:block bg-white/20 backdrop-blur-sm border border-white/30 text-white text-sm rounded-lg px-3 py-1.5 focus:outline-none ml-2"
-              >
-                {companies.map((company: Company) => (
-                  <option key={company.id} value={company.id} className="text-gray-900">
-                    {company.name}
-                  </option>
-                ))}
-              </select>
-            )}
+          <div className="ph-announcement-actions"><button aria-label={t('Baca {name}', { name: row.title })} disabled={busy} onClick={() => openDetail(row)}><Eye size={16} />{t("Baca")}</button>
+            {row.permissions?.can_edit && <><button aria-label={t('Edit {name}', { name: row.title })} disabled={busy || optionsState !== 'ready'} onClick={() => edit(row)}><Pencil size={16} />{t("Edit")}</button>
+              <button aria-label={t(row.is_published ? 'Tarik publikasi {name}' : 'Terbitkan {name}', { name: row.title })} disabled={busy} onClick={() => mutate(row, row.is_published ? 'unpublish' : 'publish')}>{row.is_published ? t("Tarik publikasi") : t("Terbitkan")}</button>
+              <button aria-label={t(row.is_pinned ? 'Lepas pin {name}' : 'Sematkan {name}', { name: row.title })} disabled={busy} onClick={() => mutate(row, 'togglePin')}><Pin size={16} /></button>
+              {row.permissions.can_delete && <button aria-label={t('Hapus {name}', { name: row.title })} disabled={busy} onClick={() => mutate(row, 'delete')}><Trash2 size={16} /></button>}</>}
           </div>
-        </div>
-      </div>
-
-      {/* Search and Filters */}
-      <div className="bg-white rounded-xl border border-gray-200 p-3 md:p-4">
-        <div className="flex flex-col gap-3 md:gap-4">
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search announcements..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
-            />
-          </div>
-
-          {/* View Mode Tabs & Actions Row */}
-          <div className="flex flex-col sm:flex-row gap-3">
-            {/* View Mode Tabs */}
-            <div className="flex items-center bg-gray-100 rounded-lg p-1 flex-shrink-0 overflow-x-auto">
-              <button
-                onClick={() => setViewMode('all')}
-                className={`px-3 md:px-4 py-1.5 rounded-md text-sm font-medium transition-all whitespace-nowrap ${
-                  viewMode === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                All
-              </button>
-              <button
-                onClick={() => setViewMode('published')}
-                className={`px-3 md:px-4 py-1.5 rounded-md text-sm font-medium transition-all whitespace-nowrap ${
-                  viewMode === 'published' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                Published
-              </button>
-              <button
-                onClick={() => setViewMode('draft')}
-                className={`px-3 md:px-4 py-1.5 rounded-md text-sm font-medium transition-all whitespace-nowrap ${
-                  viewMode === 'draft' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                Drafts
-              </button>
-            </div>
-
-            {/* Filter & Create */}
-            <div className="flex items-center gap-2 md:gap-3 sm:ml-auto">
-              <button
-                onClick={() => setShowFilters(!showFilters)}
-                className={`flex items-center gap-2 px-3 md:px-4 py-2.5 rounded-xl border transition-all text-sm ${
-                  showFilters
-                    ? 'bg-orange-50 border-orange-200 text-orange-700'
-                    : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                <Filter className="h-4 w-4" />
-                <span className="hidden sm:inline">Filters</span>
-              </button>
-
-              <button
-                onClick={openCreateModal}
-                className="flex items-center gap-2 px-3 md:px-4 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl hover:from-orange-600 hover:to-amber-600 transition-all shadow-lg shadow-orange-500/30 text-sm flex-1 sm:flex-initial justify-center"
-              >
-                <Plus className="h-4 w-4" />
-                <span>New</span>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Extended Filters */}
-        {showFilters && (
-          <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-              <select
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-              >
-                {categories.map((cat) => (
-                  <option key={cat.value} value={cat.value}>
-                    {cat.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
-              <select
-                value={selectedPriority}
-                onChange={(e) => setSelectedPriority(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-              >
-                {priorities.map((p) => (
-                  <option key={p.value} value={p.value}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Loading State */}
-      {loading && (
-        <div className="flex items-center justify-center py-12 bg-white rounded-xl border border-gray-200">
-          <Loader2 className="h-8 w-8 animate-spin text-orange-600" />
-          <span className="ml-2 text-gray-600">Loading announcements...</span>
-        </div>
-      )}
-
-      {/* Error State */}
-      {error && !loading && (
-        <div className="flex items-center justify-center py-12 bg-white rounded-xl border border-red-200">
-          <AlertCircle className="h-8 w-8 text-red-500" />
-          <span className="ml-2 text-red-600">{error}</span>
-          <button
-            onClick={fetchAnnouncements}
-            className="ml-4 px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200"
-          >
-            Retry
-          </button>
-        </div>
-      )}
-
-      {/* Announcements List */}
-      {!loading && !error && (
-      <div className="space-y-4">
-        {announcements.map((announcement) => (
-          <div
-            key={announcement.id}
-            className={`bg-white rounded-xl border hover:shadow-lg transition-all ${
-              announcement.is_pinned ? 'border-orange-300 ring-1 ring-orange-100' : 'border-gray-200'
-            } ${announcement.priority === 'urgent' ? 'border-l-4 border-l-red-500' : ''}`}
-          >
-            <div className="p-3 md:p-5">
-              {/* Header */}
-              <div className="flex items-start justify-between gap-2 md:gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1.5 md:mb-2 flex-wrap">
-                    {announcement.is_pinned && (
-                      <Pin className="h-4 w-4 text-orange-500 flex-shrink-0" />
-                    )}
-                    <h3 className="font-semibold text-gray-900 text-sm md:text-base line-clamp-1">{announcement.title}</h3>
-                    {!announcement.is_published && (
-                      <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs font-medium rounded">
-                        Draft
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-gray-600 text-xs md:text-sm line-clamp-2">{announcement.content}</p>
-                </div>
-
-                <div className="relative flex-shrink-0">
-                  <button
-                    onClick={() => setActiveDropdown(activeDropdown === announcement.id ? null : announcement.id)}
-                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                  >
-                    <MoreVertical className="h-4 w-4 text-gray-500" />
-                  </button>
-
-                  {/* Dropdown Menu */}
-                  {activeDropdown === announcement.id && (
-                    <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-xl border border-gray-200 py-1 z-10">
-                      <button
-                        onClick={() => handleView(announcement)}
-                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                      >
-                        <Eye className="h-4 w-4" />
-                        View Details
-                      </button>
-                      <button
-                        onClick={() => handleEdit(announcement)}
-                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                      >
-                        <Edit2 className="h-4 w-4" />
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleTogglePin(announcement)}
-                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                      >
-                        {announcement.is_pinned ? (
-                          <>
-                            <PinOff className="h-4 w-4" />
-                            Unpin
-                          </>
-                        ) : (
-                          <>
-                            <Pin className="h-4 w-4" />
-                            Pin to Top
-                          </>
-                        )}
-                      </button>
-                      {!announcement.is_published && (
-                        <button
-                          onClick={() => handlePublish(announcement)}
-                          className="w-full flex items-center gap-2 px-4 py-2 text-sm text-green-700 hover:bg-green-50"
-                        >
-                          <Send className="h-4 w-4" />
-                          Publish Now
-                        </button>
-                      )}
-                      <hr className="my-1" />
-                      <button
-                        onClick={() => handleDelete(announcement)}
-                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        Delete
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Footer */}
-              <div className="flex flex-col gap-3 mt-3 md:mt-4 pt-3 md:pt-4 border-t border-gray-100">
-                {/* Badges - wrap on mobile */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  {getCategoryBadge(announcement.category)}
-                  {getPriorityBadge(announcement.priority)}
-                  {/* Global/Multi-company indicator */}
-                  {announcement.is_global ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
-                      <Globe className="h-3 w-3" />
-                      Global
-                    </span>
-                  ) : announcement.target_company_ids && announcement.target_company_ids.length > 0 ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700">
-                      <Users className="h-3 w-3" />
-                      {announcement.target_company_ids.length} Co.
-                    </span>
-                  ) : announcement.company ? (
-                    <span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                      <Building2 className="h-3 w-3" />
-                      {announcement.company.name}
-                    </span>
-                  ) : null}
-                </div>
-
-                {/* Meta Info - wrap on mobile */}
-                <div className="flex items-center gap-3 md:gap-4 text-xs text-gray-500 flex-wrap">
-                  {announcement.is_published && (
-                    <span className="flex items-center gap-1">
-                      <Eye className="h-3.5 w-3.5" />
-                      {announcement.views_count}
-                    </span>
-                  )}
-                  <span className="flex items-center gap-1">
-                    <Clock className="h-3.5 w-3.5" />
-                    {new Date(announcement.published_at || announcement.created_at).toLocaleDateString()}
-                  </span>
-                  <span className="hidden sm:inline">{announcement.creator?.name || 'System'}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-      )}
-
-      {/* Empty State */}
-      {!loading && !error && announcements.length === 0 && (
-        <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
-          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Megaphone className="h-8 w-8 text-gray-400" />
-          </div>
-          <h3 className="text-lg font-medium text-gray-900">No announcements found</h3>
-          <p className="text-gray-500 mt-1">Try adjusting your search or filters</p>
-          <button
-            onClick={openCreateModal}
-            className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            Create Announcement
-          </button>
-        </div>
-      )}
-
-      {/* Create/Edit Modal */}
-      {showModal && (
-        <>
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50" onClick={() => setShowModal(false)} />
-          <div className="fixed inset-0 md:inset-auto md:top-[5%] md:left-1/2 md:-translate-x-1/2 md:w-full md:max-w-2xl md:max-h-[90vh] bg-white md:rounded-2xl shadow-2xl z-50 flex flex-col">
-            {/* Header - Fixed */}
-            <div className="flex items-center justify-between p-4 md:px-6 md:py-4 border-b border-gray-200 flex-shrink-0">
-              <h3 className="text-lg font-semibold text-gray-900">
-                {selectedAnnouncement ? 'Edit Announcement' : 'New Announcement'}
-              </h3>
-              <button
-                onClick={() => setShowModal(false)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <X className="h-5 w-5 text-gray-500" />
-              </button>
-            </div>
-
-            {/* Content - Scrollable */}
-            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
-                  <input
-                    type="text"
-                    value={formData.title}
-                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                    placeholder="Enter announcement title"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  />
-                </div>
-
-                {/* Target Scope Selector */}
-                {!selectedAnnouncement && companies.length > 0 && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Target Audience</label>
-                    <div className="grid grid-cols-3 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setFormData({ ...formData, target_scope: 'single', target_company_ids: [] })}
-                        className={`p-3 rounded-lg border-2 text-center transition-all ${
-                          formData.target_scope === 'single'
-                            ? 'border-orange-500 bg-orange-50 text-orange-700'
-                            : 'border-gray-200 hover:border-gray-300 text-gray-600'
-                        }`}
-                      >
-                        <Building2 className="h-5 w-5 mx-auto mb-1" />
-                        <span className="text-sm font-medium">Current Company</span>
-                        <p className="text-xs text-gray-500 mt-0.5">
-                          {companies.find((c: Company) => c.id === selectedCompanyId)?.name || 'Selected'}
-                        </p>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setFormData({ ...formData, target_scope: 'multiple', target_company_ids: [] })}
-                        className={`p-3 rounded-lg border-2 text-center transition-all ${
-                          formData.target_scope === 'multiple'
-                            ? 'border-orange-500 bg-orange-50 text-orange-700'
-                            : 'border-gray-200 hover:border-gray-300 text-gray-600'
-                        }`}
-                      >
-                        <Users className="h-5 w-5 mx-auto mb-1" />
-                        <span className="text-sm font-medium">Select Companies</span>
-                        <p className="text-xs text-gray-500 mt-0.5">Multiple</p>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setFormData({ ...formData, target_scope: 'global', target_company_ids: [] })}
-                        className={`p-3 rounded-lg border-2 text-center transition-all ${
-                          formData.target_scope === 'global'
-                            ? 'border-orange-500 bg-orange-50 text-orange-700'
-                            : 'border-gray-200 hover:border-gray-300 text-gray-600'
-                        }`}
-                      >
-                        <Globe className="h-5 w-5 mx-auto mb-1" />
-                        <span className="text-sm font-medium">All Companies</span>
-                        <p className="text-xs text-gray-500 mt-0.5">Global</p>
-                      </button>
-                    </div>
-
-                    {/* Multi-company selector */}
-                    {formData.target_scope === 'multiple' && (
-                      <div className="mt-3 p-3 bg-gray-50 rounded-lg">
-                        <label className="block text-xs font-medium text-gray-600 mb-2">Select target companies:</label>
-                        <div className="space-y-2">
-                          {companies.map((company: Company) => (
-                            <label key={company.id} className="flex items-center gap-2 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={formData.target_company_ids.includes(company.id)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setFormData({
-                                      ...formData,
-                                      target_company_ids: [...formData.target_company_ids, company.id],
-                                    });
-                                  } else {
-                                    setFormData({
-                                      ...formData,
-                                      target_company_ids: formData.target_company_ids.filter((id) => id !== company.id),
-                                    });
-                                  }
-                                }}
-                                className="rounded border-gray-300 text-orange-600 focus:ring-orange-500"
-                              />
-                              <span className="text-sm text-gray-700">{company.name}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Content *</label>
-                  <textarea
-                    rows={5}
-                    value={formData.content}
-                    onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                    placeholder="Write your announcement content..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                    <select
-                      value={formData.category}
-                      onChange={(e) => setFormData({ ...formData, category: e.target.value as AnnouncementCategory })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    >
-                      {categories.filter((c) => c.value !== 'all').map((cat) => (
-                        <option key={cat.value} value={cat.value}>
-                          {cat.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
-                    <select
-                      value={formData.priority}
-                      onChange={(e) => setFormData({ ...formData, priority: e.target.value as AnnouncementPriority })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    >
-                      {priorities.filter((p) => p.value !== 'all').map((p) => (
-                        <option key={p.value} value={p.value}>
-                          {p.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Visibility</label>
-                    <select
-                      value={formData.visibility}
-                      onChange={(e) => setFormData({ ...formData, visibility: e.target.value as AnnouncementVisibility })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    >
-                      <option value="all">All Employees</option>
-                      <option value="department">Specific Department</option>
-                      <option value="role">Specific Role</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Expires At</label>
-                    <input
-                      type="date"
-                      value={formData.expires_at}
-                      onChange={(e) => setFormData({ ...formData, expires_at: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    />
-                  </div>
-                </div>
-
-                {formData.visibility !== 'all' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Target {formData.visibility === 'department' ? 'Department' : 'Role'}
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.target_audience}
-                      onChange={(e) => setFormData({ ...formData, target_audience: e.target.value })}
-                      placeholder={`Enter ${formData.visibility === 'department' ? 'department' : 'role'} name`}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    />
-                  </div>
-                )}
-
-                <div className="flex items-center gap-4">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formData.is_pinned}
-                      onChange={(e) => setFormData({ ...formData, is_pinned: e.target.checked })}
-                      className="rounded border-gray-300 text-orange-600 focus:ring-orange-500"
-                    />
-                    <span className="text-sm text-gray-700">Pin to top</span>
-                  </label>
-                </div>
-            </div>
-
-            {/* Footer - Fixed Buttons */}
-            <div className="p-4 md:px-6 md:py-4 border-t border-gray-200 bg-white flex-shrink-0">
-              <div className="flex flex-col-reverse sm:flex-row sm:justify-between gap-3">
-                <button
-                  onClick={() => setShowModal(false)}
-                  disabled={submitting}
-                  className="px-4 py-2.5 text-gray-700 hover:bg-gray-100 rounded-xl transition-colors disabled:opacity-50 border border-gray-200 sm:border-0"
-                >
-                  Cancel
-                </button>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleSubmit(false)}
-                    disabled={submitting || !formData.title || !formData.content}
-                    className="flex-1 sm:flex-initial px-4 py-2.5 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 text-sm"
-                  >
-                    {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                    <span className="hidden sm:inline">Save as</span> Draft
-                  </button>
-                  <button
-                    onClick={() => handleSubmit(true)}
-                    disabled={submitting || !formData.title || !formData.content}
-                    className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl hover:from-orange-600 hover:to-amber-600 transition-colors disabled:opacity-50 text-sm"
-                  >
-                    {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                    <Send className="h-4 w-4" />
-                    Publish
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* Detail Modal */}
-      {showDetailModal && selectedAnnouncement && (
-        <>
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50" onClick={() => setShowDetailModal(false)} />
-          <div className="fixed inset-0 md:inset-auto md:top-[5%] md:left-1/2 md:-translate-x-1/2 md:w-full md:max-w-2xl md:max-h-[90vh] bg-white md:rounded-2xl shadow-2xl z-50 flex flex-col">
-            {/* Header - Fixed */}
-            <div className="flex items-center justify-between p-4 md:px-6 md:py-4 border-b border-gray-200 flex-shrink-0">
-              <div className="flex items-center gap-2">
-                {selectedAnnouncement.is_pinned && <Pin className="h-4 w-4 text-orange-500" />}
-                <h3 className="text-base md:text-lg font-semibold text-gray-900">Announcement Details</h3>
-              </div>
-              <button
-                onClick={() => setShowDetailModal(false)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <X className="h-5 w-5 text-gray-500" />
-              </button>
-            </div>
-
-            {/* Content - Scrollable */}
-            <div className="flex-1 overflow-y-auto p-4 md:p-6">
-                {/* Title & Badges */}
-                <div className="mb-4">
-                  <h2 className="text-xl font-bold text-gray-900 mb-3">{selectedAnnouncement.title}</h2>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {getCategoryBadge(selectedAnnouncement.category)}
-                    {getPriorityBadge(selectedAnnouncement.priority)}
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        selectedAnnouncement.is_published ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
-                      }`}
-                    >
-                      {selectedAnnouncement.is_published ? 'Published' : 'Draft'}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Content */}
-                <div className="bg-gray-50 rounded-xl p-4 mb-6">
-                  <p className="text-gray-700 whitespace-pre-wrap">{selectedAnnouncement.content}</p>
-                </div>
-
-                {/* Meta Info */}
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Target Scope</label>
-                    <div className="flex items-center gap-2 mt-1">
-                      {selectedAnnouncement.is_global ? (
-                        <>
-                          <Globe className="h-4 w-4 text-purple-500" />
-                          <span className="text-gray-900">All Companies (Global)</span>
-                        </>
-                      ) : selectedAnnouncement.target_company_ids && selectedAnnouncement.target_company_ids.length > 0 ? (
-                        <>
-                          <Users className="h-4 w-4 text-indigo-500" />
-                          <span className="text-gray-900">{selectedAnnouncement.target_company_ids.length} Companies</span>
-                        </>
-                      ) : (
-                        <>
-                          <Building2 className="h-4 w-4 text-gray-500" />
-                          <span className="text-gray-900">{selectedAnnouncement.company?.name || 'Single Company'}</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Visibility</label>
-                    <div className="flex items-center gap-2 mt-1">
-                      {getVisibilityIcon(selectedAnnouncement.visibility)}
-                      <span className="text-gray-900">
-                        {selectedAnnouncement.visibility === 'all'
-                          ? 'All Employees'
-                          : selectedAnnouncement.target_audience}
-                      </span>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Views</label>
-                    <p className="text-gray-900 mt-1 flex items-center gap-1">
-                      <Eye className="h-4 w-4 text-gray-400" />
-                      {selectedAnnouncement.views_count}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Created By</label>
-                    <p className="text-gray-900 mt-1">{selectedAnnouncement.creator?.name || 'System'}</p>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Created At</label>
-                    <p className="text-gray-900 mt-1 flex items-center gap-1">
-                      <Calendar className="h-4 w-4 text-gray-400" />
-                      {new Date(selectedAnnouncement.created_at).toLocaleDateString()}
-                    </p>
-                  </div>
-                  {selectedAnnouncement.published_at && (
-                    <div>
-                      <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Published At</label>
-                      <p className="text-gray-900 mt-1">{new Date(selectedAnnouncement.published_at).toLocaleDateString()}</p>
-                    </div>
-                  )}
-                  {selectedAnnouncement.expires_at && (
-                    <div>
-                      <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Expires At</label>
-                      <p className="text-gray-900 mt-1">{new Date(selectedAnnouncement.expires_at).toLocaleDateString()}</p>
-                    </div>
-                  )}
-                </div>
-            </div>
-
-            {/* Footer - Fixed Buttons */}
-            <div className="p-4 md:px-6 md:py-4 border-t border-gray-200 bg-white flex-shrink-0">
-              <div className="flex gap-3">
-                <button
-                  onClick={() => {
-                    setShowDetailModal(false);
-                    handleEdit(selectedAnnouncement);
-                  }}
-                  className="flex-1 px-4 py-2.5 text-gray-700 hover:bg-gray-100 rounded-xl transition-colors border border-gray-200"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => setShowDetailModal(false)}
-                  className="flex-1 px-4 py-2.5 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-colors"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
+        </li>)}</ul>}
+      <footer><span>{current.loading ? t("Memuat daftar") : current.error ? t("Daftar belum tersedia") : t('{count} pengumuman · Halaman {page} dari {pages}', { count: current.total.toLocaleString(intlLocale()), page, pages: current.pages })}</span><div>
+        <button disabled={current.loading || !!current.error || page <= 1} onClick={() => setPage(value => value - 1)}>{t("Sebelumnya")}</button>
+        <button disabled={current.loading || !!current.error || page >= current.pages} onClick={() => setPage(value => value + 1)}>{t("Berikutnya")}</button>
+      </div></footer>
+    </section>
     </div>
-  );
+    </div>
+    {showForm && <AccountDialog labelledBy="announcement-form-title" toasterId="announcements" className="ph-workflow ph-announcement-dialog resource-workflow resources-refresh-dialog" onClose={closeForm}>
+      <form onSubmit={save} className="resource-editor"><header className="ph-dialog-header"><h2 id="announcement-form-title">{editing ? t("Edit pengumuman") : t("Buat pengumuman")}</h2><button type="button" aria-label={t("Tutup formulir pengumuman")} disabled={busy} onClick={closeForm}><X size={20} /></button></header>
+        <div className="resource-editor-scroll"><fieldset disabled={busy} className="resource-editor-body">
+          <section className="ph-section resource-form-section"><h3>{t("Isi pengumuman")}</h3>
+          <label>{t("Judul")}<input required maxLength={255} value={form.title} onChange={event => setForm({ ...form, title: event.target.value })} /></label>
+          <label>{t("Isi pengumuman")}<textarea required rows={6} maxLength={100000} value={form.content} onChange={event => setForm({ ...form, content: event.target.value })} /></label>
+          <div className="ph-form-grid ph-announcement-form-grid"><label>{t("Kategori")}<select value={form.category} onChange={event => setForm({ ...form, category: event.target.value as AnnouncementCategory })}>{ANNOUNCEMENT_CATEGORIES.map(item => <option key={item} value={item}>{t(getAnnouncementCategoryLabel(item))}</option>)}</select></label>
+            <label>{t("Prioritas")}<select value={form.priority} onChange={event => setForm({ ...form, priority: event.target.value as AnnouncementPriority })}>{ANNOUNCEMENT_PRIORITIES.map(item => <option key={item} value={item}>{t(getPriorityLabel(item))}</option>)}</select></label></div>
+          </section>
+          <section className="ph-section resource-form-section"><h3>{t("Tujuan dan pembaca")}</h3>
+          {editing ? <p className="ph-announcement-notice">{t("Tujuan:")} {destinations(editing)}{t(". Untuk tujuan berbeda, buat pengumuman baru.")}</p> : <>
+            <label>{t("Tujuan publikasi")}<select value={form.scope} onChange={event => updateTarget({ scope: event.target.value as Form['scope'], company_ids: [] })}><option value="single">{t("Satu company")}</option><option value="multiple">{t("Beberapa company")}</option>{options.can_publish_global && <option value="global">{t("Semua entity")}</option>}</select></label>
+            {form.scope === 'single' && <label>{t("Company tujuan")}<select required value={form.company_ids[0] || ''} onChange={event => updateTarget({ company_ids: event.target.value ? [Number(event.target.value)] : [] })}><option value="">{t("Pilih company")}</option>{options.companies.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
+            {form.scope === 'multiple' && <div className="ph-announcement-targets" role="group" aria-label={t("Company tujuan")}>{options.companies.map(item => <label key={item.id}><input type="checkbox" checked={form.company_ids.includes(item.id)} onChange={event => updateTarget({ company_ids: event.target.checked ? [...form.company_ids, item.id] : form.company_ids.filter(id => id !== item.id) })} />{item.name}</label>)}</div>}
+            {form.scope === 'global' && <p className="ph-announcement-notice">{t("Pengumuman ditujukan ke semua entity. Pembaca tetap mengikuti pilihan audiens di bawah.")}</p>}
+          </>}
+          <label>{t("Pembaca")}<select value={form.visibility} onChange={event => setForm({ ...form, visibility: event.target.value as AnnouncementVisibility, target_ids: [] })}><option value="all">{t("Semua pengguna di company tujuan")}</option><option value="department">{t("Departemen tertentu")}</option><option value="role">{t("Role tertentu")}</option></select></label>
+          {form.visibility !== 'all' && <div className="ph-announcement-targets" role="group" aria-label={t("Target pembaca")}>{audienceOptions.map(item => <label key={item.id}><input type="checkbox" checked={form.target_ids.includes(item.id)} onChange={event => setForm({ ...form, target_ids: event.target.checked ? [...form.target_ids, item.id] : form.target_ids.filter(id => id !== item.id) })} />{item.name}</label>)}
+            {!audienceOptions.length && <p>{t("Belum ada target tersedia untuk company yang dipilih.")}</p>}
+            {form.target_ids.filter(id => !audienceOptions.some(item => item.id === id)).map(id => <label key={id}><input type="checkbox" checked onChange={() => setForm({ ...form, target_ids: form.target_ids.filter(value => value !== id) })} />{t("Target tersimpan #")}{id}</label>)}
+          </div>}
+          </section>
+          <section className="ph-section resource-form-section resource-span"><h3>{t("Publikasi")}</h3>
+          <label>{t("Berakhir pada (WIB, opsional)")}<input type="datetime-local" value={form.expires_at} onChange={event => setForm({ ...form, expires_at: event.target.value })} /></label>
+          <label className="ph-announcement-checkbox"><input type="checkbox" checked={form.is_pinned} onChange={event => setForm({ ...form, is_pinned: event.target.checked })} />{t("Sematkan di bagian atas")}</label>
+          {!editing && <label className="ph-announcement-checkbox"><input type="checkbox" checked={form.is_published} onChange={event => setForm({ ...form, is_published: event.target.checked })} />{t("Terbitkan setelah disimpan")}</label>}
+          </section>
+          {formError && <p className="ph-announcement-error" role="alert">{formError}</p>}
+        </fieldset></div><footer className="ph-dialog-footer ph-form-actions"><button type="button" disabled={busy} onClick={closeForm}>{t("Batal")}</button><button className="ph-announcement-primary" type="submit" disabled={busy}>{busy ? t("Menyimpan…") : t("Simpan pengumuman")}</button></footer>
+      </form>
+    </AccountDialog>}
+    {detailId !== null && <AccountDialog labelledBy="announcement-detail-title" toasterId="announcements" className="ph-workflow ph-announcement-dialog resource-workflow resources-refresh-dialog" onClose={() => setDetailId(null)}>
+      <header className="ph-dialog-header"><h2 id="announcement-detail-title">{t("Detail pengumuman")}</h2><button aria-label={t("Tutup detail pengumuman")} onClick={() => setDetailId(null)}><X size={20} /></button></header>
+      <div className="ph-announcement-detail">{detailError ? <div role="alert"><p>{detailError}</p><button onClick={() => setDetailRevision(value => value + 1)}>{t("Coba lagi")}</button></div> : !detail ? <p role="status">{t("Memuat pengumuman…")}</p> : <>
+        <article className="resource-reader-copy"><p className="ph-announcement-meta">{scopeLabel(detail)} · {t(getAnnouncementCategoryLabel(detail.category))}</p><h3>{detail.title}</h3>
+        <p className="ph-announcement-date">{dateLabel(detail.published_at || detail.created_at)}{detail.creator?.name ? ` · ${detail.creator.name}` : ''}</p>
+        <div className="ph-announcement-body">{detail.content}</div></article><section className="ph-section resource-reader-facts"><h3>{t("Publikasi dan akses")}</h3><dl><dt>{t("Company")}</dt><dd>{destinations(detail)}</dd><dt>{t("Pembaca")}</dt><dd>{t(getVisibilityLabel(detail.visibility))}{detail.target_audience ? `: ${detail.target_audience}` : ''}</dd>
+          <dt>{t("Prioritas")}</dt><dd>{t(getPriorityLabel(detail.priority))}</dd><dt>{t("Status")}</dt><dd>{!detail.is_published ? t("Draft") : expired(detail) ? t("Kedaluwarsa") : t("Terbit")}</dd>
+          {detail.expires_at && <><dt>{t("Berakhir")}</dt><dd>{dateLabel(detail.expires_at)}</dd></>}
+        </dl></section></>}
+      </div>
+    </AccountDialog>}
+    {confirmation}
+  </div>;
 }

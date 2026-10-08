@@ -1,0 +1,54 @@
+.executive-main-grid { display:grid; grid-template-columns:minmax(0,1.7fr) minmax(280px,1fr); gap:24px; margin-bottom:24px; }
+.executive-company-panel { align-self:start; }
+.executive-text-link { display:inline-flex; align-items:center; gap:6px; color:#187451; font-size:12px; white-space:nowrap; }
+.executive-table-scroll { overflow-x:auto; max-width:100%; }
+.executive-table { width:100%; border-collapse:collapse; font-size:12px; }
+.executive-table th,.executive-table td { padding:16px 12px; text-align:right; border-bottom:1px solid #edf1ed; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.executive-table th:first-child { text-align:left; padding-left:0; }
+.executive-table thead th { font-size:11px; color:#687c6d; font-weight:500; }
+.executive-table tbody th { font-weight:500; }
+.executive-table tr:last-child :is(td,th) { border-bottom:0; }
+.executive-chart { height:240px; width:100%; min-width:0; }
+.executive-caption { display:block; margin-top:4px; color:#7a8b7f; font-size:10px; }
+.executive-activity { margin:0; padding:0; list-style:none; }
+.executive-activity li { padding:15px 0; border-top:1px solid #edf1ed; }
+.executive-activity li:first-child { border-top:0; padding-top:0; }
+.executive-activity strong { font-size:13px; font-weight:500; }
+.executive-activity p { font-size:12px; color:#687c6d; margin:6px 0; }
+.executive-activity :is(small,time) { font-size:10px; color:#7a8b7f; }
+/* Shared executive reports keep the page's actions, charts and data contracts. */
+.executive-shell .report-page { gap:24px; color:#293d32; }
+.executive-shell .report-header { border-bottom:0; padding-bottom:0; align-items:center; }
+.executive-shell .report-header .report-heading { text-align:left; min-width:0; }
+.executive-shell .report-header h1 { font-size:clamp(25px,2.2vw,33px); letter-spacing:-.7px; line-height:1.25; }
+.executive-shell .report-header p { font-size:13px; color:#708074; }
+.executive-shell .report-summary { background:#fff; border:1px solid #e1e8e2; border-radius:10px; padding:22px 8px; }
+.executive-shell .report-metric { padding:0 20px; border-color:#e8eee9; }
+.executive-shell .report-metric-value { font-size:27px; color:#293d32; }
+.executive-shell .report-metric-label { font-size:12px; }
+.executive-shell .report-section { padding:22px; border:1px solid #e1e8e2; border-radius:10px; background:#fff; }
+.executive-shell .report-section .report-section { padding:16px 0; border:0; border-top:1px solid #e8eee9; border-radius:0; }
+.executive-shell .report-section h3 { font-size:16px; }
+.executive-shell .report-page table { font-size:12px; }
+.executive-shell .report-page :is(th,td) { padding:14px 16px; }
+.executive-shell .report-page th { background:#f7f9f7; color:#687c6d; }
+.executive-shell .report-page :is(input,select) { min-height:40px; background:#fff; border:1px solid #dce5de; }
+.executive-shell .report-page .report-toolbar { padding:0; }
+.executive-shell .report-approval-list { background:#fff; border:1px solid #e1e8e2; border-radius:10px; padding:0 22px; }
+.executive-shell .report-approval-list > .report-section { border:0; border-bottom:1px solid #e8eee9; border-radius:0; padding:20px 0; margin:0; }
+.executive-shell .report-approval-list > .report-section:last-child { border:0; }
+.executive-directory { display:flex; flex-direction:column; background:#fff; border:1px solid #e1e8e2; border-radius:10px; padding:0 24px; }
+.executive-shell .executive-directory > .report-section { display:grid; grid-template-columns:minmax(200px,1fr) minmax(220px,1.2fr) auto; align-items:center; gap:24px; border:0; border-bottom:1px solid #e8eee9; border-radius:0; padding:22px 0; }
+.executive-directory > .report-section > div { margin:0; }
+.executive-directory > .report-section > div:last-child { border:0; padding:0; gap:16px; }
+.executive-dialog .ph-dialog-header { padding:24px; border-bottom:1px solid #e1e8e2; }
+.executive-dialog .ph-dialog-header h2 { font-size:21px; font-weight:600; color:#293d32; }
+.executive-dialog .ph-dialog-body { padding:24px; }
+.executive-dialog .ph-dialog-footer { background:#f7f9f7; border-top:1px solid #e1e8e2; margin-top:24px; padding-top:18px; }
+.executive-shell .executive-performance .ops-page-heading { border-bottom:0; padding-bottom:0; }
+.executive-shell .executive-performance .ops-page-title { font-size:clamp(25px,2.2vw,33px); font-weight:600; color:#293d32; }
+.executive-shell .executive-performance .ops-section { background:#fff; border:1px solid #e1e8e2; border-radius:10px; padding:22px; }
+.executive-shell .executive-performance .ops-summary-register { background:#fff; border:1px solid #e1e8e2; border-radius:10px; padding:20px; }
+.executive-kpi-note { color:#687c6d; font-size:12px; line-height:1.7; }
+@media (max-width:1199px) { .executive-main-grid { grid-template-columns:minmax(0,1fr); } .executive-shell .executive-directory > .report-section { grid-template-columns:minmax(0,1fr) minmax(0,1fr); } .executive-directory > .report-section > div:last-child { grid-column:1/-1; } }
+@media (max-width:767px) { .executive-main-grid { gap:20px; } .executive-shell .report-section { padding:20px 16px; } .executive-shell .report-metric { padding-inline:14px; } .executive-shell .report-metric-value { font-size:23px; } .executive-shell .executive-directory > .report-section { grid-template-columns:minmax(0,1fr); gap:16px; } .executive-directory { padding:0 16px; } .executive-shell .report-approval-list { padding:0 16px; } .executive-dialog .ph-dialog-body,.executive-dialog .ph-dialog-header { padding:20px 16px; } }

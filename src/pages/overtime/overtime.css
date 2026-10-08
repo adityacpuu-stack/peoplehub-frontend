@@ -1,0 +1,69 @@
+/* Overtime composition only; shared compensation and other workflows stay independent. */
+.ot-page {
+  width: 100%;
+  min-width: 0;
+  font-family: 'Public Sans', sans-serif;
+}
+.ot-page .cp-filters { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)) auto; align-items:end; }
+.ot-page .cp-field { width:100%; }
+.ot-page .cp-filter-error { grid-column:1/-1; order:2; }
+.ot-page .cp-reset { padding-inline:8px; }
+.ot-page .cp-period { grid-column:1/-1; padding-top:4px; gap:6px 10px; }
+.ot-page .cp-period svg { color:#176b4a; flex-shrink:0; }
+.ot-page .cp-period small { margin-left:auto; }
+.ot-page .cp-table th:nth-child(1) { width:23%; }
+.ot-page .cp-table th:nth-child(2) { width:22%; }
+.ot-page .cp-table th:nth-child(3) { width:13%; }
+.ot-page .cp-table th:nth-child(4) { width:19%; text-align:right; }
+.ot-page .cp-table th:nth-child(5) { width:11%; }
+.ot-page .cp-table th:nth-child(6) { width:12%; text-align:right; }
+.ot-page .cp-table :is(th,td) { padding-inline:14px; }
+.ot-page .cp-table td { vertical-align:middle; }
+.ot-page .ot-identity small { margin-top:2px; }
+.ot-page .ot-hours { font-variant-numeric:tabular-nums; }
+.ot-page .cp-type > span { background:#f2f5f2; color:#52665a; font-size:11px; }
+.ot-row-actions { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:2px; }
+.ot-page .cp-row-actions { padding-right:16px !important; }
+.ot-page .cp-metrics { gap:16px 28px; }
+.ot-page .cp-metrics strong { font-size:17px; }
+
+/* Dialogs render in a portal: scope by the overtime content marker. */
+.cp-dialog:has(.ot-form,.ot-detail), .ot-decision { font-family:'Public Sans',sans-serif; }
+.cp-dialog:has(.ot-form,.ot-detail) .dw-detail-grid { background:transparent; padding:0; border:0; border-radius:0; gap:18px 24px; }
+.cp-dialog:has(.ot-detail) .dw-section { margin-top:0; }
+.ot-detail .ot-notes { white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.7; }
+.ot-detail .ot-calculation h3 { margin-bottom:14px; }
+.ot-detail .ot-calculation .flex { gap:18px; }
+.ot-detail .ot-calculation .flex > :last-child { text-align:right; font-variant-numeric:tabular-nums; }
+.ot-detail .cp-status { padding:4px 9px; border-radius:6px; background:#f2f5f2; }
+.ot-detail .cp-status[data-status=pending] { background:#fff7e6; color:#8c641f; }
+.ot-detail .cp-status[data-status=approved] { background:#edf6ef; color:#247247; }
+.ot-detail .cp-status[data-status=rejected] { background:#fdf0f0; color:#a14040; }
+.ot-form .ot-estimate { min-height:42px; background:#f3f8ef; border:1px solid #dce7d5; border-radius:8px; padding:9px 12px; }
+.ot-form .ot-estimate .dw-money { color:#176b4a; font-size:18px; font-variant-numeric:tabular-nums; }
+.ot-page :focus-visible, .cp-dialog:has(.ot-form,.ot-detail) :focus-visible, .ot-decision :focus-visible { outline:2px solid #176b4a; outline-offset:3px; }
+@container compensation (max-width:900px) {
+  .ot-page .cp-table, .ot-page .cp-table tbody { display:block; }
+  .ot-page .cp-table thead { display:none; }
+  .ot-page .cp-table tr { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; padding:18px 24px; border-top:1px solid #edf1ed; }
+  .ot-page .cp-table td, .ot-page .cp-table td:first-child, .ot-page .cp-table td:last-child { display:block; min-width:0; padding:0 !important; border:0; }
+  .ot-page .cp-table td:first-child { grid-column:1/-1; }
+  .ot-page .cp-table .cp-money { text-align:left; }
+  .ot-page .cp-table td[data-label]::before { content:attr(data-label); display:block; margin-bottom:6px; font-size:11px; color:#718077; }
+  .ot-page .cp-table .cp-row-actions { grid-column:1/-1; }
+  .ot-row-actions { justify-content:flex-end; }
+  .ot-page .cp-icon-button { width:36px; height:36px; }
+}
+@media(max-width:1100px) {
+  .ot-page .cp-filters { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .ot-page .cp-reset { justify-self:start; padding:0; }
+}
+@media(max-width:767px) {
+  .ot-page .cp-period { display:flex; }
+  .ot-page .cp-period small { margin-left:0; flex-basis:100%; }
+  .ot-page .cp-pagination { padding:16px; flex-wrap:wrap; }
+  .ot-page .cp-table tr { padding:18px 16px; }
+  .ot-page .cp-actions { width:100%; }
+  .ot-page .cp-actions .cp-primary { margin-left:auto; }
+  .ot-page .cp-metrics > div { flex:1 1 130px; }
+}

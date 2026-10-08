@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/i18n';
 import { Info } from 'lucide-react';
 
 interface PreviewBannerProps {
@@ -16,6 +17,7 @@ interface PreviewBannerProps {
 export function PreviewBanner({
   message = 'Data yang ditampilkan adalah preview/contoh. Integrasi dengan data real belum tersedia — tidak untuk pengambilan keputusan.',
 }: PreviewBannerProps) {
+  useLocale();
   return (
     <div
       role="status"
@@ -23,8 +25,8 @@ export function PreviewBanner({
     >
       <Info className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600" aria-hidden="true" />
       <div className="text-sm">
-        <p className="font-semibold">Preview Data</p>
-        <p className="mt-0.5 text-amber-800">{message}</p>
+        <p className="font-semibold">{t("Preview Data")}</p>
+        <p className="mt-0.5 text-amber-800">{t(message)}</p>
       </div>
     </div>
   );

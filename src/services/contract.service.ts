@@ -14,8 +14,13 @@ export interface ContractEmployee {
 export interface Contract {
   id: number;
   contract_number: string;
-  contract_type: 'permanent' | 'contract' | 'probation';
-  status: 'active' | 'expired' | 'terminated' | 'pending';
+  contract_type: 'permanent' | 'contract' | 'probation' | 'internship' | 'part_time';
+  status: 'draft' | 'active' | 'expired' | 'terminated' | 'pending' | 'renewed';
+  salary?: number | string | null;
+  position?: string | null;
+  department?: string | null;
+  notes?: string | null;
+  attachment_path?: string | null;
   start_date: string;
   end_date: string | null;
   created_at: string;
@@ -73,7 +78,16 @@ export const contractService = {
     contract_type?: string;
   }): Promise<{ data: Contract[]; pagination: { page: number; limit: number; total: number; totalPages: number } }> => {
     const response = await api.get('/contracts', { params });
-    return response.data;
+    const result = response.data;
+    return {
+      data: result.data,
+      pagination: { ...result.pagination, totalPages: result.pagination.total_pages ?? result.pagination.totalPages },
+    };
+  },
+
+  getById: async (id: number): Promise<Contract> => {
+    const response = await api.get<ApiResponse<Contract>>(`/contracts/${id}`);
+    return response.data.data;
   },
 
   // Get expiring contracts

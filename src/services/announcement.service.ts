@@ -34,6 +34,8 @@ export interface Announcement {
   created_by: number | null;
   created_at: string;
   updated_at: string;
+  permissions?: { can_edit: boolean; can_delete: boolean };
+  target_companies?: { id: number; name: string }[];
   company?: {
     id: number;
     name: string;
@@ -97,6 +99,14 @@ export interface AnnouncementStatistics {
 // BACKEND RESPONSE TYPES
 // ==========================================
 
+export interface AnnouncementOptions {
+  can_create: boolean;
+  can_publish_global: boolean;
+  companies: { id: number; name: string }[];
+  roles: { id: number; name: string }[];
+  departments: { id: number; name: string; company_id: number | null }[];
+}
+
 interface BackendPaginatedResponse<T> {
   data: T[];
   pagination: {
@@ -112,6 +122,10 @@ interface BackendPaginatedResponse<T> {
 // ==========================================
 
 export const announcementService = {
+  getOptions: async (): Promise<AnnouncementOptions> => {
+    const response = await api.get<ApiResponse<AnnouncementOptions>>('/announcements/options');
+    return response.data.data;
+  },
   /**
    * Get all announcements with pagination and filters
    */

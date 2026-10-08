@@ -1,0 +1,81 @@
+/* Account workspace: category rail, compact form sections, persistent actions. */
+.ph-account-dialog.settings-discard-dialog { max-width:480px; border-radius:14px; border-color:#e1e8e3; }
+.settings-discard-dialog .ph-dialog-header { padding:22px 26px; background:#fbfcfa; border-color:#e1e8e3; }
+.settings-discard-dialog .ph-dialog-header h2 { color:#163e2f; font-size:21px; }
+.settings-discard-dialog .ph-dialog-body { padding:22px 26px; }
+.settings-discard-dialog .ph-button { border-radius:8px; }
+.ph-account-dialog.settings-refresh-dialog { max-width:1100px; height:min(820px,calc(100dvh - 48px)); border:1px solid #e1e8e3; border-radius:14px; }
+.settings-refresh-dialog .ph-account-header { padding:22px 26px; background:#fbfcfa; border-color:#e1e8e3; }
+.settings-refresh-dialog .ph-account-header h1 { font-size:23px; line-height:1.3; color:#163e2f; letter-spacing:-.5px; }
+.settings-refresh-dialog .ph-account-header p { color:#718077; }
+.settings-refresh-dialog .ph-account-close { width:38px; height:38px; border:1px solid #e1e8e3; border-radius:8px; }
+.settings-refresh-dialog .ph-account-body { flex-direction:row; }
+.settings-refresh-dialog .ph-account-nav { width:210px; padding:22px 14px; border-bottom:0; border-right:1px solid #e1e8e3; background:#fbfcfa; overflow-y:auto; }
+.settings-refresh-dialog .ph-account-desktop-nav { display:block; overflow:visible; }
+.settings-refresh-dialog .ph-account-group { padding:0; }
+.settings-refresh-dialog .ph-account-group + .ph-account-group { border-left:0; border-top:1px solid #e1e8e3; margin-top:22px; padding:20px 0 0; }
+.settings-refresh-dialog .ph-account-group h2 { padding:0 12px; margin-bottom:9px; font-size:11px; font-weight:600; color:#718077; }
+.settings-refresh-dialog .ph-account-group ul { display:grid; gap:4px; }
+.settings-refresh-dialog .ph-account-group button { width:100%; padding:10px 12px; min-height:42px; border:0; border-radius:8px; gap:10px; color:#496153; white-space:normal; }
+.settings-refresh-dialog .ph-account-group button:hover:not(:disabled) { background:#f0f4ed; }
+.settings-refresh-dialog .ph-account-group button[aria-current=page] { background:#e7f0e5; color:#176b4a; font-weight:600; }
+.settings-refresh-dialog .ph-account-content { background:#fff; }
+.settings-refresh-dialog :is(.ph-settings,.ph-profile) { color:#243b32; }
+.settings-refresh-dialog .ph-settings-company-bar { padding:16px 26px; gap:16px; background:#fbfcfa; border-color:#e1e8e3; }
+.settings-refresh-dialog .ph-settings-context { width:300px; }
+.settings-refresh-dialog .ph-settings-company-bar > p { font-size:11px; }
+.settings-refresh-dialog .ph-settings-panel-header { padding:22px 26px 18px; border-color:#e8eee9; }
+.settings-refresh-dialog .ph-settings-panel-header h2 { color:#163e2f; font-size:20px; }
+.settings-refresh-dialog .ph-settings-panel-header p { font-size:13px; line-height:1.6; }
+.settings-refresh-dialog .ph-settings-fieldset { padding:0 26px; }
+.settings-refresh-dialog .ph-settings-field-group.ph-section { padding:22px 0; }
+.settings-refresh-dialog .ph-settings-group-heading { margin-bottom:16px; }
+.settings-refresh-dialog .ph-settings-group-heading h3 { color:#386346; font-size:14px; }
+.settings-refresh-dialog .ph-settings-group-heading p { font-size:12px; line-height:1.6; }
+.settings-refresh-dialog .ph-settings-field-grid { gap:16px 20px; }
+.settings-refresh-dialog .ph-settings-field > label { font-size:12px; color:#496153; }
+.settings-refresh-dialog :is(.ph-settings-input,.ph-profile-input) { border-color:#e1e8e3; border-radius:8px; font-size:13px; }
+.settings-refresh-dialog .ph-settings-toggle-label { font-size:13px; }
+.settings-refresh-dialog .ph-settings-toggle-description { font-size:12px; line-height:1.6; }
+.settings-refresh-dialog .ph-settings-toggle-row { padding:18px 0; gap:20px; }
+.settings-refresh-dialog .ph-settings-password-fields { max-width:100%; gap:16px; }
+.settings-refresh-dialog :is(.ph-settings-footer,.ph-profile-footer) { padding:16px 26px; min-height:72px; background:#fbfcfa; border-color:#e1e8e3; gap:12px; }
+.settings-refresh-dialog :is(.ph-settings-button,.ph-profile-button) { border-radius:8px; font-size:13px; min-height:38px; }
+.settings-refresh-dialog :is(.ph-settings-button-primary,.ph-profile-primary):not(:disabled) { background:#176b4a; border-color:#176b4a; color:white; }
+.settings-refresh-dialog .ph-profile-identity { margin:0 26px; padding:20px 0; }
+.settings-refresh-dialog .ph-profile-avatar { width:48px; height:48px; border-radius:10px; background:#edf3e7; color:#4f7149; }
+.settings-refresh-dialog .ph-profile-name h2 { color:#163e2f; font-size:20px; }
+.settings-refresh-dialog .ph-profile-nav { padding:0 26px; border-color:#e1e8e3; }
+.settings-refresh-dialog .ph-profile-tabs.ph-tabs { gap:20px; }
+.settings-refresh-dialog .ph-profile-tabs button { font-size:13px; }
+.settings-refresh-dialog .ph-profile-content { padding:0 26px; }
+.settings-refresh-dialog .ph-profile-section.ph-section:not([hidden]) { display:block; padding:22px 0; border-color:#e8eee9; }
+.settings-refresh-dialog .ph-profile-section-heading { margin-bottom:16px; }
+.settings-refresh-dialog .ph-profile-section-heading h3 { color:#386346; }
+.settings-refresh-dialog .ph-profile-section-body > .ph-form-grid { gap:16px 20px; }
+.settings-refresh-dialog .ph-profile-section-body :is(p,dd) { font-size:13px; }
+.settings-refresh-dialog .ph-profile-label { color:#718077; }
+.settings-refresh-dialog .ph-profile-footer > p { max-width:42ch; }
+@media(max-width:767px) {
+  .ph-account-dialog.settings-refresh-dialog { width:calc(100vw - 24px); height:calc(100dvh - 24px); border-radius:12px; }
+  .settings-refresh-dialog .ph-account-header { padding:18px; }
+  .settings-refresh-dialog .ph-account-header h1 { font-size:20px; }
+  .settings-refresh-dialog .ph-account-body { flex-direction:column; }
+  .settings-refresh-dialog .ph-account-nav { width:auto; padding:12px 18px; border-right:0; border-bottom:1px solid #e1e8e3; overflow:visible; }
+  .settings-refresh-dialog .ph-account-desktop-nav { display:none; }
+  .settings-refresh-dialog .ph-account-mobile-nav select { border-color:#e1e8e3; border-radius:8px; }
+  .settings-refresh-dialog .ph-settings-company-bar { padding:12px 18px; flex-wrap:wrap; gap:8px; }
+  .settings-refresh-dialog .ph-settings-context { width:100%; }
+  .settings-refresh-dialog .ph-settings-company-bar > p { max-width:none; }
+  .settings-refresh-dialog .ph-settings-panel-header { padding:18px; flex-wrap:wrap; gap:8px; }
+  .settings-refresh-dialog .ph-settings-fieldset,.settings-refresh-dialog .ph-profile-content { padding:0 18px; }
+  .settings-refresh-dialog .ph-settings-field-grid { grid-template-columns:minmax(0,1fr); }
+  .settings-refresh-dialog :is(.ph-settings-input,.ph-profile-input) { font-size:16px; }
+  .settings-refresh-dialog :is(.ph-settings-footer,.ph-profile-footer) { padding:12px 18px; gap:8px; }
+  .settings-refresh-dialog .ph-settings-save-status,.settings-refresh-dialog .ph-profile-footer > p { font-size:11px; line-height:1.5; }
+  .settings-refresh-dialog .ph-profile-identity { margin:0 18px; padding:14px 0; }
+  .settings-refresh-dialog .ph-profile-name h2 { font-size:17px; }
+  .settings-refresh-dialog .ph-profile-nav { padding:0 18px; }
+  .settings-refresh-dialog .ph-profile-tabs.ph-tabs { gap:16px; }
+  .settings-refresh-dialog .ph-profile-tabs button { font-size:12px; }
+}

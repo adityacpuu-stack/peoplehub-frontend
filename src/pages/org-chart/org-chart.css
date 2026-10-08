@@ -1,0 +1,73 @@
+.org-note { font-size:12px; line-height:1.6; color:var(--ph-muted, #65716b); }
+.org-note summary { padding:10px 0; cursor:pointer; white-space:nowrap; }
+.org-note[open] { flex-basis:100%; }
+.org-note p { max-width:75ch; padding-bottom:6px; }
+.org-workspace .ow-filters .ow-field:has(input) { flex:1 1 250px; }
+.org-scope { display:flex; flex-wrap:wrap; gap:8px 20px; color:var(--ph-muted, #65716b); font-size:12px; font-variant-numeric:tabular-nums; }
+.org-zoom { display:flex; align-items:center; gap:5px; margin-left:auto; flex-wrap:wrap; }
+.org-zoom output { width:45px; text-align:center; font-size:12px; font-variant-numeric:tabular-nums; }
+.org-content { min-width:0; }
+.org-chart-area { min-width:0; }
+.org-pan-hint { padding:12px 20px 0; color:var(--ph-muted, #65716b); font-size:12px; }
+.org-canvas { cursor:grab; user-select:none; scrollbar-width:none; -ms-overflow-style:none; }
+.org-canvas::-webkit-scrollbar { display:none; }
+.org-canvas .org-node { cursor:inherit; }
+.org-canvas[data-panning=true] { cursor:grabbing; }
+.org-content--selected { display:grid; grid-template-columns:minmax(0,1fr) 280px; }
+.org-canvas { overflow:auto; min-height:520px; max-height:760px; min-width:0; background:#fff; padding:36px 20px; }
+.org-scale { width:max-content; min-width:100%; }
+.org-tree { display:flex; justify-content:center; list-style:none; padding:0; margin:0; position:relative; }
+.org-tree li { display:flex; flex-direction:column; align-items:center; position:relative; padding:28px 16px 0; }
+.org-tree li:before,.org-tree li:after { content:''; position:absolute; top:0; right:50%; width:50%; height:28px; border-top:1px solid #cbd5cf; }
+.org-tree li:after { right:auto; left:50%; border-left:1px solid #cbd5cf; }
+.org-tree li:only-child:before,.org-tree li:only-child:after { display:none; }
+.org-tree li:only-child { padding-top:0; }
+.org-tree li:first-child:before,.org-tree li:last-child:after { border:0; }
+.org-tree li:last-child:before { border-right:1px solid #cbd5cf; border-top-right-radius:6px; }
+.org-tree li:first-child:after { border-top-left-radius:6px; }
+.org-tree .org-tree { padding-top:28px; }
+.org-tree .org-tree:before { content:''; position:absolute; top:0; left:50%; height:28px; border-left:1px solid #cbd5cf; }
+.org-scale>.org-tree>li { padding-top:0; }
+.org-scale>.org-tree>li:before,.org-scale>.org-tree>li:after { display:none; }
+.org-node { width:224px; text-align:left; background:#fff; border:1px solid var(--ph-line, #e4e9e6); border-radius:6px; padding:14px 16px; color:var(--ph-ink, #24302b); }
+.org-node:hover { border-color:#a0afa5; }
+.org-node[aria-pressed=true] { border-color:var(--ph-accent, #187451); background:#f4f8f5; }
+.org-node-person { display:block; }
+.org-node-person strong { display:block; font-size:14px; font-weight:600; line-height:1.5; overflow-wrap:anywhere; }
+.org-node-person>span>span { display:block; font-size:13px; color:var(--ph-muted, #65716b); line-height:1.5; margin-top:2px; }
+.org-node-department { display:block; margin-top:10px; font-size:12px; color:var(--ph-muted, #65716b); }
+.org-node-company { display:block; margin-top:3px; font-size:12px; color:var(--ph-muted, #65716b); }
+.org-inspector { border-left:1px solid var(--ph-line, #e4e9e6); padding:20px 0 20px 24px; min-width:0; }
+.org-inspector-title { display:flex; gap:8px; justify-content:space-between; align-items:center; margin-bottom:18px; }
+.org-inspector-title h2 { font-size:12px; color:var(--ph-muted, #65716b); font-weight:500; }
+.org-inspector h3 { font-size:18px; font-weight:600; overflow-wrap:anywhere; }
+.org-inspector>p { font-size:14px; color:var(--ph-muted, #65716b); margin-top:4px; }
+.org-inspector dl { margin:20px 0; }
+.org-inspector dt { font-size:12px; color:var(--ph-muted, #65716b); margin-top:12px; }
+.org-inspector dd { font-size:14px; overflow-wrap:anywhere; margin-top:3px; }
+.org-inspector h4 { font-size:13px; font-weight:600; border-top:1px solid var(--ph-line, #e4e9e6); padding-top:16px; }
+.org-reports { display:grid; gap:4px; margin-top:8px; }
+.org-reports button { text-align:left; padding:8px 0; }
+.org-reports button:hover strong { color:var(--ph-accent, #187451); text-decoration:underline; }
+.org-reports strong { display:block; font-size:14px; font-weight:500; }
+.org-reports span { display:block; font-size:12px; color:var(--ph-muted, #65716b); margin-top:3px; }
+.org-workspace :focus-visible { outline:2px solid var(--ph-accent, #187451); outline-offset:3px; }
+@media(max-width:1000px) { .org-content--selected { grid-template-columns:minmax(0,1fr); } .org-inspector { border-left:0; border-top:1px solid var(--ph-line, #e4e9e6); padding:20px 0; } .org-inspector dl { display:grid; grid-template-columns:100px minmax(0,1fr); gap:8px; } .org-inspector dt,.org-inspector dd { margin:0; } }
+@media(max-width:640px) { .org-zoom { margin-left:0; } .org-canvas { padding:28px 4px; min-height:400px; max-height:600px; } .org-scope { gap:8px 12px; } }
+@media(max-width:767px) {
+  .org-workspace .ow-filters>.org-note,.org-workspace .ow-filters>.ow-field:has(input) { grid-column:1/-1; }
+}
+.org-fullscreen-button { gap:6px; }
+.org-fullscreen-error { padding:10px 20px; color:#b42318; font-size:13px; }
+.org-stage:fullscreen { display:flex; flex-direction:column; width:100%; height:100%; max-width:none; margin:0; padding:0; border:0; border-radius:0; background:#fff; overflow:hidden; }
+.org-stage:fullscreen .org-toolbar { flex-shrink:0; padding:16px 24px; }
+.org-stage:fullscreen .org-content { flex:1; min-height:0; }
+.org-stage:fullscreen .org-content:not(.org-content--selected) { display:flex; }
+.org-stage:fullscreen .org-chart-area { flex:1; display:flex; flex-direction:column; min-height:0; }
+.org-stage:fullscreen .org-pan-hint { flex-shrink:0; padding-bottom:12px; }
+.org-stage:fullscreen .org-canvas { flex:1; min-height:0; max-height:none; }
+.org-stage:fullscreen .org-inspector { overflow:auto; min-height:0; padding:20px 24px; }
+.org-stage:fullscreen :focus-visible { outline:2px solid #187451; outline-offset:3px; }
+@media(max-width:1000px) {
+  .org-stage:fullscreen .org-content--selected { grid-template-rows:minmax(0,1fr) minmax(0,40%); }
+}

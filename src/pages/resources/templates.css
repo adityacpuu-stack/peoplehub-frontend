@@ -1,0 +1,60 @@
+﻿.ph-templates { width:100%; min-width:0; color:var(--ph-ink,#24302b); }
+.ph-templates-heading { display:flex; align-items:center; justify-content:space-between; gap:24px; margin-bottom:19px; }
+.ph-templates-heading h1 { font-size:26px; line-height:1.3; font-weight:600; letter-spacing:-.5px; }
+.ph-templates-heading p { margin-top:6px; font-size:13px; line-height:1.7; color:var(--ph-muted,#65716b); }
+.ph-templates button,.ph-template-dialog button { display:inline-flex; align-items:center; justify-content:center; gap:7px; padding:8px 11px; min-height:36px; font-size:13px; border:1px solid var(--ph-line,#e4e9e6); border-radius:6px; cursor:pointer; background:white; color:var(--ph-ink,#24302b); }
+.ph-templates button:hover,.ph-template-dialog button:hover { background:#f5f7f5; }
+.ph-templates button:disabled,.ph-template-dialog button:disabled { opacity:.5; cursor:default; }
+.ph-templates button.ph-template-primary,.ph-template-dialog button.ph-template-primary { background:var(--ph-accent,#187451); border-color:var(--ph-accent,#187451); color:white; font-weight:600; }
+.ph-templates :focus-visible,.ph-template-dialog :focus-visible { outline:2px solid var(--ph-accent,#187451); outline-offset:2px; }
+.ph-template-notice { font-size:13px; line-height:1.7; color:var(--ph-muted,#65716b); margin:12px 0; }
+.ph-template-notice button { margin-left:8px; }
+.ph-template-search { display:flex; align-items:center; gap:9px; min-width:0; height:38px; padding:8px 11px; border:1px solid var(--ph-line,#e4e9e6); border-radius:6px; color:var(--ph-muted,#65716b); }
+.ph-template-search input { width:100%; min-width:0; font-size:13px; color:var(--ph-ink,#24302b); outline:none; background:transparent; }
+.ph-template-search svg { flex-shrink:0; }
+.ph-template-library ul { list-style:none; padding:0; margin:0; border-top:1px solid var(--ph-line,#e4e9e6); }
+.ph-template-library li { display:grid; grid-template-columns:44px minmax(180px,1fr) 95px auto; align-items:center; gap:18px; min-width:0; padding:19px 0; border-bottom:1px solid var(--ph-line,#e4e9e6); }
+.ph-template-file { display:flex; align-items:center; flex-direction:column; gap:5px; color:var(--ph-muted,#65716b); font-size:10px; }
+.ph-template-copy { min-width:0; overflow-wrap:anywhere; }
+.ph-template-copy h2 { font-size:14px; line-height:1.6; font-weight:600; }
+.ph-template-copy p { color:var(--ph-muted,#65716b); font-size:13px; line-height:1.7; margin-top:3px; display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical; overflow:hidden; }
+.ph-template-meta { display:flex; flex-wrap:wrap; gap:5px 14px; margin-top:6px; color:var(--ph-muted,#65716b); font-size:12px; line-height:1.6; }
+.ph-template-meta .ph-template-inactive { color:#8c5f21; }
+.ph-template-file-meta { display:grid; gap:7px; font-size:12px; color:var(--ph-muted,#65716b); }
+.ph-template-actions { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:3px; }
+.ph-template-actions button { border-color:transparent; padding:7px 8px; font-size:12px; }
+.ph-template-actions button[aria-label^='Unduh '] { color:var(--ph-accent,#187451); }
+.ph-template-state { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:12px; min-height:220px; padding:30px; border-block:1px solid var(--ph-line,#e4e9e6); font-size:14px; color:var(--ph-muted,#65716b); }
+.ph-template-library footer,.ph-template-dialog footer { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:18px 0; font-size:12px; color:var(--ph-muted,#65716b); }
+.ph-template-library footer > div { display:flex; gap:8px; }
+.ph-account-dialog.ph-template-dialog { width: calc(100vw - 32px); max-width: 620px; height: fit-content; max-height: calc(100dvh - 32px); overflow: auto; }
+.ph-template-dialog header { display: flex; align-items: center; justify-content: space-between; padding: 15px 22px; border-bottom: 1px solid var(--ph-line,#e4e9e6); }
+.ph-template-dialog h2 { font-size: 17px; font-weight: 600; }
+.ph-template-dialog fieldset, .ph-template-detail { padding: 20px 22px; }
+.ph-template-dialog fieldset { display: flex; flex-direction: column; gap: 16px; }
+.ph-template-dialog label { display: flex; flex-direction: column; gap: 7px; font-size: 13px; }
+.ph-template-dialog label input:not([type=checkbox]), .ph-template-dialog select, .ph-template-dialog textarea { width: 100%; border: 1px solid #d5ddd8; border-radius: 6px; padding: 9px 10px; font-size: 13px; }
+.ph-template-dialog input[type=file] { font-size: 12px; }
+.ph-template-dialog .ph-template-checkbox { flex-direction: row; align-items: center; }
+.ph-template-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.ph-template-error { color: #b91c1c; font-size: 13px; }
+.ph-template-dialog footer { justify-content: flex-end; padding: 16px 22px; border-top: 1px solid var(--ph-line,#e4e9e6); position: sticky; bottom: 0; background: white; }
+.ph-template-detail h3 { font-size: 18px; font-weight: 600; overflow-wrap: anywhere; }
+.ph-template-detail p { margin: 12px 0 24px; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ph-template-detail dl { display: grid; grid-template-columns: 100px 1fr; gap: 12px; font-size: 13px; }
+.ph-template-detail dt { color: var(--ph-muted,#65716b); }
+.ph-template-detail dd { overflow-wrap: anywhere; }
+
+@media(max-width:1100px) {
+  .ph-template-library li { grid-template-columns:38px minmax(180px,1fr) 100px; gap:14px; }
+  .ph-template-actions { grid-column:2 / -1; justify-content:flex-start; }
+}
+@media(max-width:640px) {
+  .ph-templates-heading { align-items:flex-start; flex-direction:column; gap:14px; }
+  .ph-template-library li { grid-template-columns:32px minmax(0,1fr); column-gap:12px; row-gap:8px; }
+  .ph-template-file { align-self:start; padding-top:3px; }
+  .ph-template-file-meta { grid-column:2; display:flex; flex-wrap:wrap; gap:12px; }
+  .ph-template-actions { grid-column:2; gap:3px; }
+  .ph-template-library footer { align-items:flex-start; flex-direction:column; }
+  .ph-template-form-grid { grid-template-columns:minmax(0,1fr); }
+}

@@ -1,19 +1,9 @@
+import { insightNumber, insightFixed, insightPeriod } from '@/pages/ceo/insight-display';
+import { t, useLocale, intlLocale } from '@/i18n';
+import './tax-workflows.css';
+import { Modal } from '@/components/ui';
 import { useState, useEffect } from 'react';
-import {
-  History,
-  Calendar,
-  Building2,
-  Download,
-  Search,
-  CheckCircle,
-  Clock,
-  AlertCircle,
-  XCircle,
-  FileText,
-  Eye,
-  Receipt,
-  X,
-} from 'lucide-react';
+import { History, Calendar, Download, Search, CheckCircle, Clock, AlertCircle, FileText, Eye } from 'lucide-react';
 import {
   AreaChart,
   Area,
@@ -42,10 +32,10 @@ interface PaymentSummary {
 }
 
 const statusConfig: Record<string, { label: string; color: string; bg: string; icon: any }> = {
-  paid: { label: 'Paid', color: 'text-green-600', bg: 'bg-green-100', icon: CheckCircle },
-  pending: { label: 'Pending', color: 'text-amber-600', bg: 'bg-amber-100', icon: Clock },
-  calculated: { label: 'Calculated', color: 'text-blue-600', bg: 'bg-blue-100', icon: FileText },
-  overdue: { label: 'Overdue', color: 'text-red-600', bg: 'bg-red-100', icon: AlertCircle },
+  paid: { get label() { return t('Paid'); }, color: 'text-green-600', bg: 'bg-green-100', icon: CheckCircle },
+  pending: { get label() { return t('Pending'); }, color: 'text-amber-600', bg: 'bg-amber-100', icon: Clock },
+  calculated: { get label() { return t('Calculated'); }, color: 'text-blue-600', bg: 'bg-blue-100', icon: FileText },
+  overdue: { get label() { return t('Overdue'); }, color: 'text-red-600', bg: 'bg-red-100', icon: AlertCircle },
 };
 
 const typeColors: Record<string, string> = {
@@ -55,7 +45,10 @@ const typeColors: Record<string, string> = {
 };
 
 export function PaymentHistoryPage() {
+  useLocale();
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [retryAttempt, setRetryAttempt] = useState(0);
   const [payrolls, setPayrolls] = useState<Payroll[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -68,6 +61,7 @@ export function PaymentHistoryPage() {
     const fetchData = async () => {
       try {
         setIsLoading(true);
+        setLoadError(null);
         // Fetch payrolls for the selected year (all months)
         const [payrollRes, companiesRes] = await Promise.all([
           payrollService.getAll({ limit: 5000 }),
@@ -77,15 +71,16 @@ export function PaymentHistoryPage() {
         setCompanies(companiesRes.data || []);
       } catch (err) {
         console.error('Failed to fetch data:', err);
+        setLoadError('Data payroll tidak dapat dimuat. Silakan coba lagi.');
       } finally {
         setIsLoading(false);
       }
     };
     fetchData();
-  }, [selectedYear]);
+  }, [selectedYear, retryAttempt]);
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('id-ID', {
+    return new Intl.NumberFormat(intlLocale(), {
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0,
@@ -94,14 +89,14 @@ export function PaymentHistoryPage() {
   };
 
   const formatCompactCurrency = (value: number) => {
-    if (value >= 1000000000) return `Rp ${(value / 1000000000).toFixed(1)}B`;
-    if (value >= 1000000) return `Rp ${(value / 1000000).toFixed(0)}M`;
+    if (value >= 1000000000) return `Rp ${insightFixed((value / 1000000000), 1)}${t('billion short')}`;
+    if (value >= 1000000) return `Rp ${insightFixed((value / 1000000), 0)}${t('million short')}`;
     return formatCurrency(value);
   };
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return '-';
-    return new Date(dateString).toLocaleDateString('id-ID', {
+    return new Date(dateString).toLocaleDateString(intlLocale(), {
       day: 'numeric',
       month: 'short',
       year: 'numeric',
@@ -157,7 +152,7 @@ export function PaymentHistoryPage() {
     summaryMap.forEach((summary, key) => {
       const [year, month] = summary.period.split('-');
       const periodDate = new Date(parseInt(year), parseInt(month) - 1, 1);
-      const periodLabel = periodDate.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+      const periodLabel = periodDate.toLocaleDateString(intlLocale(), { month: 'long', year: 'numeric' });
 
       // Due date is 10th of next month for PPh 21
       const dueDate = new Date(parseInt(year), parseInt(month), 10);
@@ -174,7 +169,8 @@ export function PaymentHistoryPage() {
           type: 'PPh 21',
           period: summary.period,
           periodLabel,
-          company: summary.companyName,
+          // The existing summary has an application-owned company placeholder.
+          get company() { return t('Company'); },
           companyId: summary.companyId,
           amount: summary.pph21,
           employeeCount: summary.employeeCount,
@@ -191,7 +187,8 @@ export function PaymentHistoryPage() {
           type: 'BPJS Kesehatan',
           period: summary.period,
           periodLabel,
-          company: summary.companyName,
+          // The existing summary has an application-owned company placeholder.
+          get company() { return t('Company'); },
           companyId: summary.companyId,
           amount: summary.bpjsKes,
           employeeCount: summary.employeeCount,
@@ -209,7 +206,8 @@ export function PaymentHistoryPage() {
           type: 'BPJS TK',
           period: summary.period,
           periodLabel,
-          company: summary.companyName,
+          // The existing summary has an application-owned company placeholder.
+          get company() { return t('Company'); },
           companyId: summary.companyId,
           amount: summary.bpjsTK,
           employeeCount: summary.employeeCount,
@@ -260,7 +258,7 @@ export function PaymentHistoryPage() {
 
     yearFilteredPayments.forEach((payment) => {
       const [year, month] = payment.period.split('-');
-      const monthKey = new Date(parseInt(year), parseInt(month) - 1, 1).toLocaleDateString('id-ID', { month: 'short' });
+      const monthKey = new Date(parseInt(year), parseInt(month) - 1, 1).toLocaleDateString(intlLocale(), { month: 'short' });
 
       if (!monthMap.has(monthKey)) {
         monthMap.set(monthKey, { pph21: 0, bpjs: 0 });
@@ -286,132 +284,27 @@ export function PaymentHistoryPage() {
   const yearOptions = Array.from({ length: 5 }, (_, i) => (new Date().getFullYear() - i).toString());
 
   if (isLoading) {
-    return <PageSpinner />;
+    return <div className="ph-workflow tax-workflow"><header className="ph-page-header tax-page-header"><h1>{t("Payment History")}</h1></header><div role="status" aria-label={t("Memuat data payroll")}><PageSpinner /></div></div>;
   }
 
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 rounded-2xl shadow-xl overflow-hidden">
-        <div className="px-4 md:px-8 py-6 md:py-8 relative">
-          <div className="absolute inset-0 opacity-5">
-            <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
-              <defs>
-                <pattern id="history-pattern" width="60" height="60" patternUnits="userSpaceOnUse">
-                  <path d="M 60 0 L 0 0 0 60" fill="none" stroke="white" strokeWidth="1" />
-                </pattern>
-              </defs>
-              <rect width="100%" height="100%" fill="url(#history-pattern)" />
-            </svg>
-          </div>
+  if (loadError) return <div className="ph-workflow tax-workflow tax-error-page"><header className="ph-page-header tax-page-header"><h1>{t("Payment History")}</h1></header><p role="alert" className="ph-callout" data-tone="error">{t(loadError)}</p><button type="button" className="ph-button tax-button" onClick={() => setRetryAttempt(value => value + 1)}>{t("Coba lagi")}</button></div>;
 
-          <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 md:w-14 md:h-14 bg-white/20 backdrop-blur-xl rounded-2xl flex items-center justify-center shadow-lg">
-                <History className="h-6 w-6 md:h-7 md:w-7 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl md:text-2xl font-bold text-white">Payment History</h1>
-                <p className="text-indigo-100 text-xs md:text-sm mt-1">Riwayat Pembayaran Pajak & BPJS</p>
-              </div>
-            </div>
-            <button className="inline-flex items-center gap-2 px-4 py-2 bg-white text-indigo-700 rounded-xl text-sm font-medium hover:bg-indigo-50 transition-colors shadow-lg">
-              <Download className="h-4 w-4" />
-              Export History
-            </button>
-          </div>
-        </div>
-      </div>
+  return (
+    <div className="ph-workflow tax-workflow">
+      {/* Header */}
+      <header className="ph-page-header tax-page-header"><div><h1>{t("Payment History")}</h1><p>{t("Riwayat Pembayaran Pajak & BPJS")}</p></div><div className="ph-actions tax-header-actions"><button type="button" disabled title={t("Belum tersedia")} className="ph-button tax-button ph-button-primary">
+              <Download className="h-4 w-4" />{t("Export History")} </button></div></header>
+      <p className="ph-callout tax-notice" role="note">{t("Ringkasan ini diturunkan dari payroll, bukan bukti setor pajak. Status dan tanggal pembayaran mengikuti logika ringkasan payroll; konfirmasi pembayaran dan ekspor belum tersedia.")}</p>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center">
-              <CheckCircle className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <p className="text-lg font-bold text-green-600">{formatCompactCurrency(totalPaid)}</p>
-              <p className="text-xs text-gray-500">Total Paid</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl flex items-center justify-center">
-              <Clock className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <p className="text-lg font-bold text-amber-600">{formatCompactCurrency(totalPending)}</p>
-              <p className="text-xs text-gray-500">Pending</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
-              <FileText className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <p className="text-lg font-bold text-blue-600">{formatCompactCurrency(totalCalculated)}</p>
-              <p className="text-xs text-gray-500">Calculated</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center">
-              <Receipt className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-gray-900">{transactionCount}</p>
-              <p className="text-xs text-gray-500">Transactions</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Payment Trend Chart */}
-      {trendData.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-6">
-          <h3 className="text-base md:text-lg font-bold text-gray-900 mb-4">Tren Pembayaran Bulanan</h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={trendData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="month" tick={{ fontSize: 11 }} stroke="#9ca3af" />
-                <YAxis tickFormatter={(v) => formatCompactCurrency(v)} tick={{ fontSize: 11 }} stroke="#9ca3af" />
-                <Tooltip formatter={(value) => formatCurrency(Number(value) || 0)} />
-                <Area type="monotone" dataKey="pph21" stackId="1" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.6} name="PPh 21" />
-                <Area type="monotone" dataKey="bpjs" stackId="1" stroke="#10b981" fill="#10b981" fillOpacity={0.6} name="BPJS" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="flex items-center justify-center gap-6 mt-4">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-blue-500" />
-              <span className="text-xs text-gray-600">PPh 21</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-emerald-500" />
-              <span className="text-xs text-gray-600">BPJS</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Filters */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4">
+      <div className="tax-toolbar">
         <div className="flex flex-col md:flex-row gap-3">
           <div className="flex items-center gap-2">
             <Calendar className="h-5 w-5 text-gray-400" />
-            <select
+            <select aria-label={t("Tahun")}
               value={selectedYear}
               onChange={(e) => setSelectedYear(e.target.value)}
-              className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 tax-control"
             >
               {yearOptions.map((year) => (
                 <option key={year} value={year}>
@@ -423,58 +316,102 @@ export function PaymentHistoryPage() {
 
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input
+            <input aria-label={t("Cari company atau jenis...")}
               type="text"
-              placeholder="Cari company atau jenis..."
+              placeholder={t("Cari company atau jenis...")}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 tax-control"
             />
           </div>
 
-          <select
+          <select aria-label={t("Jenis")}
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
-            className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 tax-control"
           >
-            <option value="all">Semua Jenis</option>
-            <option value="PPh 21">PPh 21</option>
-            <option value="BPJS Kesehatan">BPJS Kesehatan</option>
-            <option value="BPJS TK">BPJS TK</option>
+            <option value="all">{t("Semua Jenis")}</option>
+            <option value="PPh 21">{t("PPh 21")}</option>
+            <option value="BPJS Kesehatan">{t("BPJS Kesehatan")}</option>
+            <option value="BPJS TK">{t("BPJS TK")}</option>
           </select>
 
-          <select
+          <select aria-label={t("Status")}
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 tax-control"
           >
-            <option value="all">Semua Status</option>
-            <option value="paid">Paid</option>
-            <option value="pending">Pending</option>
-            <option value="calculated">Calculated</option>
+            <option value="all">{t("Semua Status")}</option>
+            <option value="paid">{t("Paid")}</option>
+            <option value="pending">{t("Pending")}</option>
+            <option value="calculated">{t("Calculated")}</option>
           </select>
         </div>
       </div>
+<div className="tax-summary">
+        <div className="tax-summary-item"><p className="text-lg font-bold text-green-600">{formatCompactCurrency(totalPaid)}</p>
+<p className="text-xs text-gray-500">{t("Total Paid")}</p></div>
+
+        <div className="tax-summary-item"><p className="text-lg font-bold text-amber-600">{formatCompactCurrency(totalPending)}</p>
+<p className="text-xs text-gray-500">{t("Pending")}</p></div>
+
+        <div className="tax-summary-item"><p className="text-lg font-bold text-blue-600">{formatCompactCurrency(totalCalculated)}</p>
+<p className="text-xs text-gray-500">{t("Calculated")}</p></div>
+
+        <div className="tax-summary-item"><p className="text-2xl font-bold text-gray-900">{insightNumber(transactionCount)}</p>
+<p className="text-xs text-gray-500">{t("Transactions")}</p></div>
+      </div>
+
+      {/* Payment Trend Chart */}
+      {trendData.length > 0 && (
+        <details className="tax-charts"><summary>{t("Lihat grafik pembayaran")}</summary><div className="ph-section tax-section">
+          <h3 className="text-base md:text-lg font-bold text-gray-900 mb-4">{t("Tren Pembayaran Bulanan")}</h3>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={trendData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="month" tick={{ fontSize: 11 }} stroke="#9ca3af" />
+                <YAxis tickFormatter={(v) => formatCompactCurrency(v)} tick={{ fontSize: 11 }} stroke="#9ca3af" />
+                <Tooltip formatter={(value) => formatCurrency(Number(value) || 0)} />
+                <Area type="monotone" dataKey="pph21" stackId="1" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.6} name={t("PPh 21")} />
+                <Area type="monotone" dataKey="bpjs" stackId="1" stroke="#10b981" fill="#10b981" fillOpacity={0.6} name={t("BPJS")} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="flex items-center justify-center gap-6 mt-4">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-blue-500" />
+              <span className="text-xs text-gray-600">{t("PPh 21")}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-emerald-500" />
+              <span className="text-xs text-gray-600">{t("BPJS")}</span>
+            </div>
+          </div>
+        </div></details>
+      )}
+
+      {/* Filters */}
 
       {/* Payment History Table */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="px-4 md:px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
-          <h3 className="text-base md:text-lg font-bold text-gray-900">Riwayat Pembayaran</h3>
-          <p className="text-xs text-gray-500 mt-1">Menampilkan {filteredData.length} transaksi</p>
+      <div className="ph-section tax-section tax-register">
+        <div className="px-4 md:px-6 py-4 border-b border-gray-100 tax-section">
+          <h3 className="text-base md:text-lg font-bold text-gray-900">{t("Riwayat Pembayaran")}</h3>
+          <p className="text-xs text-gray-500 mt-1">{t("Menampilkan")} {insightNumber(filteredData.length)}{' '}{t("transaksi")}</p>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="ph-table-scroll tax-table-scroll">
           <table className="w-full">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Jenis</th>
-                <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase">Company</th>
-                <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase hidden md:table-cell">Periode</th>
-                <th className="text-right px-3 py-3 text-xs font-semibold text-gray-500 uppercase">Jumlah</th>
-                <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500 uppercase hidden lg:table-cell">Karyawan</th>
-                <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase hidden lg:table-cell">Due Date</th>
-                <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
-                <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500 uppercase">Aksi</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">{t("Jenis")}</th>
+                <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500">{t("Company")}</th>
+                <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500">{t("Periode")}</th>
+                <th className="text-right px-3 py-3 text-xs font-semibold text-gray-500">{t("Jumlah")}</th>
+                <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">{t("Karyawan")}</th>
+                <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500">{t("Due Date")}</th>
+                <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">{t("Status")}</th>
+                <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">{t("Aksi")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -492,16 +429,16 @@ export function PaymentHistoryPage() {
                       <td className="px-3 py-4">
                         <p className="font-medium text-gray-900 text-sm">{payment.company}</p>
                       </td>
-                      <td className="px-3 py-4 hidden md:table-cell">
+                      <td className="px-3 py-4">
                         <span className="text-sm text-gray-600">{payment.periodLabel}</span>
                       </td>
                       <td className="px-3 py-4 text-right">
                         <span className="font-bold text-gray-900">{formatCurrency(payment.amount)}</span>
                       </td>
-                      <td className="px-3 py-4 text-center hidden lg:table-cell">
-                        <span className="text-sm text-gray-600">{payment.employeeCount}</span>
+                      <td className="px-3 py-4 text-center">
+                        <span className="text-sm text-gray-600">{insightNumber(payment.employeeCount)}</span>
                       </td>
-                      <td className="px-3 py-4 hidden lg:table-cell">
+                      <td className="px-3 py-4">
                         <span className="text-sm text-gray-600">{formatDate(payment.dueDate)}</span>
                       </td>
                       <td className="px-3 py-4 text-center">
@@ -511,13 +448,11 @@ export function PaymentHistoryPage() {
                         </span>
                       </td>
                       <td className="px-3 py-4 text-center">
-                        <button
+                        <button type="button"
                           onClick={() => setSelectedPayment(payment)}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors"
+                          className="ph-button tax-button"
                         >
-                          <Eye className="h-3.5 w-3.5" />
-                          Detail
-                        </button>
+                          <Eye className="h-3.5 w-3.5" />{t("Detail")} </button>
                       </td>
                     </tr>
                   );
@@ -526,8 +461,8 @@ export function PaymentHistoryPage() {
                 <tr>
                   <td colSpan={8} className="px-6 py-12 text-center">
                     <History className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Tidak ada data</h3>
-                    <p className="text-gray-500">Tidak ada riwayat pembayaran yang ditemukan</p>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">{t("Tidak ada data")}</h3>
+                    <p className="text-gray-500">{t("Tidak ada riwayat pembayaran yang ditemukan")}</p>
                   </td>
                 </tr>
               )}
@@ -538,66 +473,28 @@ export function PaymentHistoryPage() {
 
       {/* Detail Modal */}
       {selectedPayment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
-            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-4 rounded-t-2xl">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-bold text-white">Detail Pembayaran</h3>
-                  <p className="text-indigo-100 text-sm">{selectedPayment.type}</p>
-                </div>
-                <button onClick={() => setSelectedPayment(null)} className="p-2 hover:bg-white/20 rounded-lg transition-colors">
-                  <X className="h-5 w-5 text-white" />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6 space-y-4">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Jenis Pajak</span>
-                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${typeColors[selectedPayment.type]}`}>
+        <Modal isOpen={true} onClose={() => setSelectedPayment(null)} title={t("Detail Pembayaran")} size="lg">
+<div className="ph-workflow tax-workflow tax-detail"><p className="tax-period">{selectedPayment.type}</p><p className="ph-callout tax-notice">{t("Ringkasan ini diturunkan dari payroll, bukan bukti setor pajak. Status dan tanggal pembayaran mengikuti logika ringkasan payroll; konfirmasi pembayaran dan ekspor belum tersedia.")}</p><div className="tax-dialog-body">
+              <dl className="ph-kv tax-kv-row"><dt>{t("Jenis Pajak")}</dt><dd>
                   {selectedPayment.type}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Company</span>
-                <span className="font-medium text-gray-900">{selectedPayment.company}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Periode</span>
-                <span className="font-medium text-gray-900">{selectedPayment.periodLabel}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Jumlah Karyawan</span>
-                <span className="font-medium text-gray-900">{selectedPayment.employeeCount} orang</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Due Date</span>
-                <span className="font-medium text-gray-900">{formatDate(selectedPayment.dueDate)}</span>
-              </div>
+                </dd></dl>
+              <dl className="ph-kv tax-kv-row"><dt>{t("Company")}</dt><dd>{selectedPayment.company}</dd></dl>
+              <dl className="ph-kv tax-kv-row"><dt>{t("Periode")}</dt><dd>{insightPeriod(selectedPayment.period)}</dd></dl>
+              <dl className="ph-kv tax-kv-row"><dt>{t("Jumlah Karyawan")}</dt><dd>{insightNumber(selectedPayment.employeeCount)}{' '}{t("orang")}</dd></dl>
+              <dl className="ph-kv tax-kv-row"><dt>{t("Due Date")}</dt><dd>{formatDate(selectedPayment.dueDate)}</dd></dl>
               {selectedPayment.paidDate && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Paid Date</span>
-                  <span className="font-medium text-gray-900">{formatDate(selectedPayment.paidDate)}</span>
-                </div>
+                <dl className="ph-kv tax-kv-row"><dt>{t("Paid Date")}</dt><dd>{formatDate(selectedPayment.paidDate)}</dd></dl>
               )}
 
-              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-4 border border-indigo-200">
-                <div className="flex justify-between items-center">
-                  <span className="font-semibold text-indigo-700">Jumlah</span>
-                  <span className="text-2xl font-bold text-indigo-600">{formatCurrency(selectedPayment.amount)}</span>
-                </div>
+              <div className="p-4 border border-indigo-200 tax-section">
+                <dl className="ph-kv tax-kv-row"><dt>{t("Jumlah")}</dt><dd>{formatCurrency(selectedPayment.amount)}</dd></dl>
               </div>
 
-              <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-                <span className="text-sm text-gray-600">Status</span>
-                <span className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-medium ${statusConfig[selectedPayment.status].bg} ${statusConfig[selectedPayment.status].color}`}>
+              <dl className="ph-kv tax-kv-row"><dt>{t("Status")}</dt><dd>
                   {statusConfig[selectedPayment.status].label}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
+                </dd></dl>
+            </div><div className="ph-dialog-footer tax-dialog-actions"><button type="button" className="ph-button tax-button" onClick={() => setSelectedPayment(null)}>{t("Tutup")}</button></div></div>
+</Modal>
       )}
     </div>
   );

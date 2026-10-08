@@ -1,656 +1,115 @@
-import { useState, useEffect } from 'react';
-import toast from 'react-hot-toast';
-import { orgChartService } from '@/services/org-chart.service';
-import type { OrgChartNode, OrgChartStats } from '@/services/org-chart.service';
-import { companyService } from '@/services/company.service';
+import { t, useLocale, intlLocale } from '@/i18n';
+import { useState, useEffect, useRef } from 'react';
+import { Minus, Plus, X, Maximize, Minimize } from 'lucide-react';
+import { orgChartService, type OrgChartNode, type OrgChartStats } from '@/services/org-chart.service';
+import { companyService, type Company } from '@/services/company.service';
+import { collectPages } from '@/services/master-data';
+import { OperationalWorkspace } from '@/components/ui/OperationalWorkspace';
+import { OrgChartCanvas } from './OrgChartCanvas';
+import './org-chart.css';
+import { getInitials } from '@/lib/utils';
 
-// UI-friendly node interface
-interface OrgNode {
-  id: number;
-  employee_id: string | null;
-  name: string;
-  position: string;
-  department: string;
-  company: string;
-  email: string;
-  phone?: string;
-  avatar?: string;
-  children?: OrgNode[];
+const MAX_DEPTH = 20;
+const position = (node: OrgChartNode) => node.position?.name || node.job_title || t('No position');
+function filterTree(nodes: OrgChartNode[], query: string, branch = new Set<number>(), depth = 0): OrgChartNode[] {
+  if (depth >= MAX_DEPTH) return [];
+  return nodes.flatMap(node => {
+    if (branch.has(node.id)) return [];
+    const next = new Set(branch); next.add(node.id);
+    const children = filterTree(node.children || [], query, next, depth + 1);
+    const matches = `${node.name} ${node.employee_id || ''} ${position(node)} ${node.department?.name || ''} ${node.email || ''}`.toLowerCase().includes(query);
+    return matches || children.length ? [{ ...node, children }] : [];
+  });
 }
-
-// Transform API response to UI format
-const transformNode = (node: OrgChartNode): OrgNode => {
-  return {
-    id: node.id,
-    employee_id: node.employee_id,
-    name: node.name,
-    position: node.position?.name || node.job_title || 'No Position',
-    department: node.department?.name || 'No Department',
-    company: node.company?.name || '',
-    email: node.email || '',
-    phone: node.phone || undefined,
-    avatar: node.avatar || undefined,
-    children: node.children?.map(transformNode),
-  };
-};
-
-// Generate department color dynamically
-const getDepartmentColor = (department: string): { bg: string; text: string; gradient: string } => {
-  const colors = [
-    { bg: 'bg-purple-50', text: 'text-purple-700', gradient: 'from-purple-500 to-purple-700' },
-    { bg: 'bg-blue-50', text: 'text-blue-700', gradient: 'from-blue-500 to-blue-700' },
-    { bg: 'bg-cyan-50', text: 'text-cyan-700', gradient: 'from-cyan-500 to-cyan-700' },
-    { bg: 'bg-indigo-50', text: 'text-indigo-700', gradient: 'from-indigo-500 to-indigo-700' },
-    { bg: 'bg-green-50', text: 'text-green-700', gradient: 'from-green-500 to-green-700' },
-    { bg: 'bg-pink-50', text: 'text-pink-700', gradient: 'from-pink-500 to-pink-700' },
-    { bg: 'bg-amber-50', text: 'text-amber-700', gradient: 'from-amber-500 to-amber-700' },
-    { bg: 'bg-rose-50', text: 'text-rose-700', gradient: 'from-rose-500 to-rose-700' },
-    { bg: 'bg-teal-50', text: 'text-teal-700', gradient: 'from-teal-500 to-teal-700' },
-    { bg: 'bg-violet-50', text: 'text-violet-700', gradient: 'from-violet-500 to-violet-700' },
-  ];
-
-  // Simple hash function to get consistent color for department
-  let hash = 0;
-  for (let i = 0; i < department.length; i++) {
-    hash = department.charCodeAt(i) + ((hash << 5) - hash);
+function findNode(nodes: OrgChartNode[], id: number, depth = 0): OrgChartNode | undefined {
+  if (depth >= MAX_DEPTH) return;
+  for (const node of nodes) {
+    if (node.id === id) return node;
+    const child = findNode(node.children || [], id, depth + 1);
+    if (child) return child;
   }
-  const index = Math.abs(hash) % colors.length;
-  return colors[index];
-};
-
-function OrgCard({
-  node,
-  onSelect,
-  isSelected,
-}: {
-  node: OrgNode;
-  onSelect: (node: OrgNode) => void;
-  isSelected: boolean;
-}) {
-  const colors = getDepartmentColor(node.department);
-
-  return (
-    <div
-      onClick={() => onSelect(node)}
-      className={`relative bg-white rounded-xl border-2 shadow-sm hover:shadow-lg transition-all duration-200 cursor-pointer min-w-[200px] max-w-[240px] ${
-        isSelected ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-gray-100 hover:border-blue-200'
-      }`}
-    >
-      <div className="p-4">
-        <div className="flex items-start gap-3">
-          <div
-            className={`flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center text-white font-semibold text-lg shadow-sm bg-gradient-to-br ${colors.gradient}`}
-          >
-            {node.name
-              .split(' ')
-              .map(n => n[0])
-              .join('')
-              .slice(0, 2)}
-          </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="text-sm font-semibold text-gray-900 truncate">{node.name}</h3>
-            <p className="text-xs text-gray-500 truncate">{node.position}</p>
-          </div>
-        </div>
-        <div className="mt-3 flex flex-wrap gap-1">
-          <span
-            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${colors.bg} ${colors.text}`}
-          >
-            {node.department}
-          </span>
-          {node.company && (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-              {node.company}
-            </span>
-          )}
-        </div>
-      </div>
-    </div>
-  );
 }
-
-// Hard depth limit to prevent runaway recursion if backend data ever contains
-// a manager-cycle (employee A → B → A) or pathological depth. Browser stack would
-// blow up otherwise. 20 is well beyond any real org structure.
-const MAX_ORG_TREE_DEPTH = 20;
-
-function OrgTree({
-  node,
-  onSelect,
-  selectedId,
-  level = 0,
-  visited,
-}: {
-  node: OrgNode;
-  onSelect: (node: OrgNode) => void;
-  selectedId: number | null;
-  level?: number;
-  visited?: Set<number>;
-}) {
-  // Initialize visited set at root and track current branch for cycle detection.
-  const branchVisited = visited ?? new Set<number>();
-  if (branchVisited.has(node.id)) {
-    // Cycle detected — render leaf-only to break the loop.
-    return (
-      <div className="flex flex-col items-center">
-        <OrgCard node={node} onSelect={onSelect} isSelected={selectedId === node.id} />
-        <div className="text-xs text-red-500 mt-1">⚠ cycle detected (skipped descendants)</div>
-      </div>
-    );
-  }
-  if (level >= MAX_ORG_TREE_DEPTH) {
-    return (
-      <div className="flex flex-col items-center">
-        <OrgCard node={node} onSelect={onSelect} isSelected={selectedId === node.id} />
-        <div className="text-xs text-amber-600 mt-1">⚠ depth limit reached</div>
-      </div>
-    );
-  }
-  const nextVisited = new Set(branchVisited);
-  nextVisited.add(node.id);
-
-  const hasChildren = node.children && node.children.length > 0;
-
-  return (
-    <div className="flex flex-col items-center">
-      <OrgCard node={node} onSelect={onSelect} isSelected={selectedId === node.id} />
-
-      {hasChildren && (
-        <>
-          {/* Vertical connector line */}
-          <div className="w-0.5 h-6 bg-gray-300"></div>
-
-          {/* Horizontal line and children */}
-          <div className="relative">
-            {/* Horizontal connector */}
-            {node.children!.length > 1 && (
-              <div
-                className="absolute top-0 h-0.5 bg-gray-300"
-                style={{
-                  left: '50%',
-                  right: '50%',
-                  transform: 'translateX(-50%)',
-                  width: `calc(100% - 200px)`,
-                }}
-              ></div>
-            )}
-
-            <div className="flex gap-8 pt-0">
-              {node.children!.map(child => (
-                <div key={child.id} className="flex flex-col items-center">
-                  {/* Vertical line to child */}
-                  <div className="w-0.5 h-6 bg-gray-300"></div>
-                  <OrgTree
-                    node={child}
-                    onSelect={onSelect}
-                    selectedId={selectedId}
-                    level={level + 1}
-                    visited={nextVisited}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-interface Company {
-  id: number;
-  name: string;
+function OrgTree({ nodes, selected, onSelect }: { nodes: OrgChartNode[]; selected?: number; onSelect: (node: OrgChartNode) => void }) {
+  useLocale();
+  return <ul className="org-tree">{nodes.map(node => <li key={node.id}>
+    <button className="org-node" aria-pressed={selected === node.id} onClick={() => onSelect(node)}>
+      <span className="org-node-person"><span className="operations-person-mark" aria-hidden="true">{getInitials(node.name || '?')}</span><span><strong>{node.name}</strong><span>{position(node)}</span></span></span>
+      <span className="org-node-department">{node.department?.name || t('No department')}</span><span className="org-node-company">{node.company?.name || t('No company')}</span>
+      {!!node.children?.length && <span className="org-report-count">{node.children.length.toLocaleString(intlLocale())}{' '}{t("reports shown")}</span>}
+    </button>
+    {!!node.children?.length && <OrgTree nodes={node.children} selected={selected} onSelect={onSelect} />}
+  </li>)}</ul>;
 }
 
 export function OrgChartPage() {
-  const [orgData, setOrgData] = useState<OrgNode[]>([]);
+  useLocale();
+  const stage = useRef<HTMLElement>(null);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [fullscreenError, setFullscreenError] = useState(false);
+  useEffect(() => {
+    const syncFullscreen = () => setFullscreen(document.fullscreenElement === stage.current);
+    document.addEventListener('fullscreenchange', syncFullscreen);
+    return () => document.removeEventListener('fullscreenchange', syncFullscreen);
+  }, []);
+  const toggleFullscreen = async () => {
+    setFullscreenError(false);
+    try {
+      if (document.fullscreenElement === stage.current) await document.exitFullscreen();
+      else await stage.current?.requestFullscreen();
+    } catch { setFullscreenError(true); }
+  };
+  const [orgData, setOrgData] = useState<OrgChartNode[]>([]);
   const [stats, setStats] = useState<OrgChartStats | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [selectedNode, setSelectedNode] = useState<OrgNode | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [revision, setRevision] = useState(0);
+  const [selectedNode, setSelectedNode] = useState<OrgChartNode | null>(null);
+  const [search, setSearch] = useState('');
   const [zoom, setZoom] = useState(100);
   const [companies, setCompanies] = useState<Company[]>([]);
-  const [selectedCompany, setSelectedCompany] = useState<number | ''>('');
-
+  const [companiesError, setCompaniesError] = useState(false);
+  const [companiesLoading, setCompaniesLoading] = useState(true);
+  const [companyRevision, setCompanyRevision] = useState(0);
+  const [companyId, setCompanyId] = useState('');
   useEffect(() => {
-    fetchCompanies();
-  }, []);
-
+    let current = true;
+    // Clear the previous request state before loading this company list.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCompaniesLoading(true); setCompaniesError(false);
+    collectPages((page, limit) => companyService.getAll({ page, limit })).then(data => { if (current) setCompanies(data); })
+      .catch(() => { if (current) setCompaniesError(true); }).finally(() => { if (current) setCompaniesLoading(false); });
+    return () => { current = false; };
+  }, [companyRevision]);
   useEffect(() => {
-    fetchOrgData();
-  }, [selectedCompany]);
+    let current = true;
+    // A changed company must immediately hide the previous company tree and inspector.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLoading(true); setError(false); setOrgData([]); setStats(null); setSelectedNode(null);
+    orgChartService.getOrgChart({ company_id: companyId ? Number(companyId) : undefined }).then(data => {
+      if (current) { setOrgData(data.tree); setStats(data.stats); }
+    }).catch(() => { if (current) setError(true); }).finally(() => { if (current) setLoading(false); });
+    return () => { current = false; };
+  }, [companyId, revision]);
+  const filtered = filterTree(orgData, search.trim().toLowerCase());
+  const selectNode = (node: OrgChartNode) => setSelectedNode(findNode(orgData, node.id) || node);
+  return <OperationalWorkspace module="operations" title={t("Organization Structure")} description={t("Explore reporting lines and find people in your organization.")} className="org-workspace"
+    actions={<button className="ow-button" disabled={loading} onClick={() => setRevision(v => v + 1)}>{t("Refresh")}</button>}
+    filters={<>
+      <label className="ow-field">{t("Company")}<select value={companyId} disabled={companiesLoading || companiesError} onChange={e => setCompanyId(e.target.value)}><option value="">{companiesLoading ? t("Loading companies...") : t("All Companies")}</option>{companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+      {companiesError && <p role="alert">{t("Companies unavailable.")} <button className="ow-button" onClick={() => setCompanyRevision(v => v + 1)}>{t("Retry companies")}</button></p>}
+      <label className="ow-field">{t("Search organization")}<input placeholder={t("Name, role or department")} value={search} onChange={e => { setSearch(e.target.value); setSelectedNode(null); }} /></label>
+      <details className="org-note"><summary>{t("Reading the chart")}</summary><p>{t("Search keeps the reporting path to each match. Click and drag to move the chart. Scroll up to zoom in and down to zoom out around your cursor. Click a person for their details and direct reports. Touch and arrow keys can also scroll the chart.")}</p></details>
+      {(companyId || search) && <button className="ow-button" onClick={() => { setCompanyId(''); setSearch(''); setSelectedNode(null); }}>{t("Reset filters")}</button>}
+    </>}
 
-  const fetchCompanies = async () => {
-    try {
-      const response = await companyService.getAll();
-      setCompanies(response.data || []);
-    } catch {
-      console.error('Failed to load companies');
-    }
-  };
-
-  const fetchOrgData = async () => {
-    setIsLoading(true);
-    try {
-      const params: { company_id?: number } = {};
-      if (selectedCompany) {
-        params.company_id = selectedCompany;
-      }
-
-      const response = await orgChartService.getOrgChart(params);
-
-      // Transform API response to UI format
-      const transformedData = response.tree.map(transformNode);
-      setOrgData(transformedData);
-      setStats(response.stats);
-    } catch {
-      toast.error('Failed to load organization structure');
-      setOrgData([]);
-      setStats(null);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleNodeSelect = (node: OrgNode) => {
-    setSelectedNode(node);
-  };
-
-  // Search filter function with cycle + depth guard (matches OrgTree).
-  const filterNodes = (nodes: OrgNode[], query: string): OrgNode[] => {
-    if (!query.trim()) return nodes;
-
-    const lowerQuery = query.toLowerCase();
-
-    const filterRecursive = (node: OrgNode, visited: Set<number>, depth: number): OrgNode | null => {
-      if (visited.has(node.id) || depth >= MAX_ORG_TREE_DEPTH) {
-        return null;
-      }
-      const matches =
-        node.name.toLowerCase().includes(lowerQuery) ||
-        node.position.toLowerCase().includes(lowerQuery) ||
-        node.department.toLowerCase().includes(lowerQuery) ||
-        node.email.toLowerCase().includes(lowerQuery);
-
-      const nextVisited = new Set(visited);
-      nextVisited.add(node.id);
-
-      const filteredChildren = node.children
-        ?.map((c) => filterRecursive(c, nextVisited, depth + 1))
-        .filter((child): child is OrgNode => child !== null);
-
-      if (matches || (filteredChildren && filteredChildren.length > 0)) {
-        return { ...node, children: filteredChildren };
-      }
-
-      return null;
-    };
-
-    return nodes
-      .map((n) => filterRecursive(n, new Set<number>(), 0))
-      .filter((node): node is OrgNode => node !== null);
-  };
-
-  const filteredData = filterNodes(orgData, searchQuery);
-  const colors = selectedNode ? getDepartmentColor(selectedNode.department) : null;
-
-  return (
-    <div className="space-y-6">
-      {/* Header Banner */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-600 rounded-2xl shadow-lg">
-        <div className="absolute inset-0 bg-grid-white/10 [mask-image:linear-gradient(0deg,transparent,rgba(255,255,255,0.5))]"></div>
-        <div className="absolute -top-24 -right-24 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
-        <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-purple-400/20 rounded-full blur-3xl"></div>
-
-        <div className="relative px-6 py-8 sm:px-8 sm:py-10">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Organization Structure</h1>
-              <p className="mt-2 text-purple-100 max-w-xl">
-                Visualization of company hierarchy and organizational structure
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <button className="inline-flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 backdrop-blur-sm text-white rounded-xl transition-all duration-200">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
-                  />
-                </svg>
-                <span className="font-medium">Export</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
-          <div className="flex items-center gap-4">
-            <div className="flex-shrink-0 w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-              <svg className="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"
-                />
-              </svg>
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 font-medium">Total Employees</p>
-              <p className="text-2xl font-bold text-gray-900">{stats?.totalEmployees || 0}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
-          <div className="flex items-center gap-4">
-            <div className="flex-shrink-0 w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-              <svg className="w-6 h-6 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                />
-              </svg>
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 font-medium">Departments</p>
-              <p className="text-2xl font-bold text-gray-900">{stats?.totalDepartments || 0}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
-          <div className="flex items-center gap-4">
-            <div className="flex-shrink-0 w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-              <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-                />
-              </svg>
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 font-medium">Organization Levels</p>
-              <p className="text-2xl font-bold text-gray-900">{stats?.maxDepth || 0}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Controls */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-          {/* Company Filter */}
-          <div className="w-full sm:w-48">
-            <select
-              value={selectedCompany}
-              onChange={e => setSelectedCompany(e.target.value ? Number(e.target.value) : '')}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
-            >
-              <option value="">All Companies</option>
-              {companies.map(company => (
-                <option key={company.id} value={company.id}>
-                  {company.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Search */}
-          <div className="flex-1 max-w-xs">
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Search employees..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
-              />
-              <svg
-                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                />
-              </svg>
-            </div>
-          </div>
-
-          {/* Zoom Controls */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-500">Zoom:</span>
-            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
-              <button
-                onClick={() => setZoom(prev => Math.max(50, prev - 10))}
-                className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-white rounded-md transition-colors"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
-                </svg>
-              </button>
-              <span className="w-12 text-center text-sm font-medium text-gray-700">{zoom}%</span>
-              <button
-                onClick={() => setZoom(prev => Math.min(150, prev + 10))}
-                className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-white rounded-md transition-colors"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-              </button>
-              <button
-                onClick={() => setZoom(100)}
-                className="px-2 h-8 flex items-center justify-center text-gray-600 hover:bg-white rounded-md transition-colors text-xs font-medium"
-              >
-                Reset
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Org Chart Container */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="flex flex-col items-center gap-3">
-              <div className="w-10 h-10 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin"></div>
-              <p className="text-gray-500">Loading organization structure...</p>
-            </div>
-          </div>
-        ) : filteredData.length > 0 ? (
-          <div className="p-8 overflow-auto">
-            <div
-              className="inline-block min-w-full transition-transform duration-200"
-              style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top center' }}
-            >
-              {/* Render each root node */}
-              <div className="flex flex-wrap gap-12 justify-center">
-                {filteredData.map(rootNode => (
-                  <OrgTree
-                    key={rootNode.id}
-                    node={rootNode}
-                    onSelect={handleNodeSelect}
-                    selectedId={selectedNode?.id || null}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="flex items-center justify-center py-20">
-            <div className="text-center">
-              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={1.5}
-                    d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"
-                  />
-                </svg>
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900">No data</h3>
-              <p className="mt-1 text-gray-500">
-                {searchQuery
-                  ? 'No employees match your search.'
-                  : 'Organization structure data is not available.'}
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Selected Employee Detail Panel */}
-      {selectedNode && colors && (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="p-5 border-b border-gray-100 flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-gray-900">Employee Details</h3>
-            <button
-              onClick={() => setSelectedNode(null)}
-              className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          <div className="p-5">
-            <div className="flex items-start gap-4">
-              <div
-                className={`flex-shrink-0 w-16 h-16 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-sm bg-gradient-to-br ${colors.gradient}`}
-              >
-                {selectedNode.name
-                  .split(' ')
-                  .map(n => n[0])
-                  .join('')
-                  .slice(0, 2)}
-              </div>
-              <div className="flex-1">
-                <h4 className="text-xl font-semibold text-gray-900">{selectedNode.name}</h4>
-                <p className="text-gray-600">{selectedNode.position}</p>
-                <div className="flex flex-wrap gap-2 mt-2">
-                  <span
-                    className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${colors.bg} ${colors.text}`}
-                  >
-                    {selectedNode.department}
-                  </span>
-                  {selectedNode.company && (
-                    <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-600">
-                      {selectedNode.company}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {selectedNode.employee_id && (
-                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                  <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm">
-                    <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2"
-                      />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Employee ID</p>
-                    <p className="text-sm font-medium text-gray-900">{selectedNode.employee_id}</p>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm">
-                  <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Email</p>
-                  <p className="text-sm font-medium text-gray-900">{selectedNode.email || '-'}</p>
-                </div>
-              </div>
-
-              {selectedNode.phone && (
-                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                  <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm">
-                    <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                      />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Phone</p>
-                    <p className="text-sm font-medium text-gray-900">{selectedNode.phone}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {selectedNode.children && selectedNode.children.length > 0 && (
-              <div className="mt-6">
-                <h5 className="text-sm font-semibold text-gray-700 mb-3">
-                  Direct Reports ({selectedNode.children.length})
-                </h5>
-                <div className="space-y-2">
-                  {selectedNode.children.map(child => {
-                    const childColors = getDepartmentColor(child.department);
-                    return (
-                      <div
-                        key={child.id}
-                        onClick={() => setSelectedNode(child)}
-                        className="flex items-center gap-3 p-3 bg-gray-50 hover:bg-gray-100 rounded-lg cursor-pointer transition-colors"
-                      >
-                        <div
-                          className={`w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-medium bg-gradient-to-br ${childColors.gradient}`}
-                        >
-                          {child.name.charAt(0)}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900 truncate">{child.name}</p>
-                          <p className="text-xs text-gray-500 truncate">{child.position}</p>
-                        </div>
-                        <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  >
+    <section ref={stage} className="ow-register org-stage" aria-label={t("Organization chart workspace")}>
+      <div className="ow-toolbar org-toolbar"><p className="org-scope"><span>{stats?.totalEmployees.toLocaleString(intlLocale()) ?? '-'}{' '}{t("employees")}</span><span>{stats?.totalDepartments.toLocaleString(intlLocale()) ?? '-'}{' '}{t("departments")}</span><span>{stats?.maxDepth.toLocaleString(intlLocale()) ?? '-'}{' '}{t("levels")}</span>{search && <span>{t("Showing matching reporting paths")}</span>}</p><div className="org-zoom" aria-label={t("Chart zoom")}><button className="ow-button" aria-label={t("Zoom out")} disabled={zoom <= 50} onClick={() => setZoom(v => Math.max(50, v - 10))}><Minus size={16} /></button><output aria-label={t("Zoom level")}>{zoom}%</output><button className="ow-button" aria-label={t("Zoom in")} disabled={zoom >= 150} onClick={() => setZoom(v => Math.min(150, v + 10))}><Plus size={16} /></button><button className="ow-button" onClick={() => setZoom(100)}>{t("Reset zoom")}</button><button className="ow-button org-fullscreen-button" onClick={toggleFullscreen} aria-pressed={fullscreen} disabled={!document.fullscreenEnabled} title={document.fullscreenEnabled ? (fullscreen ? t("Exit fullscreen (Esc)") : t("View chart fullscreen")) : t("Fullscreen is unavailable in this browser")}>{fullscreen ? <Minimize size={16} /> : <Maximize size={16} />}{fullscreen ? t("Exit fullscreen") : t("Fullscreen")}</button></div></div>
+      {fullscreenError && <p className="org-fullscreen-error" role="alert">{t("Fullscreen could not be changed. Please try again.")}</p>}
+      {loading ? <div className="ow-feedback" role="status">{t("Loading organization structure...")}</div> : error ? <div className="ow-feedback" role="alert">{t("Unable to load organization structure.")} <button className="ow-button" onClick={() => setRevision(v => v + 1)}>{t("Retry chart")}</button></div> : filtered.length === 0 ? <div className="ow-feedback"><h3>{search ? t("No matching employees") : t("No organization data")}</h3><p>{search ? t("Try another name, role or department.") : t("There are no reporting records in this company selection.")}</p></div> : <div className={selectedNode ? 'org-content org-content--selected' : 'org-content'}>
+        <div className="org-chart-area"><OrgChartCanvas zoom={zoom} onZoomChange={setZoom}><div className="org-scale" style={{ zoom: zoom / 100 }}><OrgTree nodes={filtered} selected={selectedNode?.id} onSelect={selectNode} /></div></OrgChartCanvas></div>
+        {selectedNode && <aside className="org-inspector" aria-label={t("Employee details")}><div className="org-inspector-title"><h2>{t("Employee details")}</h2><button className="ow-button" aria-label={t("Close employee details")} onClick={() => setSelectedNode(null)}><X size={16} /></button></div><h3>{selectedNode.name}</h3><p>{position(selectedNode)}</p><dl><dt>{t("Employee ID")}</dt><dd>{selectedNode.employee_id || '-'}</dd><dt>{t("Department")}</dt><dd>{selectedNode.department?.name || '-'}</dd><dt>{t("Company")}</dt><dd>{selectedNode.company?.name || '-'}</dd><dt>{t("Email")}</dt><dd>{selectedNode.email || '-'}</dd>{selectedNode.phone && <><dt>{t("Phone")}</dt><dd>{selectedNode.phone}</dd></>}</dl><h4>{t('Direct reports ({count})', { count: (selectedNode.children?.length || 0).toLocaleString(intlLocale()) })}</h4><div className="org-reports">{selectedNode.children?.map(child => <button key={child.id} onClick={() => selectNode(child)}><strong>{child.name}</strong><span>{position(child)}</span></button>)}</div></aside>}
+      </div>}
+    </section>
+  </OperationalWorkspace>;
 }

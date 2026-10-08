@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/i18n';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -15,6 +16,7 @@ const forgotPasswordSchema = z.object({
 type ForgotPasswordFormData = z.infer<typeof forgotPasswordSchema>;
 
 export function ForgotPasswordPage() {
+  useLocale();
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submittedEmail, setSubmittedEmail] = useState('');
@@ -34,10 +36,10 @@ export function ForgotPasswordPage() {
       await authService.forgotPassword(data.email);
       setSubmittedEmail(data.email);
       setIsSubmitted(true);
-      toast.success('Password reset link sent!');
+      toast.success(t("Password reset link sent!"));
     } catch (error: unknown) {
       const err = error as { response?: { data?: { message?: string } } };
-      toast.error(err.response?.data?.message || 'Failed to send reset link. Please try again.', { id: 'api-error' });
+      toast.error(err.response?.data?.message || t('Failed to send reset link. Please try again.'), { id: 'api-error' });
     } finally {
       setIsLoading(false);
     }

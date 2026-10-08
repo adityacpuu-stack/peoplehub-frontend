@@ -1,0 +1,31 @@
+.ph-account { height: 100%; min-height: 0; display: flex; flex-direction: column; }
+.ph-account-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; flex-shrink: 0; padding: 22px 26px 20px; border-bottom: 1px solid #e4e9e6; }
+.ph-account-header h1 { margin: 0; color: #24302b; font-size: 20px; font-weight: 600; line-height: 28px; letter-spacing: -.02em; }
+.ph-account-header p { margin: 5px 0 0; color: #65716b; font-size: 13px; line-height: 21px; }
+.ph-account-close { display: grid; place-items: center; flex-shrink: 0; width: 34px; height: 34px; border: 0; border-radius: 6px; color: #65716b; background: #fff; cursor: pointer; }
+.ph-account-close:hover:not(:disabled) { background: #f5f6f7; color: #24302b; }
+.ph-account-close:disabled { opacity: .5; cursor: default; }
+.ph-account-close:focus-visible, .ph-account-nav button:focus-visible, .ph-account-nav select:focus-visible { outline: 2px solid #187451; outline-offset: 3px; }
+.ph-account-body { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.ph-account-nav { padding: 0 26px; flex-shrink: 0; border-bottom: 1px solid #e4e9e6; background: #fff; }
+.ph-account-desktop-nav { display: flex; align-items: stretch; gap: 20px; overflow-x: auto; scrollbar-width: thin; }
+.ph-account-group { padding-top: 12px; }
+.ph-account-group + .ph-account-group { border-left: 1px solid #e4e9e6; padding-left: 20px; }
+.ph-account-group h2 { margin: 0 0 3px; color: #65716b; font-size: 12px; font-weight: 400; }
+.ph-account-group ul { display: flex; gap: 20px; list-style: none; padding: 0; margin: 0; }
+.ph-account-group button { display: flex; align-items: center; gap: 7px; min-height: 44px; padding: 8px 0; border: 0; border-bottom: 2px solid transparent; border-radius: 0; color: #65716b; background: transparent; font-size: 13px; font-weight: 500; line-height: 20px; text-align: left; white-space: nowrap; cursor: pointer; }
+.ph-account-group button svg { flex-shrink: 0; stroke-width: 1.7; }
+.ph-account-group button:hover:not(:disabled) { color: #24302b; }
+.ph-account-group button[aria-current='page'] { color: #187451; border-bottom-color: #187451; }
+.ph-account-group button:disabled { opacity: .5; cursor: default; }
+.ph-account-mobile-nav { display: none; }
+.ph-account-content { flex: 1; min-width: 0; min-height: 0; }
+@media (max-width: 767px) {
+  .ph-account-header { padding: 17px 20px 15px; gap: 12px; }
+  .ph-account-header p { font-size: 12px; line-height: 19px; }
+  .ph-account-nav { padding: 12px 20px; }
+  .ph-account-desktop-nav { display: none; }
+  .ph-account-mobile-nav { display: block; }
+  .ph-account-mobile-nav label { display: block; color: #65716b; font-size: 12px; line-height: 19px; }
+  .ph-account-mobile-nav select { width: 100%; height: 44px; margin-top: 5px; padding: 8px 12px; border: 1px solid #cfd8d2; border-radius: 6px; background: #fff; color: #24302b; font-size: 16px; }
+}

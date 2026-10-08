@@ -2,6 +2,7 @@ import api from './api';
 import type { PaginatedResponse } from '@/types';
 
 export interface Company {
+  npwp?: string;
   id: number;
   name: string;
   code: string;
@@ -39,6 +40,7 @@ export interface Company {
 
 // Backend response format
 interface BackendCompany {
+  tax_id?: string;
   id: number;
   name: string;
   code: string;
@@ -82,6 +84,7 @@ function transformCompany(backend: BackendCompany): Company {
 
   return {
     ...backend,
+    npwp: backend.tax_id,
     type: typeMap[backend.company_type?.toLowerCase()] || 'Subsidiary',
     is_active: backend.status === 'active',
     employee_count: backend._count?.employees || backend.employee_count || 0,
@@ -95,13 +98,14 @@ function toBackendCompany(input: Partial<Company> & { npwp?: string }): Record<s
   if (input.name !== undefined) out.name = input.name;
   if (input.code !== undefined) out.code = input.code;
   if (input.type !== undefined) out.company_type = String(input.type).toLowerCase();
-  if (input.address !== undefined) out.address = input.address || undefined;
-  if (input.phone !== undefined) out.phone = input.phone || undefined;
-  if (input.email !== undefined) out.email = input.email || undefined;
-  if (input.website !== undefined) out.website = input.website || undefined;
-  if (input.email_domain !== undefined) out.email_domain = input.email_domain || undefined;
-  if (input.npwp !== undefined) out.tax_id = input.npwp || undefined;
+  if (input.address !== undefined) out.address = input.address || null;
+  if (input.phone !== undefined) out.phone = input.phone || null;
+  if (input.email !== undefined) out.email = input.email || null;
+  if (input.website !== undefined) out.website = input.website || null;
+  if (input.email_domain !== undefined) out.email_domain = input.email_domain || null;
+  if (input.npwp !== undefined) out.tax_id = input.npwp || null;
   if (input.is_active !== undefined) out.status = input.is_active ? 'active' : 'inactive';
+  if (input.parent_company_id !== undefined) out.parent_company_id = input.parent_company_id;
   return out;
 }
 

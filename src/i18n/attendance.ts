@@ -1,0 +1,95 @@
+import type { MessagePair } from './index';
+const entries: MessagePair[] = [
+  ['Data kehadiran gagal dimuat', 'Failed to load attendance data'], ['Pilih karyawan', 'Please select an employee'],
+  ['Pilih tanggal', 'Please select a date'], ['Kehadiran berhasil dibuat', 'Attendance created successfully'],
+  ['Kehadiran berhasil diperbarui', 'Attendance updated successfully'], ['Kehadiran berhasil dihapus', 'Attendance deleted successfully'],
+  ['Kehadiran gagal dibuat', 'Failed to create attendance'], ['Kehadiran gagal diperbarui', 'Failed to update attendance'],
+  ['Kehadiran gagal dihapus', 'Failed to delete attendance'], ['Tidak ada data untuk diekspor', 'No data to export'],
+  ['Ekspor berhasil', 'Export successful'], ['Manajemen Kehadiran', 'Attendance Management'],
+  ['Pantau dan kelola kehadiran karyawan', 'Monitor and manage employee attendance'], ['Ekspor', 'Export'],
+  ['Entri Manual', 'Manual Entry'], ['Total', 'Total'], ['Cuti', 'On Leave'], ['Filter Kehadiran', 'Attendance Filter'],
+  ['Filter data kehadiran berdasarkan tanggal, perusahaan, departemen, dan status', 'Filter attendance data by date, company, department, and status'],
+  ['Semua Perusahaan', 'All Companies'], ['Departemen', 'Department'], ['Semua Departemen', 'All Departments'],
+  ['Semua Status', 'All Status'], ['Pulang Lebih Awal', 'Early Leave'], ['Nama atau ID...', 'Name or ID...'],
+  ['Filter aktif:', 'Active filters:'], ['Data Kehadiran', 'Attendance Data'], ['Menampilkan', 'Showing'],
+  ['catatan', 'records'], ['Masuk', 'Clock In'], ['Keluar', 'Clock Out'], ['Jam Kerja', 'Work Hours'],
+  ['Memuat data...', 'Loading data...'], ['Data tidak ditemukan', 'No data found'],
+  ['Tidak ada data kehadiran untuk filter yang dipilih', 'No attendance data for the selected filters'],
+  ['Lihat detail', 'View details'], ['Halaman', 'Page'], ['Buat catatan kehadiran secara manual', 'Create attendance record manually'],
+  ['Pilih karyawan...', 'Select employee...'], ['Masuk', 'Check In'], ['Keluar', 'Check Out'], ['Setengah Hari', 'Half Day'],
+  ['Tambahkan catatan...', 'Add notes...'], ['Buat Kehadiran', 'Create Attendance'], ['Edit Kehadiran', 'Edit Attendance'],
+  ['Karyawan:', 'Employee:'], ['Tanggal:', 'Date:'], ['Simpan Perubahan', 'Save Changes'], ['Detail Kehadiran', 'Attendance Details'],
+  ['Masuk:', 'Check In:'], ['Keluar:', 'Check Out:'], ['Hapus Kehadiran?', 'Delete Attendance?'],
+  ['Yakin ingin menghapus catatan kehadiran untuk', 'Are you sure you want to delete attendance record for'],
+  ['pada', 'on'], ['Tindakan ini tidak dapat dibatalkan.', 'This action cannot be undone.'], ['Ya, Hapus', 'Yes, Delete'],
+  ['ID Karyawan', 'Employee ID'], ['Nama Karyawan', 'Employee Name'], ['Pulang lebih awal', 'Early departure'],
+  ['Absensi setengah hari', 'Half-day attendance'], ['Hari libur', 'Public holiday'], ['Tidak tercatat', 'Not recorded'],
+  ['Catatan tersimpan', 'Saved records'], ['Tidak hadir tercatat', 'Recorded absences'], ['Total durasi (jam)', 'Total duration (hours)'],
+  ['Lembur tercatat (jam)', 'Recorded overtime (hours)'], ['Rata-rata masuk (WIB)', 'Average check-in (WIB)'],
+  ['Rata-rata keluar (WIB)', 'Average checkout (WIB)'], ['Riwayat absensi belum berhasil dimuat. Silakan coba lagi.', 'Could not load attendance history. Please try again.'],
+  ['{count} catatan', '{count} records'], ['Detail kehadiran {date}', 'Attendance details for {date}'],
+  ['Masuk (WIB)', 'Check-in (WIB)'], ['Keluar (WIB)', 'Checkout (WIB)'], ['Durasi (jam)', 'Duration (hours)'],
+  ['Mulai istirahat (WIB)', 'Break start (WIB)'], ['Selesai istirahat (WIB)', 'Break end (WIB)'], ['Lokasi kerja', 'Work location'],
+  ['Tidak ada catatan tambahan.', 'No additional notes.'],
+  ['Perusahaan karyawan belum terpasang. Hubungi P&C.', 'Your employee company is not assigned. Contact P&C.'],
+  ['Absensi belum diaktifkan untuk perusahaan Anda.', 'Attendance is not enabled for your company.'],
+  ['Lokasi kerja perlu diperiksa P&C sebelum absensi.', 'P&C needs to check your work location before you can record attendance.'],
+  ['Konfigurasi geofence khusus perlu disesuaikan P&C ke koordinat lokasi kerja.', 'P&C needs to align the custom geofence settings with the work location coordinates.'],
+  ['Koordinat atau radius absensi belum lengkap. Hubungi P&C.', 'Attendance coordinates or radius are incomplete. Contact P&C.'],
+  ['Foto absensi wajib dilampirkan.', 'An attendance photo is required.'], ['Izinkan lokasi untuk melakukan absensi.', 'Allow location access to record attendance.'],
+  ['Lokasi Anda berada di luar radius absensi yang diizinkan.', 'Your location is outside the permitted attendance radius.'],
+  ['Anda sudah check-in hari ini.', 'You have already checked in today.'], ['Anda harus check-in terlebih dahulu.', 'Check in first.'],
+  ['Anda sudah check-out hari ini.', 'You have already checked out today.'], ['Pencatatan istirahat tidak diaktifkan.', 'Break tracking is not enabled.'],
+  ['Istirahat sudah dicatat hari ini.', 'A break has already been recorded today.'], ['Istirahat belum dimulai.', 'Your break has not started.'],
+  ['Istirahat sudah selesai.', 'Your break has already ended.'], ['Selesaikan istirahat sebelum check-out.', 'End your break before checking out.'],
+  ['Catat istirahat sebelum check-out sesuai pengaturan perusahaan.', 'Record a break before checking out, as required by company settings.'],
+];
+export const attendance: Record<string, MessagePair> = {};
+for (const pair of entries) for (const source of pair) attendance[source] ??= pair;
+
+const displayCopy: MessagePair[] = [
+  ['Anda tidak memiliki izin untuk melihat catatan kehadiran.', 'You do not have permission to view attendance records.'],
+  ['Opsi filter kehadiran gagal dimuat.', 'Unable to load attendance filter options.'],
+  ['Cari kehadiran berdasarkan nama atau ID karyawan', 'Search attendance by name or employee ID'],
+  ['Waktu kehadiran ditampilkan dalam WIB. Ekspor hanya mencakup halaman ini.', 'Attendance times are shown in WIB. Export includes this page only.'],
+  ['Coba lagi kehadiran', 'Retry attendance'],
+  ['{shown} ditampilkan · {total} catatan kehadiran sesuai filter', '{shown} shown · {total} matching attendance records'],
+  ['Halaman kehadiran', 'Attendance pages'],
+  ['Masukkan waktu kehadiran dalam WIB (UTC+7).', 'Enter attendance times in WIB (UTC+7).'],
+  ['Daftar karyawan untuk kehadiran gagal dimuat.', 'Unable to load attendance employees.'],
+  ['Coba lagi karyawan', 'Retry employees'],
+  ['Detail kehadiran gagal dimuat.', 'Unable to load attendance details.'],
+  ['Coba lagi detail', 'Retry details'],
+  ['Koordinat masuk', 'Check-in coordinates'], ['Koordinat keluar', 'Checkout coordinates'],
+  ['Giliran kerja', 'Shift'], ['Shift pagi', 'Morning shift'], ['Shift siang', 'Afternoon shift'],
+  ['Shift malam', 'Night shift'], ['Shift fleksibel', 'Flexible shift'],
+  ['{hours}j {minutes}m', '{hours}h {minutes}m'],
+  ['Karyawan tidak diketahui', 'Unknown employee'],
+];
+for (const pair of displayCopy) for (const source of pair) attendance[source] = pair;
+
+/** Exact application-owned clock errors; other server messages remain literal. */
+export const attendanceClockErrorSources = new Set([
+  'Perusahaan karyawan belum terpasang. Hubungi P&C.',
+  'Absensi belum diaktifkan untuk perusahaan Anda.',
+  'Lokasi kerja perlu diperiksa P&C sebelum absensi.',
+  'Konfigurasi geofence khusus perlu disesuaikan P&C ke koordinat lokasi kerja.',
+  'Koordinat atau radius absensi belum lengkap. Hubungi P&C.',
+  'Foto absensi wajib dilampirkan.',
+  'Izinkan lokasi untuk melakukan absensi.',
+  'Lokasi Anda berada di luar radius absensi yang diizinkan.',
+  'Anda sudah check-in hari ini.',
+  'Anda harus check-in terlebih dahulu.',
+  'Anda sudah check-out hari ini.',
+  'Pencatatan istirahat tidak diaktifkan.',
+  'Istirahat sudah dicatat hari ini.',
+  'Istirahat belum dimulai.',
+  'Istirahat sudah selesai.',
+  'Selesaikan istirahat sebelum check-out.',
+  'Catat istirahat sebelum check-out sesuai pengaturan perusahaan.',
+]);
+// The shared API adapter may already have translated an exact known error.
+// Retain either catalog alias as application copy so a stored error can switch again.
+for (const source of [...attendanceClockErrorSources]) {
+  for (const alias of attendance[source]) attendanceClockErrorSources.add(alias);
+}

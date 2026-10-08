@@ -1,4 +1,13 @@
-import { useEffect, useState } from 'react';
+import { t, useLocale, intlLocale } from '@/i18n';
+import '@/pages/leave/domain-workflows.css';
+import { PositionCatalog } from '@/components/ui/OrganizationRecords';
+import { CompanyScopePanel, DirectorySearch, DirectoryToggle, type DirectoryView } from '@/components/ui/MasterDataWorkspace';
+import { MasterDataHeader, MasterDataSummary, MasterDataDialog } from '@/components/ui/MasterDataLayout';
+import { collectPages, hasMasterRole } from '@/services/master-data';
+import { useAuthStore } from '@/stores/auth.store';
+import { canAction } from '@/lib/actions';
+import { MasterDataError, MasterDataPager } from '@/components/ui/MasterDataFeedback';
+import { useEffect, useState, useRef } from 'react';
 import { companyService, type Company } from '@/services/company.service';
 import { departmentService } from '@/services/department.service';
 import { positionService, POSITION_LEVELS, getLevelName } from '@/services/position.service';
@@ -28,6 +37,21 @@ interface Position {
 }
 
 export function PositionsPage() {
+  useLocale();
+  const user = useAuthStore(state => state.user);
+  const roles = user?.roles;
+  const isEditorRole = hasMasterRole(roles);
+  // Editor role is the ceiling; each mutation also needs its covered action.
+  const canCreate = isEditorRole && canAction(user, 'position.create');
+  const canUpdate = isEditorRole && canAction(user, 'position.update');
+  const canDelete = isEditorRole && canAction(user, 'position.delete');
+  const canManage = canCreate || canUpdate;
+  const requestId = useRef(0);
+  const [loadError, setLoadError] = useState(false);
+  const [page, setPage] = useState(1);
+  const [directoryView, setDirectoryView] = useState<DirectoryView>('table');
+  const [statusFilter, setStatusFilter] = useState('all');
+
   const [positions, setPositions] = useState<Position[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -50,63 +74,37 @@ export function PositionsPage() {
     status: 'active',
   });
 
-  useEffect(() => {
-    fetchCompanies();
-  }, []);
-
-  useEffect(() => {
-    if (selectedCompanyId) {
-      fetchPositions();
-      fetchDepartments();
-    }
-  }, [selectedCompanyId]);
-
-  const fetchCompanies = async () => {
-    try {
-      const response = await companyService.getAll({ limit: 100 });
-      setCompanies(response.data);
-      if (response.data.length > 0) {
-        setSelectedCompanyId(response.data[0].id);
-      }
-    } catch {
-      toast.error('Failed to load company data');
-    }
-  };
-
-  const fetchDepartments = async () => {
-    try {
-      const data = await departmentService.getAllDepartments();
-      setDepartments(data);
-    } catch {
-      toast.error('Failed to load department data');
-    }
-  };
-
+  useEffect(() => { fetchPositions(); return () => { requestId.current++; }; }, []);
+  useEffect(() => { setPage(1); }, [selectedCompanyId, search, statusFilter]);
   const fetchPositions = async () => {
-    if (!selectedCompanyId) return;
-    setIsLoading(true);
+    const request = ++requestId.current;
+    setIsLoading(true); setLoadError(false);
     try {
-      const response = await positionService.getAll({
-        company_id: selectedCompanyId,
-        limit: 100,
-        page: 1,
-        status: 'active'
-      });
-      setPositions(response.data as unknown as Position[]);
+      const [companyRows, departmentRows, positionRows] = await Promise.all([
+        collectPages((page, limit) => companyService.getAll({ page, limit })),
+        collectPages((page, limit) => departmentService.getAll({ page, limit })),
+        collectPages((page, limit) => positionService.getAll({ page, limit })),
+      ]);
+      if (request !== requestId.current) return;
+      setCompanies(companyRows); setDepartments(departmentRows);
+      setPositions(positionRows as unknown as Position[]); setPage(1);
+      setSelectedCompanyId(current => current ?? companyRows[0]?.id ?? null);
     } catch {
-      toast.error('Failed to load position data');
-    } finally {
-      setIsLoading(false);
-    }
+      if (request !== requestId.current) return;
+      setLoadError(true); setPositions([]);
+    } finally { if (request === requestId.current) setIsLoading(false); }
   };
 
   const selectedCompany = companies.find(c => c.id === selectedCompanyId);
 
   const filteredPositions = positions.filter(pos =>
+    (!selectedCompanyId || pos.company_id === selectedCompanyId) && (
     pos.name.toLowerCase().includes(search.toLowerCase()) ||
     (pos.code && pos.code.toLowerCase().includes(search.toLowerCase())) ||
-    (pos.department?.name && pos.department.name.toLowerCase().includes(search.toLowerCase()))
+    (pos.department?.name && pos.department.name.toLowerCase().includes(search.toLowerCase())))
   );
+
+  const visiblePositions = filteredPositions.filter(item => statusFilter === 'all' || (statusFilter === 'active' ? item.status === 'active' : item.status !== 'active'));
 
   const stats = {
     total: filteredPositions.length,
@@ -115,6 +113,7 @@ export function PositionsPage() {
   };
 
   const handleOpenModal = (position?: Position) => {
+    if (position ? !canUpdate : !canCreate) return;
     if (position) {
       setEditingPosition(position);
       setFormData({
@@ -143,51 +142,56 @@ export function PositionsPage() {
     setShowModal(true);
   };
 
+  // Re-check the current operation: access may have changed while the dialog was open.
+  const canSubmitDialog = editingPosition ? canUpdate : canCreate;
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedCompanyId) return;
+    if (!selectedCompanyId || isSubmitting || !canSubmitDialog) return;
 
+    if (formData.min_salary && formData.max_salary && Number(formData.min_salary) > Number(formData.max_salary)) {
+      toast.error(t("Gaji minimum tidak boleh melebihi maksimum")); return;
+    }
     setIsSubmitting(true);
     try {
       const payload = {
         name: formData.name,
-        code: formData.code || undefined,
-        description: formData.description || undefined,
-        company_id: selectedCompanyId,
-        department_id: formData.department_id,
-        level: formData.level ? parseInt(formData.level) : undefined,
-        min_salary: formData.min_salary ? parseFloat(formData.min_salary) : undefined,
-        max_salary: formData.max_salary ? parseFloat(formData.max_salary) : undefined,
+        code: formData.code,
+        description: formData.description,
+        company_id: editingPosition?.company_id ?? selectedCompanyId,
+        department_id: formData.department_id ?? null,
+        level: formData.level ? parseInt(formData.level) : null,
+        min_salary: formData.min_salary ? parseFloat(formData.min_salary) : null,
+        max_salary: formData.max_salary ? parseFloat(formData.max_salary) : null,
         status: formData.status,
       };
 
       if (editingPosition) {
         await positionService.update(editingPosition.id, payload);
-        toast.success('Position updated successfully');
+        toast.success(t("Position updated successfully"));
       } else {
         await positionService.create(payload);
-        toast.success('Position created successfully');
+        toast.success(t("Position created successfully"));
       }
       setShowModal(false);
       fetchPositions();
     } catch {
-      toast.error('Failed to save position');
+      toast.error(t("Failed to save position"), { id: 'api-error' });
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleDelete = async () => {
-    if (!deletingPosition) return;
+    if (!deletingPosition || !canDelete || isSubmitting) return;
     setIsSubmitting(true);
     try {
       await positionService.delete(deletingPosition.id);
-      toast.success('Position deleted successfully');
+      toast.success(t("Position deleted successfully"));
       setShowDeleteModal(false);
       setDeletingPosition(null);
       fetchPositions();
     } catch {
-      toast.error('Failed to delete position');
+      toast.error(t("Failed to delete position"), { id: 'api-error' });
     } finally {
       setIsSubmitting(false);
     }
@@ -199,8 +203,8 @@ export function PositionsPage() {
   };
 
   const formatCurrency = (value: number | null) => {
-    if (!value) return '-';
-    return new Intl.NumberFormat('id-ID', {
+    if (value == null) return '-';
+    return new Intl.NumberFormat(intlLocale(), {
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0,
@@ -208,20 +212,7 @@ export function PositionsPage() {
     }).format(value);
   };
 
-  const getAvatarColor = (name: string) => {
-    const colors = [
-      'from-blue-500 to-blue-600',
-      'from-purple-500 to-purple-600',
-      'from-green-500 to-green-600',
-      'from-orange-500 to-orange-600',
-      'from-pink-500 to-pink-600',
-      'from-indigo-500 to-indigo-600',
-      'from-teal-500 to-teal-600',
-      'from-red-500 to-red-600',
-    ];
-    const index = name.charCodeAt(0) % colors.length;
-    return colors[index];
-  };
+
 
   const getLevelBadge = (level: number | null) => {
     if (!level) return null;
@@ -237,205 +228,48 @@ export function PositionsPage() {
     };
     return (
       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${levelStyles[levelName] || 'bg-gray-100 text-gray-600'}`}>
-        {levelName}
+        {t(levelName)}
       </span>
     );
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header Banner */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-teal-600 via-teal-700 to-cyan-700 rounded-2xl shadow-lg">
-        <div className="absolute inset-0 bg-grid-white/10 [mask-image:linear-gradient(0deg,transparent,rgba(255,255,255,0.5))]"></div>
-        <div className="absolute -top-24 -right-24 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
-        <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-teal-400/20 rounded-full blur-3xl"></div>
+    <div className="master-data md-page master-refresh">
+      {loadError && <MasterDataError onRetry={fetchPositions} />}
+      <MasterDataHeader title={t("Positions")} description={t("Jabatan, level, dan rentang gaji dalam struktur perusahaan.")} actions={
+        canCreate && !!selectedCompanyId && !isLoading && !loadError && <button onClick={() => handleOpenModal()} className="md-button md-button-primary"><span aria-hidden="true" className="text-lg leading-none">+</span>{' '}{t("Add Position")}</button>
+      } />
 
-        <div className="relative px-6 py-8 sm:px-8 sm:py-10">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-14 h-14 bg-white/20 backdrop-blur-xl rounded-2xl flex items-center justify-center shadow-lg">
-                  <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                  </svg>
-                </div>
-                <div>
-                  <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-                    Positions
-                  </h1>
-                  <p className="text-teal-100 text-sm mt-1">
-                    {selectedCompany ? (
-                      <>Manage positions for <span className="font-semibold">{selectedCompany.name}</span></>
-                    ) : (
-                      'Select a company to get started'
-                    )}
-                  </p>
-                </div>
-              </div>
-              <div className="flex flex-wrap items-center gap-3 mt-4">
-                <span className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-xl rounded-xl text-sm text-white font-medium">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                  </svg>
-                  {stats.total} Positions
-                </span>
-                <span className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-xl rounded-xl text-sm text-white font-medium">
-                  <span className="w-2 h-2 bg-green-400 rounded-full"></span>
-                  {stats.active} Active
-                </span>
-              </div>
-            </div>
 
-            <div className="flex flex-wrap items-center gap-3">
-              {/* Company Selector */}
-              <div className="relative">
-                <select
-                  value={selectedCompanyId || ''}
-                  onChange={(e) => setSelectedCompanyId(Number(e.target.value))}
-                  className="appearance-none pl-10 pr-10 py-2.5 bg-white/20 backdrop-blur-xl text-white rounded-xl border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50 text-sm font-medium cursor-pointer min-w-[200px]"
-                >
-                  {companies.map(company => (
-                    <option key={company.id} value={company.id} className="text-gray-900">
-                      {company.name}
-                    </option>
-                  ))}
-                </select>
-                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                </svg>
-                <svg className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </div>
-
-              <button
-                onClick={() => handleOpenModal()}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-teal-700 rounded-xl hover:bg-teal-50 transition-all duration-200 font-semibold shadow-lg"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                <span>Add Position</span>
-              </button>
-            </div>
+      <div className="md-explorer">
+        <CompanyScopePanel companies={companies} value={selectedCompanyId} onChange={setSelectedCompanyId}
+          status={statusFilter} onStatusChange={setStatusFilter} counts={stats} loading={isLoading || loadError}>{t("Pilih company untuk melihat jabatan, level, dan rentang gajinya.")}</CompanyScopePanel>
+        <section className="md-directory-results" aria-label={t("Direktori position")}>
+          <div className="md-results-toolbar"><DirectorySearch value={search} onChange={setSearch} label={t("Cari position")} placeholder={t("Search position...")} />
+            <DirectoryToggle view={directoryView} onChange={setDirectoryView} />
           </div>
-        </div>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-teal-500 to-teal-600 rounded-xl flex items-center justify-center shadow-lg">
-              <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-            </div>
-          </div>
-          <p className="text-3xl font-bold text-gray-900 mb-1">{stats.total}</p>
-          <p className="text-sm text-gray-500">Total Positions</p>
-        </div>
-
-        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center shadow-lg">
-              <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <span className="inline-flex items-center px-2 py-1 bg-green-50 text-green-700 text-xs font-bold rounded-lg">
-              Active
-            </span>
-          </div>
-          <p className="text-3xl font-bold text-gray-900 mb-1">{stats.active}</p>
-          <p className="text-sm text-gray-500">Active Positions</p>
-        </div>
-
-        <div className="relative overflow-hidden bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-gray-400 to-gray-500 rounded-xl flex items-center justify-center shadow-lg">
-              <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-              </svg>
-            </div>
-            <span className="inline-flex items-center px-2 py-1 bg-gray-100 text-gray-600 text-xs font-bold rounded-lg">
-              Inactive
-            </span>
-          </div>
-          <p className="text-3xl font-bold text-gray-900 mb-1">{stats.inactive}</p>
-          <p className="text-sm text-gray-500">Inactive Positions</p>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-        {/* Search */}
-        <div className="px-6 py-4 border-b border-gray-100">
-          <div className="flex items-center gap-4">
-            <div className="relative flex-1 max-w-md">
-              <input
-                type="text"
-                placeholder="Search position, code, or department..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
-              />
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </div>
-            <span className="text-sm text-gray-500">
-              {filteredPositions.length} positions
-            </span>
-          </div>
-        </div>
-
-        {/* Table */}
-        <div className="overflow-x-auto">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-20">
-              <div className="flex flex-col items-center gap-3">
-                <div className="w-10 h-10 border-4 border-teal-200 border-t-teal-600 rounded-full animate-spin"></div>
-                <p className="text-gray-500">Loading data...</p>
-              </div>
-            </div>
-          ) : filteredPositions.length === 0 ? (
-            <div className="text-center py-16">
-              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900">No positions yet</h3>
-              <p className="mt-1 text-gray-500">Add your first position.</p>
-              <button
-                onClick={() => handleOpenModal()}
-                className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Add Position
-              </button>
-            </div>
-          ) : (
-            <table className="w-full">
+          <div className="md-results-heading"><div><h2>{selectedCompany?.name || t('Pilih company')}</h2><p>{isLoading ? t("Memuat data…") : loadError ? t("Data belum tersedia") : t("{count} position ditemukan", { count: visiblePositions.length.toLocaleString(intlLocale()) })}</p></div></div>
+          {isLoading ? <div className="md-directory-empty" role="status">{t("Memuat position…")}</div>
+            : loadError ? <div className="md-directory-empty">{t("Data belum tersedia. Gunakan Coba lagi untuk memuat ulang.")}</div>
+            : visiblePositions.length === 0 ? <div className="md-directory-empty"><h3>{t("Tidak ada position ditemukan")}</h3><p>{t("Coba ubah company, status, atau kata pencarian.")}</p></div>
+            : directoryView === 'board' ? <PositionCatalog positions={visiblePositions.slice((page - 1) * 20, page * 20)} departments={departments} canManage={canUpdate} canDelete={canDelete} onEdit={handleOpenModal} onDelete={openDeleteModal} getLevelName={getLevelName} formatCurrency={formatCurrency} />
+            : <div className="md-panel overflow-x-auto"><table className="w-full">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
-                  <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Position</th>
-                  <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Department</th>
-                  <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Level</th>
-                  <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Salary Range</th>
-                  <th className="text-center px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="text-center px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+                  <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">{t("Position")}</th>
+                  <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">{t("Department")}</th>
+                  <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">{t("Level")}</th>
+                  <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">{t("Salary Range")}</th>
+                  <th className="text-center px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">{t("Status")}</th>
+                  <th className="text-center px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">{t("Actions")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filteredPositions.map(pos => (
-                  <tr key={pos.id} className="hover:bg-gray-50 transition-colors">
+                {visiblePositions.slice((page - 1) * 20, page * 20).map(pos => (
+                  <tr data-master-record key={pos.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 bg-gradient-to-br ${getAvatarColor(pos.name)} rounded-xl flex items-center justify-center text-white font-semibold text-sm shadow-sm`}>
+                        <div className="md-avatar">
                           {pos.name.charAt(0)}
                         </div>
                         <div>
@@ -463,10 +297,10 @@ export function PositionsPage() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="text-sm">
-                        {pos.min_salary || pos.max_salary ? (
+                        {pos.min_salary != null || pos.max_salary != null ? (
                           <>
                             <p className="text-gray-900 font-medium">{formatCurrency(pos.min_salary)}</p>
-                            <p className="text-gray-500">to {formatCurrency(pos.max_salary)}</p>
+                            <p className="text-gray-500">{t("to")} {formatCurrency(pos.max_salary)}</p>
                           </>
                         ) : (
                           <span className="text-gray-400">-</span>
@@ -476,62 +310,54 @@ export function PositionsPage() {
                     <td className="px-6 py-4 text-center">
                       {pos.status === 'active' ? (
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
-                          <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-                          Active
-                        </span>
+                          <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>{' '}{t("Active")} </span>
                       ) : (
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                          <span className="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
-                          Inactive
-                        </span>
+                          <span className="w-1.5 h-1.5 rounded-full bg-gray-400"></span>{' '}{t("Inactive")} </span>
                       )}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-center gap-1">
-                        <button
+                        {canUpdate && (<button
                           onClick={() => handleOpenModal(pos)}
                           className="p-2 text-gray-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"
-                          title="Edit"
+                          title={t("Edit")}
                         >
                           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                           </svg>
-                        </button>
-                        <button
+                        </button>)}
+                        {canDelete && (<button
                           onClick={() => openDeleteModal(pos)}
                           className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Delete"
+                          title={t("Delete")}
                         >
                           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                           </svg>
-                        </button>
+                        </button>)}
                       </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
-            </table>
-          )}
-        </div>
+            </table></div>}
+          <MasterDataPager page={page} total={visiblePositions.length} onChange={setPage} />
+        </section>
       </div>
 
       {/* Add/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex min-h-screen items-center justify-center p-4">
-            <div className="fixed inset-0 bg-black/50 transition-opacity" onClick={() => setShowModal(false)} />
-
-            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
-              <div className="bg-gradient-to-br from-teal-600 to-cyan-600 px-6 py-5">
+        <MasterDataDialog busy={isSubmitting} labelledBy="md-positions-dialog-0" onClose={() => setShowModal(false)}>
+              <div className="md-dialog-header">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-bold text-white">
-                    {editingPosition ? 'Edit Position' : 'Add Position'}
+                  <h2 id="md-positions-dialog-0" className="text-xl font-bold text-slate-900">
+                    {editingPosition ? t("Edit Position") : t("Add Position")}
                   </h2>
-                  <button
+                  <button disabled={isSubmitting}
                     onClick={() => setShowModal(false)}
-                    className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center text-white hover:bg-white/30 transition-colors"
-                  >
+                    className="md-avatar"
+                   aria-label={t("Tutup dialog")}>
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
@@ -539,73 +365,57 @@ export function PositionsPage() {
                 </div>
               </div>
 
-              <form onSubmit={handleSubmit} className="p-6 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Position Name <span className="text-red-500">*</span>
+              <form onSubmit={handleSubmit} className="ph-workflow dw-form"><div className="dw-form-content"><section className="ph-section dw-section"><h3>{t("Position & department")}</h3><div className="dw-fields"><div className="ph-form-grid dw-form-grid"><div className="dw-full">
+                    <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="md-positions-field-0">{t("Position Name")} <span className="text-red-500">*</span>
                     </label>
-                    <input
+                    <input id="md-positions-field-0"
                       type="text"
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
-                      placeholder="e.g., Software Engineer"
+                      placeholder={t("e.g., Software Engineer")}
                       required
                     />
                   </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Code
-                    </label>
-                    <input
+<div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="md-positions-field-1">{t("Code")} </label>
+                    <input id="md-positions-field-1"
                       type="text"
                       value={formData.code}
                       onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
                       className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 font-mono"
-                      placeholder="e.g., SE"
+                      placeholder={t("e.g., SE")}
                       maxLength={10}
                     />
                   </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Level
-                    </label>
-                    <select
+<div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="md-positions-field-2">{t("Level")} </label>
+                    <select id="md-positions-field-2"
                       value={formData.level}
                       onChange={(e) => setFormData({ ...formData, level: e.target.value })}
                       className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
                     >
-                      <option value="">Select Level</option>
+                      <option value="">{t("Select Level")}</option>
                       {Object.entries(POSITION_LEVELS).map(([value, label]) => (
-                        <option key={value} value={value}>{label}</option>
+                        <option key={value} value={value}>{t(label)}</option>
                       ))}
                     </select>
                   </div>
-
-                  <div className="col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Department
-                    </label>
-                    <select
+<div className="dw-full">
+                    <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="md-positions-field-3">{t("Department")} </label>
+                    <select id="md-positions-field-3"
                       value={formData.department_id || ''}
                       onChange={(e) => setFormData({ ...formData, department_id: e.target.value ? Number(e.target.value) : undefined })}
                       className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
                     >
-                      <option value="">Select Department</option>
-                      {departments.map(dept => (
+                      <option value="">{t("Select Department")}</option>
+                      {departments.filter(dept => (dept.company_id == null || dept.company_id === (editingPosition?.company_id ?? selectedCompanyId)) && (dept.status === 'active' || dept.id === formData.department_id)).map(dept => (
                         <option key={dept.id} value={dept.id}>{dept.name}</option>
                       ))}
                     </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Minimum Salary
-                    </label>
-                    <input
+                  </div></div></div></section><section className="ph-section dw-section"><h3>{t("Salary range")}</h3><div className="dw-fields"><div className="ph-form-grid dw-form-grid"><div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="md-positions-field-4">{t("Minimum Salary")} </label>
+                    <input id="md-positions-field-4"
                       type="number"
                       value={formData.min_salary}
                       onChange={(e) => setFormData({ ...formData, min_salary: e.target.value })}
@@ -613,38 +423,28 @@ export function PositionsPage() {
                       placeholder="0"
                     />
                   </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Maximum Salary
-                    </label>
-                    <input
+<div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="md-positions-field-5">{t("Maximum Salary")} </label>
+                    <input id="md-positions-field-5"
                       type="number"
                       value={formData.max_salary}
                       onChange={(e) => setFormData({ ...formData, max_salary: e.target.value })}
                       className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
                       placeholder="0"
                     />
-                  </div>
-
-                  <div className="col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Description
-                    </label>
-                    <textarea
+                  </div></div></div></section><section className="ph-section dw-section"><h3>{t("Description & status")}</h3><div className="dw-fields"><div className="dw-full">
+                    <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="md-positions-field-6">{t("Description")} </label>
+                    <textarea id="md-positions-field-6"
                       value={formData.description}
                       onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                       className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 resize-none"
-                      placeholder="Position description..."
+                      placeholder={t("Position description...")}
                       rows={3}
                     />
                   </div>
-
-                  <div className="col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Status
-                    </label>
-                    <div className="flex items-center gap-4">
+<div className="dw-full">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t("Status")} </label>
+                    <div className="dw-checks">
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input
                           type="radio"
@@ -652,7 +452,7 @@ export function PositionsPage() {
                           onChange={() => setFormData({ ...formData, status: 'active' })}
                           className="w-4 h-4 text-teal-600 border-gray-300 focus:ring-teal-500"
                         />
-                        <span className="text-sm text-gray-700">Active</span>
+                        <span className="text-sm text-gray-700">{t("Active")}</span>
                       </label>
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input
@@ -661,25 +461,20 @@ export function PositionsPage() {
                           onChange={() => setFormData({ ...formData, status: 'inactive' })}
                           className="w-4 h-4 text-teal-600 border-gray-300 focus:ring-teal-500"
                         />
-                        <span className="text-sm text-gray-700">Inactive</span>
+                        <span className="text-sm text-gray-700">{t("Inactive")}</span>
                       </label>
                     </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100">
+                  </div></div></section></div>{!canSubmitDialog && <p role="status" className="text-sm text-amber-700 px-1" data-testid="access-changed">{t("Your access changed; this action is no longer available. Your input is kept until you close the dialog.")}</p>}<div className="ph-form-actions dw-actions">
                   <button
                     type="button"
                     onClick={() => setShowModal(false)}
                     disabled={isSubmitting}
-                    className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
+                    className="ph-button"
+                  >{t("Cancel")} </button>
                   <button
                     type="submit"
-                    disabled={isSubmitting}
-                    className="px-6 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors font-medium disabled:opacity-50 flex items-center gap-2"
+                    disabled={isSubmitting || !canSubmitDialog}
+                    className="ph-button ph-button-primary"
                   >
                     {isSubmitting && (
                       <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -687,58 +482,39 @@ export function PositionsPage() {
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                       </svg>
                     )}
-                    {editingPosition ? 'Update' : 'Save'}
+                    {editingPosition ? t("Update") : t("Save")}
                   </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
+                </div></form>
+            </MasterDataDialog>
       )}
 
       {/* Delete Confirmation Modal */}
       {showDeleteModal && deletingPosition && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex min-h-screen items-center justify-center p-4">
-            <div className="fixed inset-0 bg-black/50 transition-opacity" onClick={() => setShowDeleteModal(false)} />
+        <MasterDataDialog busy={isSubmitting} labelledBy="md-positions-dialog-1" onClose={() => setShowDeleteModal(false)}>
+              <div className="ph-workflow dw-confirm">
 
-            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-              <div className="p-6 text-center">
-                <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </div>
-                <h3 className="text-lg font-bold text-gray-900 mb-2">Delete Position?</h3>
-                <p className="text-gray-500 text-sm mb-6">
-                  Are you sure you want to delete position <span className="font-semibold text-gray-700">{deletingPosition.name}</span>? This action cannot be undone.
-                </p>
-                <div className="flex items-center justify-center gap-3">
+                <h3 id="md-positions-dialog-1" className="text-lg font-bold text-gray-900 mb-2">{t("Delete Position?")}</h3>
+                <p className="text-gray-500 text-sm mb-6">{t("Are you sure you want to delete position")} <span className="font-semibold text-gray-700">{deletingPosition.name}</span>{t("? This action cannot be undone.")} </p>
+                <div className="ph-form-actions dw-actions">
                   <button
                     onClick={() => setShowDeleteModal(false)}
                     disabled={isSubmitting}
-                    className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
+                    className="ph-button"
+                  >{t("Cancel")} </button>
                   <button
                     onClick={handleDelete}
-                    disabled={isSubmitting}
-                    className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:opacity-50 flex items-center gap-2"
+                    disabled={isSubmitting || !canDelete}
+                    className="ph-button dw-danger"
                   >
                     {isSubmitting && (
                       <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                       </svg>
-                    )}
-                    Delete
-                  </button>
+                    )}{' '}{t("Delete")} </button>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
+            </MasterDataDialog>
       )}
     </div>
   );

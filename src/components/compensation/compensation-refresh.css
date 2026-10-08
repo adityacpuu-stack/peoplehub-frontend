@@ -1,0 +1,61 @@
+/* Match Operations/Leave; keep compensation records and workflow semantics. */
+.compensation-refresh { color:#243b32; }
+.compensation-refresh .cp-header { margin-bottom:22px; }
+.compensation-refresh .cp-header h1 { font-size:28px; line-height:1.25; letter-spacing:-.8px; color:#163e2f; margin-bottom:8px; }
+.compensation-refresh .cp-header p { font-size:14px; color:#718077; }
+.compensation-refresh .cp-workspace { border:1px solid #e1e8e3; border-radius:12px; background:#fff; overflow:hidden; }
+.compensation-refresh .cp-filters { padding:22px 24px 18px; gap:14px; border-bottom:1px solid #e8eee9; }
+.compensation-refresh .cp-field { flex:0 1 210px; }
+.compensation-refresh .cp-field select { font-size:13px; min-height:40px; border-color:#e1e8e3; border-radius:8px; }
+.compensation-refresh .cp-button,.compensation-refresh-dialog :is(.cp-button,.ph-button) { border-radius:8px; min-height:38px; font-weight:500; }
+.compensation-refresh .cp-primary,.compensation-refresh-dialog :is(.cp-primary,.ph-button-primary) { background:#176b4a; border-color:#176b4a; color:white; }
+.compensation-refresh .cp-primary:hover:not(:disabled),.compensation-refresh-dialog :is(.cp-primary,.ph-button-primary):hover:not(:disabled) { background:#115439; }
+.compensation-refresh .cp-toolbar { padding:18px 24px; }
+.compensation-refresh .cp-search { width:min(360px,100%); min-height:40px; border-radius:8px; border-color:#e1e8e3; background:#fff; }
+.compensation-refresh .cp-search input { font-size:13px; }
+.compensation-refresh .cp-table th { background:#f8faf8; padding:12px 20px; font-size:11px; color:#718077; }
+.compensation-refresh .cp-table td { padding:18px 20px; border-color:#edf1ed; font-size:13px; }
+.compensation-refresh .cp-table :is(th,td):first-child { padding-left:24px; }
+.compensation-refresh .cp-table :is(th,td):last-child { padding-right:24px; }
+.compensation-refresh .cp-table strong { font-size:13px; font-weight:600; }
+.compensation-refresh .cp-table small { font-size:11px; }
+.compensation-refresh :is(.cp-avatar,.cp-record-icon) { width:38px; height:38px; background:#edf3e7; color:#4f7149; }
+.compensation-refresh .cp-status { padding:4px 9px; border-radius:6px; font-size:11px; background:#f2f5f2; }
+.compensation-refresh .cp-status[data-status=pending] { background:#fff7e6; color:#8c641f; }
+.compensation-refresh .cp-status[data-status=rejected] { background:#fdf0f0; color:#a14040; }
+.compensation-refresh .cp-status:is([data-status=active],[data-status=approved]) { background:#edf6ef; color:#247247; }
+.compensation-refresh .cp-metrics { padding:16px 24px; margin:0; gap:18px 28px; background:#fbfcfa; border-top:1px solid #edf1ed; justify-content:space-between; }
+.compensation-refresh .cp-metrics > div { padding:0; border:0; flex:1 1 140px; }
+.compensation-refresh .cp-metrics strong { font-size:18px; color:#163e2f; }
+.compensation-refresh .cp-pagination { padding:16px 24px; background:white; border-color:#edf1ed; }
+.compensation-refresh-dialog.ph-account-dialog[open] { display:flex; flex-direction:column; border-radius:14px; overflow:hidden; }
+.compensation-refresh-dialog.ph-account-dialog.cp-dialog { max-width:840px; }
+.compensation-refresh-dialog :is(.ow-dialog-header,header) { padding:22px 26px; background:#fbfcfa; flex-shrink:0; border-color:#e1e8e3; }
+.compensation-refresh-dialog :is(.ow-dialog-header,header) h2 { color:#163e2f; font-size:21px; }
+.compensation-refresh-dialog > :is(.dw-form,.dw-detail,.dw-confirm) { overflow-y:auto; min-height:0; padding:22px 26px; overscroll-behavior:contain; }
+.compensation-refresh-dialog > .cp-form-error { flex-shrink:0; margin:12px 26px; }
+.compensation-refresh-dialog .dw-form-content { gap:20px; }
+.compensation-refresh-dialog .dw-section { padding-bottom:20px; border-color:#e8eee9; }
+.compensation-refresh-dialog .dw-section h3 { color:#386346; font-size:14px; }
+.compensation-refresh-dialog .dw-form-grid { gap:16px 22px; }
+.compensation-refresh-dialog .dw-form label { font-size:12px; color:#496153; }
+.compensation-refresh-dialog .dw-form :is(input:not([type=checkbox]):not([type=radio]),select,textarea),.compensation-refresh-dialog .dw-confirm textarea { border-radius:8px; font-size:13px; border-color:#e1e8e3; }
+.compensation-refresh-dialog .dw-actions { position:sticky; bottom:-22px; padding:16px 26px; margin:22px -26px -22px; border-top:1px solid #e1e8e3; background:#fbfcfa; z-index:3; }
+.compensation-refresh-dialog .dw-actions > button:first-child { margin-right:0; }
+.compensation-refresh-dialog .dw-callout { border-radius:8px; background:#f3f8ef; border-color:#dce7d5; }
+.compensation-refresh-dialog .dw-detail-grid { padding:18px; border:1px solid #e1e8e3; border-radius:9px; background:#fbfcfa; }
+@container compensation (max-width:720px) {
+  .compensation-refresh .cp-table tr { padding:18px 16px; }
+  .compensation-refresh .cp-table td,.compensation-refresh .cp-table td:first-child,.compensation-refresh .cp-table td:last-child { padding:0; }
+}
+@media(max-width:767px) {
+  .compensation-refresh .cp-header h1 { font-size:25px; }
+  .compensation-refresh .cp-header p { font-size:13px; }
+  .compensation-refresh .cp-filters { padding:18px 16px; gap:12px; }
+  .compensation-refresh :is(.cp-toolbar,.cp-metrics,.cp-pagination) { padding:16px; }
+  .compensation-refresh .cp-metrics { gap:18px 16px; }
+  .compensation-refresh .cp-metrics > div { flex:1 1 120px; }
+  .compensation-refresh-dialog :is(.ow-dialog-header,header) { padding:18px; }
+  .compensation-refresh-dialog > :is(.dw-form,.dw-detail,.dw-confirm) { padding:18px; }
+  .compensation-refresh-dialog .dw-actions { bottom:-18px; padding:14px 18px; margin:20px -18px -18px; }
+}

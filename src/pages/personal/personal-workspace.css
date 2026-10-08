@@ -1,0 +1,118 @@
+.personal-page { width:100%; min-width:0; display:grid; gap:28px; color:#243b32; }
+.personal-heading { display:flex; justify-content:space-between; align-items:center; gap:20px; }
+.personal-heading-actions { display:flex; flex-wrap:wrap; gap:10px; }
+.personal-balances-dialog .personal-balance-list { max-height:min(55dvh,480px); overflow-y:auto; overscroll-behavior:contain; }
+.personal-balance-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:14px 20px; padding:19px 4px; border-bottom:1px solid #e8eee9; }
+.personal-balance-row:first-child { padding-top:0; }
+.personal-balance-row:last-child { border-bottom:0; padding-bottom:0; }
+.personal-balance-name { display:flex; gap:11px; align-items:center; min-width:0; }
+.personal-balance-name svg { width:19px; height:19px; flex-shrink:0; color:#48836a; }
+.personal-balance-name h3 { font-size:14px; font-weight:500; color:#243b32; overflow-wrap:anywhere; }
+.personal-balance-name span { display:block; margin-top:5px; color:#77847c; font-size:11px; }
+.personal-balance-available { text-align:right; }
+.personal-balance-available strong { display:block; font-size:25px; line-height:1.2; color:#176b4a; font-weight:600; font-variant-numeric:tabular-nums; }
+.personal-balance-available span { font-size:10px; color:#77847c; }
+.personal-balance-row dl { grid-column:1/-1; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-left:30px; }
+.personal-balance-row dt { color:#77847c; font-size:10px; }
+.personal-balance-row dd { color:#496153; font-size:12px; margin-top:4px; font-variant-numeric:tabular-nums; }
+.personal-heading h1 { margin:5px 0 7px; color:#163e2f; font-size:28px; font-weight:600; letter-spacing:-.8px; line-height:1.25; }
+.personal-heading p:not(.personal-eyebrow) { color:#718077; font-size:14px; }
+.personal-eyebrow { color:#708077; font-size:11px; font-weight:600; letter-spacing:1.5px; text-transform:uppercase; }
+.personal-page .ph-button, .personal-modal .ph-button { border-radius:8px; min-height:40px; }
+.personal-page .ph-button-primary, .personal-modal .ph-button-primary { color:white; background:#176b4a; border-color:#176b4a; }
+.personal-page .ph-button-primary:hover:not(:disabled), .personal-modal .ph-button-primary:hover:not(:disabled) { background:#115439; }
+.personal-section-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; }
+.personal-section-heading h2 { font-size:15px; font-weight:600; display:flex; align-items:center; gap:10px; }
+.personal-section-heading > span, .personal-section-heading p { color:#77847c; font-size:12px; }
+.personal-section-heading p { margin-top:5px; }
+.personal-balance-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,225px),1fr)); border:1px solid #e1e8e3; border-radius:12px; overflow:hidden; background:#fff; gap:1px; background-color:#e1e8e3; }
+.personal-balance { min-width:0; padding:20px; background:#fff; }
+.personal-balance-title { display:flex; align-items:center; gap:9px; }
+.personal-balance-title svg { width:17px; height:17px; color:#48836a; flex-shrink:0; }
+.personal-balance-title h3 { font-size:13px; font-weight:500; flex:1; }
+.personal-balance-title > span { font-size:11px; color:#7b877f; }
+.personal-balance-value { font-size:30px; font-weight:600; letter-spacing:-1px; margin:18px 0 12px; line-height:1; font-variant-numeric:tabular-nums; }
+.personal-balance-value span { font-size:12px; color:#758279; letter-spacing:0; font-weight:400; }
+.personal-balance-meta { display:flex; flex-wrap:wrap; gap:7px 12px; color:#758279; font-size:11px; font-variant-numeric:tabular-nums; }
+.personal-surface { min-width:0; border:1px solid #e1e8e3; border-radius:12px; background:#fff; overflow:hidden; }
+.personal-surface-heading { padding:22px 24px 0; margin-bottom:18px; }
+.personal-count { background:#edf3ee; color:#50705e; font-size:11px; padding:3px 8px; border-radius:6px; }
+.personal-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:12px; padding:0 24px 16px; }
+.personal-search { position:relative; min-width:180px; flex:1; max-width:440px; }
+.personal-search > svg { position:absolute; width:16px; height:16px; top:12px; left:12px; color:#849088; pointer-events:none; }
+.personal-page .personal-search input { padding-left:38px; }
+.personal-toolbar > select { width:auto; max-width:220px; }
+.personal-filter-note { color:#7b877f; font-size:11px; padding:0 24px 16px; }
+.personal-leave-columns, .personal-leave-row { display:grid; grid-template-columns:minmax(180px,1.6fr) minmax(135px,1fr) 90px 105px 16px; gap:20px; align-items:center; padding:18px 24px; width:100%; text-align:left; }
+.personal-leave-columns, .personal-document-columns { background:#f8faf8; border-block:1px solid #edf0ed; color:#7b877f; font-size:11px; font-weight:500; padding-block:11px; }
+.personal-leave-row { border-bottom:1px solid #edf0ed; font-size:13px; cursor:pointer; transition:background .15s; }
+.personal-leave-row:hover { background:#f7faf7; }
+.personal-record-name { display:flex; align-items:center; gap:12px; min-width:0; text-align:left; }
+.personal-record-name > :last-child { min-width:0; }
+.personal-record-name strong { display:block; font-size:13px; font-weight:500; overflow-wrap:anywhere; }
+.personal-record-name small, .personal-period small { display:block; font-size:11px; color:#7b877f; margin-top:4px; overflow-wrap:anywhere; }
+.personal-file-icon { display:flex; align-items:center; justify-content:center; flex-shrink:0; width:38px; height:42px; border:1px solid #e6ece7; border-radius:8px; background:#f7faf7; color:#59836c; }
+.personal-file-icon svg { width:19px; height:19px; color:inherit; }
+.personal-status { display:inline-flex; width:fit-content; align-items:center; gap:5px; padding:4px 9px; font-size:11px; font-weight:500; border-radius:6px; white-space:nowrap; }
+.personal-status svg { width:12px; height:12px; }
+.personal-row-arrow { width:16px; height:16px; color:#8a988e; }
+.personal-muted { font-size:12px; color:#77847c; }
+.personal-pagination { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:14px 24px; color:#77847c; font-size:12px; }
+.personal-pagination > div { display:flex; gap:8px; }
+.personal-pagination .ph-button { min-height:32px; padding:6px 9px; }
+.personal-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:56px 24px; gap:10px; text-align:center; }
+.personal-empty > svg { width:28px; height:28px; color:#90a495; margin-bottom:6px; }
+.personal-empty h3 { font-size:15px; font-weight:500; }
+.personal-empty p { font-size:13px; color:#77847c; margin-bottom:5px; }
+.personal-tabs { display:flex; gap:24px; padding:0 24px; border-bottom:1px solid #e7ede7; }
+.personal-tabs button { display:flex; align-items:center; gap:8px; padding:20px 0 17px; font-size:13px; color:#77847c; border-bottom:2px solid transparent; }
+.personal-tabs button[aria-pressed=true] { color:#176b4a; border-color:#176b4a; font-weight:600; }
+.personal-tabs svg { width:16px; height:16px; }
+.personal-tabs span { font-size:11px; background:#f0f4f0; padding:1px 7px; border-radius:5px; }
+.personal-documents-intro { display:flex; align-items:center; gap:8px; color:#77847c; padding:20px 24px; font-size:12px; }
+.personal-documents-intro svg { width:15px; height:15px; flex-shrink:0; }
+.personal-document-columns, .personal-document-row { display:grid; grid-template-columns:minmax(180px,1fr) 160px 105px 88px; align-items:center; gap:24px; padding-inline:24px; }
+.personal-document-row { padding-block:20px; border-bottom:1px solid #edf0ed; font-size:13px; }
+.personal-document-row:last-child { border-bottom:0; }
+.personal-document-open:hover strong { color:#176b4a; text-decoration:underline; text-underline-offset:3px; }
+.personal-record-actions { display:flex; gap:6px; }
+.personal-record-actions .ph-button { min-height:34px; padding:7px; border-color:transparent; color:#7b8a7f; }
+.personal-modal.ph-account-dialog { border-radius:14px; }
+.personal-modal .ph-dialog-header { background:#fbfcfa; padding:22px 26px; }
+.personal-modal .ph-dialog-header h2 { color:#163e2f; font-size:21px; overflow-wrap:anywhere; }
+.personal-modal .ph-dialog-body { padding:24px 26px; }
+.personal-modal .ph-dialog-footer { margin:24px -26px -24px; padding:16px 26px; background:#fbfcfa; }
+.personal-form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px 20px; border:0; padding:0; min-width:0; }
+.personal-field { display:flex; flex-direction:column; gap:7px; font-size:12px; font-weight:500; color:#496153; min-width:0; position:relative; }
+.personal-full { grid-column:1/-1; }
+.personal-modal .personal-field input, .personal-modal .personal-field select, .personal-modal .personal-field textarea { border-radius:8px; font-size:13px; }
+.personal-modal .personal-field textarea { min-height:74px; }
+.personal-optional { position:absolute; top:0; right:0; font-size:11px; color:#8a958d; font-weight:400; }
+.personal-form-hint { color:#77847c; font-size:11px; line-height:1.6; }
+.personal-form-grid > .personal-form-hint { margin-top:-10px; }
+.personal-request-context { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; background:#f1f6f0; border:1px solid #e5eee1; border-radius:9px; padding:16px; margin-top:22px; }
+.personal-request-context span, .personal-request-context small { display:block; font-size:11px; color:#70816f; }
+.personal-request-context strong { display:block; font-size:13px; font-weight:600; margin:5px 0; color:#356342; }
+.personal-detail-summary { display:flex; align-items:center; justify-content:space-between; gap:20px; background:#f5f8f3; border:1px solid #e6ece2; padding:18px; border-radius:9px; }
+.personal-detail-summary p { margin-top:10px; font-size:13px; }
+.personal-detail-summary > strong { font-size:30px; color:#376348; flex-shrink:0; line-height:1; text-align:center; }
+.personal-detail-summary > strong small { display:block; font-size:11px; margin-top:6px; font-weight:400; }
+.personal-details { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; margin-top:24px; }
+.personal-details > div { min-width:0; padding-bottom:15px; border-bottom:1px solid #edf0ec; }
+.personal-details dt { color:#7b877f; font-size:11px; margin-bottom:7px; }
+.personal-details dd { font-size:13px; overflow-wrap:anywhere; white-space:pre-wrap; }
+.personal-warning { background:#fff5f2; border:1px solid #f3d6cd; padding:14px; border-radius:8px; color:#943f32; font-size:13px; margin-top:20px; }
+.personal-note { font-size:13px; color:#708077; line-height:1.7; overflow-wrap:anywhere; }
+.personal-modal .personal-danger { color:#a43d33; border-color:#e7c6c1; }
+.personal-modal .personal-danger:hover:not(:disabled) { background:#fff4f0; }
+.personal-file-picker { position:relative; border:1px dashed #afc9b7; border-radius:9px; background:#f8fbf6; padding:18px; text-align:center; }
+.personal-file-picker:focus-within { outline:2px solid #176b4a; outline-offset:2px; }
+.personal-file-picker label { display:flex; flex-direction:column; align-items:center; gap:6px; cursor:pointer; }
+.personal-file-picker label svg { width:22px; height:22px; color:#6c9479; margin-bottom:3px; }
+.personal-file-picker label strong { font-size:13px; font-weight:500; overflow-wrap:anywhere; max-width:100%; }
+.personal-file-picker label span { font-size:11px; color:#849080; }
+.personal-file-picker > button { margin-top:10px; }
+.personal-upload-note { margin-top:18px; }
+@media(min-width:1600px) { .personal-balance-grid { grid-template-columns:repeat(4,minmax(0,1fr)); } }
+@media(max-width:1000px) { .personal-leave-columns,.personal-document-columns { display:none; } .personal-leave-row { grid-template-columns:minmax(0,1fr) 110px; gap:12px; } .personal-leave-row .personal-record-name { grid-column:1/-1; grid-row:1; } .personal-leave-row .personal-status { grid-column:2; grid-row:1; justify-self:end; } .personal-leave-row .personal-record-name { padding-right:105px; } .personal-row-arrow { display:none; } .personal-document-row { grid-template-columns:minmax(0,1fr) auto; gap:14px; } .personal-document-row .personal-period { grid-column:1; grid-row:2; padding-left:50px; font-size:11px; } .personal-document-row .personal-status { grid-column:2; grid-row:1; justify-self:end; } .personal-record-actions { grid-column:2; grid-row:2; } }
+@media(max-width:600px) { .personal-page { gap:22px; } .personal-heading { align-items:flex-start; flex-direction:column; gap:16px; } .personal-heading h1 { font-size:25px; } .personal-heading p:not(.personal-eyebrow) { font-size:13px; } .personal-section-heading { align-items:flex-start; flex-direction:column; gap:4px; } .personal-balance-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .personal-balance { padding:14px; } .personal-balance-title { gap:6px; align-items:flex-start; flex-wrap:wrap; } .personal-balance-title > span { display:none; } .personal-balance-title h3 { font-size:12px; } .personal-balance-value { font-size:26px; margin-top:14px; } .personal-balance-value span { display:block; margin-top:7px; font-size:11px; } .personal-balance-meta { gap:4px 8px; font-size:10px; } .personal-surface-heading { padding:18px 16px 0; } .personal-toolbar { padding-inline:16px; gap:10px; } .personal-search { flex-basis:100%; max-width:none; } .personal-toolbar > select { flex:1; max-width:none; width:0; font-size:12px; } .personal-filter-note { padding-inline:16px; } .personal-leave-row { padding:18px 16px; gap:12px; grid-template-columns:minmax(0,1fr) 95px; font-size:12px; } .personal-file-icon { width:30px; height:35px; } .personal-record-name { gap:9px; } .personal-record-name strong { font-size:12px; } .personal-leave-row .personal-record-name { padding-right:80px; } .personal-status { padding:4px 6px; font-size:10px; } .personal-pagination { padding:14px 16px; font-size:11px; } .personal-pagination > span { max-width:65%; } .personal-tabs { padding-inline:16px; gap:20px; } .personal-tabs button { gap:6px; font-size:12px; } .personal-tabs svg { display:none; } .personal-documents-intro { padding:18px 16px; font-size:11px; } .personal-document-row { padding:16px; gap:10px; } .personal-document-row .personal-period { padding-left:39px; } .personal-modal .ph-dialog-header { padding:18px; } .personal-modal .ph-dialog-body { padding:18px; } .personal-modal .ph-dialog-footer { margin:20px -18px -18px; padding:14px 18px; bottom:-18px; } .personal-form-grid { gap:16px 12px; } .personal-form-grid .personal-field { grid-column:1/-1; } .personal-request-context { gap:14px; grid-template-columns:1fr; } .personal-detail-summary { gap:12px; padding:14px; flex-wrap:wrap; } .personal-detail-summary > .personal-record-name { flex-basis:100%; } .personal-details { gap:16px 12px; } }

@@ -1,8 +1,10 @@
+import { t, useLocale } from '@/i18n';
 import { useEffect, useState } from 'react';
 import { PageSpinner } from '@/components/ui';
 import { dashboardService, type DashboardOverview, type TeamDashboard, type GroupDashboard, type MyDashboard, type SuperAdminStats, type AuditLogEntry, type AuditStatistics } from '@/services/dashboard.service';
 import { leaveService } from '@/services/leave.service';
 import { useAuthStore } from '@/stores/auth.store';
+import { canAction } from '@/lib/actions';
 import type { DashboardStats, LeaveRequest } from '@/types';
 import { TaxDashboardPage } from './TaxDashboardPage';
 import { SuperAdminDashboard } from './SuperAdminDashboard';
@@ -10,6 +12,7 @@ import { GroupCEODashboard } from './GroupCEODashboard';
 import { ManagerDashboard } from './ManagerDashboard';
 import { EmployeeDashboard } from './EmployeeDashboard';
 import { HRDashboard } from './HRDashboard';
+import { FinanceDashboard } from './FinanceDashboard';
 
 // Payroll summary type for HR dashboard
 interface PayrollSummaryData {
@@ -26,7 +29,10 @@ interface PayrollSummaryData {
 }
 
 export function DashboardPage() {
+  useLocale();
   const { user } = useAuthStore();
+  const employeeId = user?.employee?.id;
+  const leaveEnabled = user?.companyFeatures?.leave_enabled ?? true;
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [teamDashboard, setTeamDashboard] = useState<TeamDashboard | null>(null);
@@ -34,21 +40,28 @@ export function DashboardPage() {
   const [myDashboard, setMyDashboard] = useState<MyDashboard | null>(null);
   const [pendingApprovals, setPendingApprovals] = useState<LeaveRequest[]>([]);
   const [payrollSummary, setPayrollSummary] = useState<PayrollSummaryData | null>(null);
+  const [payrollUnavailable, setPayrollUnavailable] = useState(false);
   const [superAdminStats, setSuperAdminStats] = useState<SuperAdminStats | null>(null);
   const [recentLogs, setRecentLogs] = useState<AuditLogEntry[]>([]);
   const [auditStats, setAuditStats] = useState<AuditStatistics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [dashboardError, setDashboardError] = useState(false);
+  const [retry, setRetry] = useState(0);
 
   // Check user roles
   const isSuperAdmin = user?.roles?.includes('Super Admin');
-  const isGroupCEO = user?.roles?.includes('Group CEO');
-  const isTax = user?.roles?.some(r => ['Tax Manager', 'Tax Staff'].includes(r));
-  const isHR = user?.roles?.some(r => ['CEO', 'HR Manager', 'HR Staff'].includes(r)) && !isGroupCEO && !isTax;
-  const isManager = user?.roles?.includes('Manager') && !isHR && !isGroupCEO && !isTax;
-  const isEmployee = !isSuperAdmin && !isGroupCEO && !isTax && !isHR && !isManager;
+  const isGroupCEO = !isSuperAdmin && user?.roles?.includes('Group CEO');
+  const isTax = !isSuperAdmin && !isGroupCEO && user?.roles?.some(r => ['Tax Manager', 'Tax Staff'].includes(r));
+  const isHR = !isSuperAdmin && user?.roles?.some(r => ['CEO', 'HR Manager', 'HR Staff'].includes(r)) && !isGroupCEO && !isTax;
+  const isFinance = !isSuperAdmin && !isGroupCEO && !isTax && !isHR && user?.roles?.includes('Finance Manager');
+  const isManager = !isSuperAdmin && user?.roles?.includes('Manager') && !isHR && !isGroupCEO && !isTax && !isFinance;
+  const isEmployee = !isSuperAdmin && !isGroupCEO && !isTax && !isHR && !isManager && !isFinance;
 
   useEffect(() => {
+    let cancelled = false;
     const fetchData = async () => {
+      setIsLoading(true);
+      setDashboardError(false);
       try {
         // Group CEO fetches group dashboard
         if (isGroupCEO) {
@@ -66,56 +79,73 @@ export function DashboardPage() {
             dashboardService.getRecentAuditLogs(10),
             dashboardService.getAuditStatistics(),
           ]);
-          setSuperAdminStats(saStats);
-          setRecentLogs(logs);
-          setAuditStats(aStats);
+          if (!cancelled) {
+            setSuperAdminStats(saStats);
+            setRecentLogs(logs);
+            setAuditStats(aStats);
+          }
         }
         // HR/Admin fetches stats and overview
         else if (isHR) {
+          // Payroll totals are optional: request them only with payroll.view and
+          // never let a denial collapse the workforce/leave sections.
+          const payrollAllowed = canAction(user, 'payroll.view');
           const [statsData, overviewData, payrollData] = await Promise.all([
             dashboardService.getStats(),
             dashboardService.getOverview(),
-            dashboardService.getPayrollSummary(),
+            payrollAllowed
+              ? dashboardService.getPayrollSummary().catch((error: unknown) => {
+                if ((error as { response?: { status?: number } }).response?.status === 403) return null;
+                throw error;
+              })
+              : Promise.resolve(null),
           ]);
-          setStats(statsData);
-          setOverview(overviewData as DashboardOverview);
-          setPayrollSummary(payrollData as PayrollSummaryData);
+          if (!cancelled) {
+            setStats(statsData);
+            setOverview(overviewData as DashboardOverview);
+            setPayrollSummary(payrollData as PayrollSummaryData | null);
+            setPayrollUnavailable(payrollData == null);
+          }
         }
 
         // Manager fetches team dashboard
         if (isManager) {
           const [teamData, approvals] = await Promise.all([
             dashboardService.getTeamDashboard(),
-            leaveService.getPendingApprovals(),
+            leaveEnabled ? leaveService.getMyApprovals() : Promise.resolve([]),
           ]);
-          setTeamDashboard(teamData);
-          setPendingApprovals(approvals);
+          if (!cancelled) {
+            setTeamDashboard(teamData);
+            setPendingApprovals(approvals.filter(leave => leave.status === 'pending' && leave.can_approve === true));
+          }
         }
 
         // Employee fetches my dashboard
-        if (isEmployee) {
+        if (isEmployee && employeeId) {
           const myData = await dashboardService.getMyDashboard();
-          setMyDashboard(myData);
+          if (!cancelled) setMyDashboard(myData);
         }
       } catch (error) {
+        if (!cancelled && (isEmployee || isHR || isManager || isSuperAdmin)) setDashboardError(true);
         console.error('Failed to fetch dashboard data:', error);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     };
 
     fetchData();
-  }, [isHR, isManager, isSuperAdmin, isGroupCEO, isTax, isEmployee]);
+    return () => { cancelled = true; };
+  }, [isHR, isManager, isSuperAdmin, isGroupCEO, isTax, isEmployee, isFinance, retry, employeeId, user?.id, leaveEnabled]);
 
   if (isLoading) {
     return <PageSpinner />;
   }
 
   const greeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Good Morning';
-    if (hour < 17) return 'Good Afternoon';
-    return 'Good Evening';
+    const hour = Number(new Intl.DateTimeFormat('en-GB', { hour: '2-digit', hourCycle: 'h23', timeZone: 'Asia/Jakarta' }).format(new Date()));
+    if (hour < 12) return t('Good Morning');
+    if (hour < 17) return t('Good Afternoon');
+    return t('Good Evening');
   };
 
   if (isSuperAdmin) {
@@ -126,6 +156,8 @@ export function DashboardPage() {
         recentLogs={recentLogs}
         auditStats={auditStats}
         greeting={greeting}
+        failed={dashboardError}
+        onRetry={() => setRetry(value => value + 1)}
       />
     );
   }
@@ -151,9 +183,13 @@ export function DashboardPage() {
         teamDashboard={teamDashboard}
         pendingApprovals={pendingApprovals}
         greeting={greeting}
+        failed={dashboardError}
+        onRetry={() => setRetry(value => value + 1)}
       />
     );
   }
+
+  if (isFinance) return <FinanceDashboard />;
 
   if (isEmployee) {
     return (
@@ -161,6 +197,8 @@ export function DashboardPage() {
         user={user}
         myDashboard={myDashboard}
         greeting={greeting}
+        failed={dashboardError}
+        onRetry={() => setRetry(value => value + 1)}
       />
     );
   }
@@ -172,7 +210,10 @@ export function DashboardPage() {
       stats={stats}
       overview={overview}
       payrollSummary={payrollSummary}
+      payrollUnavailable={payrollUnavailable}
       greeting={greeting}
+      failed={dashboardError}
+      onRetry={() => setRetry(value => value + 1)}
     />
   );
 }

@@ -1,14 +1,8 @@
+import { insightNumber, insightFixed } from '@/pages/ceo/insight-display';
+import { t, useLocale } from '@/i18n';
+import { ReportPage, ReportHeader, ReportSummary, ReportSection } from '@/pages/dashboard/ReportingLayout';
 import { useState } from 'react';
-import {
-  Users,
-  Star,
-  TrendingUp,
-  Award,
-  Building2,
-  Search,
-  Sparkles,
-  Zap,
-} from 'lucide-react';
+import { Users, Star, TrendingUp, Award, Building2, Search, Zap } from 'lucide-react';
 import { PreviewBanner } from '@/components/ui';
 import {
   ResponsiveContainer,
@@ -48,6 +42,7 @@ const quadrantLabels: Record<string, string> = {
 };
 
 export function CEOTalentOverviewPage() {
+  useLocale();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedQuadrant, setSelectedQuadrant] = useState<string | null>(null);
 
@@ -75,120 +70,68 @@ export function CEOTalentOverviewPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <PreviewBanner message="Talent matrix belum terintegrasi dengan performance data real. Data adalah contoh untuk preview UI." />
-      {/* Header */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-900 to-slate-900 rounded-2xl shadow-xl overflow-hidden">
-        <div className="px-4 md:px-8 py-6 md:py-8 relative">
-          <div className="absolute inset-0 opacity-5">
-            <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
-              <defs>
-                <pattern id="talent-pattern" width="60" height="60" patternUnits="userSpaceOnUse">
-                  <path d="M 60 0 L 0 0 0 60" fill="none" stroke="white" strokeWidth="1"/>
-                </pattern>
-              </defs>
-              <rect width="100%" height="100%" fill="url(#talent-pattern)" />
-            </svg>
-          </div>
-
-          <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 md:w-14 md:h-14 bg-gradient-to-br from-pink-400 to-rose-600 rounded-2xl flex items-center justify-center shadow-lg">
-                <Sparkles className="h-6 w-6 md:h-7 md:w-7 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl md:text-2xl font-bold text-white">Talent Overview</h1>
-                <p className="text-slate-400 text-xs md:text-sm mt-1">9-Box talent matrix & insights</p>
-              </div>
-            </div>
-            <span className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur-xl rounded-xl text-sm text-white font-medium border border-white/10">
+    <ReportPage><PreviewBanner message={t("Talent matrix belum terintegrasi dengan performance data real. Data adalah contoh untuk preview UI.")} />{/* Header */}<ReportHeader>
+<div className="report-heading"><h1 className="text-xl md:text-2xl font-bold">{t("Talent Overview")}</h1><p className="text-xs md:text-sm mt-1">{t("9-Box talent matrix & insights")}</p></div>
+<div className="report-header-context"><span className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium border">
               <Users className="h-4 w-4" />
-              {mockTalentData.length} Talent Pool
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-        <div
-          className={`bg-white rounded-2xl shadow-sm border-2 p-4 md:p-5 cursor-pointer transition-all ${selectedQuadrant === 'star' ? 'border-purple-500' : 'border-gray-200 hover:border-purple-300'}`}
+              {insightNumber(mockTalentData.length)}{' '}{t("Talent Pool")} </span></div>
+</ReportHeader>{/* Stats */}<ReportSummary><div
+          className={`bg-white rounded-2xl shadow-sm border-2 p-4 md:p-5 cursor-pointer transition-all ${selectedQuadrant === "star" ? "border-purple-500" : "border-gray-200 hover:border-purple-300"}`}
           onClick={() => setSelectedQuadrant(selectedQuadrant === 'star' ? null : 'star')}
         >
           <div className="flex items-center justify-between mb-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-violet-600 rounded-xl flex items-center justify-center shadow-md">
-              <Star className="h-5 w-5 text-white" />
-            </div>
+            <div className="report-metric"><Star className="h-5 w-5 text-white" /></div>
           </div>
-          <p className="text-xl md:text-2xl font-bold text-gray-900">{stats.stars}</p>
-          <p className="text-xs text-gray-500">Star Performers</p>
-        </div>
-
-        <div
-          className={`bg-white rounded-2xl shadow-sm border-2 p-4 md:p-5 cursor-pointer transition-all ${selectedQuadrant === 'high_potential' ? 'border-indigo-500' : 'border-gray-200 hover:border-indigo-300'}`}
+          <p className="text-xl md:text-2xl font-bold text-gray-900">{insightNumber(stats.stars)}</p>
+          <p className="text-xs text-gray-500">{t("Star Performers")}</p>
+        </div><div
+          className={`bg-white rounded-2xl shadow-sm border-2 p-4 md:p-5 cursor-pointer transition-all ${selectedQuadrant === "high_potential" ? "border-indigo-500" : "border-gray-200 hover:border-indigo-300"}`}
           onClick={() => setSelectedQuadrant(selectedQuadrant === 'high_potential' ? null : 'high_potential')}
         >
           <div className="flex items-center justify-between mb-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-xl flex items-center justify-center shadow-md">
-              <Zap className="h-5 w-5 text-white" />
-            </div>
+            <div className="report-metric"><Zap className="h-5 w-5 text-white" /></div>
           </div>
-          <p className="text-xl md:text-2xl font-bold text-gray-900">{stats.highPotential}</p>
-          <p className="text-xs text-gray-500">High Potentials</p>
-        </div>
-
-        <div
-          className={`bg-white rounded-2xl shadow-sm border-2 p-4 md:p-5 cursor-pointer transition-all ${selectedQuadrant === 'consistent' ? 'border-green-500' : 'border-gray-200 hover:border-green-300'}`}
+          <p className="text-xl md:text-2xl font-bold text-gray-900">{insightNumber(stats.highPotential)}</p>
+          <p className="text-xs text-gray-500">{t("High Potentials")}</p>
+        </div><div
+          className={`bg-white rounded-2xl shadow-sm border-2 p-4 md:p-5 cursor-pointer transition-all ${selectedQuadrant === "consistent" ? "border-green-500" : "border-gray-200 hover:border-green-300"}`}
           onClick={() => setSelectedQuadrant(selectedQuadrant === 'consistent' ? null : 'consistent')}
         >
           <div className="flex items-center justify-between mb-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-md">
-              <TrendingUp className="h-5 w-5 text-white" />
-            </div>
+            <div className="report-metric"><TrendingUp className="h-5 w-5 text-white" /></div>
           </div>
-          <p className="text-xl md:text-2xl font-bold text-gray-900">{stats.consistent}</p>
-          <p className="text-xs text-gray-500">Consistent Performers</p>
-        </div>
-
-        <div
-          className={`bg-white rounded-2xl shadow-sm border-2 p-4 md:p-5 cursor-pointer transition-all ${selectedQuadrant === 'core' ? 'border-amber-500' : 'border-gray-200 hover:border-amber-300'}`}
+          <p className="text-xl md:text-2xl font-bold text-gray-900">{insightNumber(stats.consistent)}</p>
+          <p className="text-xs text-gray-500">{t("Consistent Performers")}</p>
+        </div><div
+          className={`bg-white rounded-2xl shadow-sm border-2 p-4 md:p-5 cursor-pointer transition-all ${selectedQuadrant === "core" ? "border-amber-500" : "border-gray-200 hover:border-amber-300"}`}
           onClick={() => setSelectedQuadrant(selectedQuadrant === 'core' ? null : 'core')}
         >
           <div className="flex items-center justify-between mb-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl flex items-center justify-center shadow-md">
-              <Award className="h-5 w-5 text-white" />
-            </div>
+            <div className="report-metric"><Award className="h-5 w-5 text-white" /></div>
           </div>
-          <p className="text-xl md:text-2xl font-bold text-gray-900">{stats.core}</p>
-          <p className="text-xs text-gray-500">Core Contributors</p>
-        </div>
-      </div>
-
-      {/* Talent Matrix */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-6">
-        <h3 className="text-base md:text-lg font-bold text-gray-900 mb-4">Talent Matrix</h3>
-        <p className="text-sm text-gray-500 mb-4">Performance vs Potential mapping</p>
-        <div className="h-64 md:h-80">
+          <p className="text-xl md:text-2xl font-bold text-gray-900">{insightNumber(stats.core)}</p>
+          <p className="text-xs text-gray-500">{t("Core Contributors")}</p>
+        </div></ReportSummary>{/* Talent Matrix */}<ReportSection><h3 className="text-base md:text-lg font-bold text-gray-900 mb-4">{t("Talent Matrix")}</h3><p className="text-sm text-gray-500 mb-4">{t("Performance vs Potential mapping")}</p><div className="h-64 md:h-80">
           <ResponsiveContainer width="100%" height="100%">
             <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis
+              <XAxis tickFormatter={insightNumber}
                 type="number"
                 dataKey="x"
-                name="Performance"
+                name={t("Performance")}
                 domain={[2, 5]}
                 tick={{ fontSize: 11 }}
                 stroke="#9ca3af"
-                label={{ value: 'Performance', position: 'bottom', fontSize: 12 }}
+                label={{ value: t('Performance'), position: 'bottom', fontSize: 12 }}
               />
-              <YAxis
+              <YAxis tickFormatter={insightNumber}
                 type="number"
                 dataKey="y"
-                name="Potential"
+                name={t("Potential")}
                 domain={[2, 5]}
                 tick={{ fontSize: 11 }}
                 stroke="#9ca3af"
-                label={{ value: 'Potential', angle: -90, position: 'left', fontSize: 12 }}
+                label={{ value: t('Potential'), angle: -90, position: 'left', fontSize: 12 }}
               />
               <Tooltip
                 cursor={{ strokeDasharray: '3 3' }}
@@ -196,11 +139,7 @@ export function CEOTalentOverviewPage() {
                   if (active && payload && payload.length) {
                     const data = payload[0].payload;
                     return (
-                      <div className="bg-white p-3 rounded-lg shadow-lg border border-gray-200">
-                        <p className="font-bold text-gray-900">{data.name}</p>
-                        <p className="text-sm text-gray-500">Performance: {data.x}</p>
-                        <p className="text-sm text-gray-500">Potential: {data.y}</p>
-                      </div>
+                      <ReportSection><p className="font-bold text-gray-900">{data.name}</p><p className="text-sm text-gray-500">{t("Performance:")} {data.x}</p><p className="text-sm text-gray-500">{t("Potential:")} {data.y}</p></ReportSection>
                     );
                   }
                   return null;
@@ -213,28 +152,21 @@ export function CEOTalentOverviewPage() {
               </Scatter>
             </ScatterChart>
           </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Search and Talent List */}
-      <div className="relative">
+        </div></ReportSection>{/* Search and Talent List */}<div className="relative report-search">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
         <input
           type="text"
-          placeholder="Search talent..."
+          placeholder={t("Search talent...")}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
         />
-      </div>
-
-      <div className="grid md:grid-cols-2 gap-4">
+      </div><div className="grid md:grid-cols-2 gap-4">
         {filteredTalent.map((talent) => (
-          <div key={talent.id} className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 hover:shadow-lg transition-shadow">
-            <div className="flex items-start gap-4">
+          <ReportSection key={talent.id}><div className="flex items-start gap-4">
               <div
-                className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-sm"
-                style={{ background: `linear-gradient(135deg, ${quadrantColors[talent.quadrant]}99, ${quadrantColors[talent.quadrant]})` }}
+                className="w-12 h-12 rounded-md flex items-center justify-center text-white font-bold text-sm"
+                style={{ backgroundColor: quadrantColors[talent.quadrant] }}
               >
                 {talent.name.split(' ').map(n => n[0]).join('')}
               </div>
@@ -245,7 +177,7 @@ export function CEOTalentOverviewPage() {
                     className="inline-flex items-center px-2 py-1 rounded-lg text-xs font-semibold"
                     style={{ backgroundColor: `${quadrantColors[talent.quadrant]}20`, color: quadrantColors[talent.quadrant] }}
                   >
-                    {quadrantLabels[talent.quadrant]}
+                    {t(quadrantLabels[talent.quadrant])}
                   </span>
                 </div>
                 <p className="text-sm text-indigo-600 font-medium">{talent.position}</p>
@@ -256,26 +188,18 @@ export function CEOTalentOverviewPage() {
                   </span>
                   <span className="flex items-center gap-1">
                     <Star className="h-3.5 w-3.5" />
-                    {talent.performance.toFixed(1)}
+                    {insightFixed(talent.performance, 1)}
                   </span>
                   <span className="flex items-center gap-1">
                     <TrendingUp className="h-3.5 w-3.5" />
-                    {talent.potential.toFixed(1)}
+                    {insightFixed(talent.potential, 1)}
                   </span>
                 </div>
               </div>
-            </div>
-          </div>
+            </div></ReportSection>
         ))}
-      </div>
-
-      {filteredTalent.length === 0 && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-12 text-center">
-          <Users className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">No talent found</h3>
-          <p className="text-gray-500">Try adjusting your filters or search criteria.</p>
-        </div>
-      )}
-    </div>
+      </div>{filteredTalent.length === 0 && (
+        <ReportSection><Users className="h-12 w-12 text-gray-300 mx-auto mb-4" /><h3 className="text-lg font-semibold text-gray-900 mb-2">{t("No talent found")}</h3><p className="text-gray-500">{t("Try adjusting your filters or search criteria.")}</p></ReportSection>
+      )}</ReportPage>
   );
 }

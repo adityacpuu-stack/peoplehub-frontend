@@ -1,16 +1,37 @@
-import { useEffect, useState, lazy, Suspense } from 'react';
+import { t, useLocale } from '@/i18n';
+import { useEffect, useLayoutEffect, useRef, useState, lazy, Suspense } from 'react';
 import * as Sentry from '@sentry/react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { Toaster } from 'react-hot-toast';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate, useParams, type Location } from 'react-router-dom';
+import { ApplicationToaster } from '@/components/ui/ApplicationToaster';
 import { useAuthStore } from '@/stores/auth.store';
 import { Layout } from '@/components/layout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { RoleRoute } from '@/components/auth/RoleRoute';
+import { PersonalRoute } from '@/components/auth/PersonalRoute';
+import { canAction } from '@/lib/actions';
 import { FullPageSpinner } from '@/components/ui';
 import { ProfileCompletionModal, PasswordChangeModal } from '@/components/profile';
 
 // Eager imports — small pages loaded early (login flow + 403).
 import { LoginPage, ForgotPasswordPage, ResetPasswordPage, ForbiddenPage } from '@/pages';
+
+function TemplatesRedirect() {
+  useLocale();
+  const { search, hash } = useLocation();
+  return <Navigate replace to={{ pathname: '/templates', search, hash }} />;
+}
+
+function ApprovalsRedirect() {
+  useLocale();
+  const { search, hash } = useLocation();
+  return <Navigate replace to={{ pathname: '/requests', search, hash }} />;
+}
+
+function AnnouncementsRedirect() {
+  useLocale();
+  const { search, hash } = useLocation();
+  return <Navigate replace to={{ pathname: '/announcements', search, hash }} />;
+}
 
 // Helper: convert named-export module → default-export shape for React.lazy.
 // Returns `ComponentType<any>` so prop types propagate from JSX usage rather
@@ -22,6 +43,7 @@ const lazyNamed = (loader: () => Promise<Record<string, any>>, name: string) =>
 
 // Dashboard
 const DashboardPage = lazyNamed(() => import('@/pages/dashboard/DashboardPage'), 'DashboardPage');
+const MyAttendancePage = lazyNamed(() => import('@/pages/employee/MyAttendancePage'), 'MyAttendancePage');
 
 // CEO bundle (18 pages — heavy, lazy load all)
 const CEODashboardPage = lazyNamed(() => import('@/pages/ceo/CEODashboardPage' as never), 'CEODashboardPage');
@@ -35,13 +57,11 @@ const CEODepartmentReportPage = lazyNamed(() => import('@/pages/ceo/CEODepartmen
 const CEOKPIDashboardPage = lazyNamed(() => import('@/pages/ceo/CEOKPIDashboardPage' as never), 'CEOKPIDashboardPage');
 const CEOCompanyGoalsPage = lazyNamed(() => import('@/pages/ceo/CEOCompanyGoalsPage' as never), 'CEOCompanyGoalsPage');
 const CEOOKRTrackingPage = lazyNamed(() => import('@/pages/ceo/CEOOKRTrackingPage' as never), 'CEOOKRTrackingPage');
-const CEOApprovalsPage = lazyNamed(() => import('@/pages/ceo/CEOApprovalsPage' as never), 'CEOApprovalsPage');
 const CEOBudgetRequestsPage = lazyNamed(() => import('@/pages/ceo/CEOBudgetRequestsPage' as never), 'CEOBudgetRequestsPage');
 const CEOLeadershipTeamPage = lazyNamed(() => import('@/pages/ceo/CEOLeadershipTeamPage' as never), 'CEOLeadershipTeamPage');
 const CEOSuccessionPlanningPage = lazyNamed(() => import('@/pages/ceo/CEOSuccessionPlanningPage' as never), 'CEOSuccessionPlanningPage');
 const CEOPerformanceSummaryPage = lazyNamed(() => import('@/pages/ceo/CEOPerformanceSummaryPage' as never), 'CEOPerformanceSummaryPage');
 const CEOTalentOverviewPage = lazyNamed(() => import('@/pages/ceo/CEOTalentOverviewPage' as never), 'CEOTalentOverviewPage');
-const CEOAnnouncementsPage = lazyNamed(() => import('@/pages/ceo/CEOAnnouncementsPage' as never), 'CEOAnnouncementsPage');
 const CEOPayrollReportPage = lazyNamed(() => import('@/pages/ceo/CEOPayrollReportPage' as never), 'CEOPayrollReportPage');
 
 // Employees / Org
@@ -62,8 +82,8 @@ const KPIDashboardPage = lazyNamed(() => import('@/pages/performance/KPIDashboar
 const GoalsOKRsPage = lazyNamed(() => import('@/pages/performance/GoalsOKRsPage' as never), 'GoalsOKRsPage');
 
 // Self-service / Misc
-const ProfilePage = lazyNamed(() => import('@/pages/profile/ProfilePage' as never), 'ProfilePage');
-const SettingsPage = lazyNamed(() => import('@/pages/settings/SettingsPage' as never), 'SettingsPage');
+const AccountSettingsPage = lazyNamed(() => import('@/pages/settings/AccountSettingsPage' as never), 'AccountSettingsPage');
+const NotificationsPage = lazyNamed(() => import('@/pages/notifications/NotificationsPage' as never), 'NotificationsPage');
 const RequestsPage = lazyNamed(() => import('@/pages/requests/RequestsPage' as never), 'RequestsPage');
 
 // HR Operations (Attendance / Leave / Overtime / Payroll)
@@ -85,13 +105,9 @@ const TeamAttendancePage = lazyNamed(() => import('@/pages/manager/TeamAttendanc
 const TeamOvertimePage = lazyNamed(() => import('@/pages/manager/TeamOvertimePage' as never), 'TeamOvertimePage');
 const LeaveApprovalPage = lazyNamed(() => import('@/pages/manager/LeaveApprovalPage' as never), 'LeaveApprovalPage');
 const MyLeavePage = lazyNamed(() => import('@/pages/manager/MyLeavePage' as never), 'MyLeavePage');
-const TeamTemplatesPage = lazyNamed(() => import('@/pages/manager/TeamTemplatesPage' as never), 'TeamTemplatesPage');
-const TeamAnnouncementsPage = lazyNamed(() => import('@/pages/manager/TeamAnnouncementsPage' as never), 'TeamAnnouncementsPage');
 const ManagerDocumentsPage = lazyNamed(() => import('@/pages/manager/ManagerDocumentsPage' as never), 'ManagerDocumentsPage');
 
 // Employee self-service
-const EmployeeTemplatesPage = lazyNamed(() => import('@/pages/employee/EmployeeTemplatesPage' as never), 'EmployeeTemplatesPage');
-const EmployeeAnnouncementsPage = lazyNamed(() => import('@/pages/employee/EmployeeAnnouncementsPage' as never), 'EmployeeAnnouncementsPage');
 const EmployeeDocumentsPage = lazyNamed(() => import('@/pages/employee/EmployeeDocumentsPage' as never), 'EmployeeDocumentsPage');
 
 // Resources
@@ -135,8 +151,33 @@ const TaxRatesPage = lazyNamed(() => import('@/pages/tax/TaxRatesPage' as never)
 const PTKPSettingsPage = lazyNamed(() => import('@/pages/tax/PTKPSettingsPage' as never), 'PTKPSettingsPage');
 const CompanyNPWPPage = lazyNamed(() => import('@/pages/tax/CompanyNPWPPage' as never), 'CompanyNPWPPage');
 
+// Route ceilings mirror the backend role guards (literal arrays so route
+// inventories can read them); covered actions narrow them further.
+const managerUpRoles = ['Group CEO', 'CEO', 'HR Manager', 'Finance Manager', 'Tax Manager', 'HR Staff', 'Tax Staff', 'Manager'];
+const hrStaffUpRoles = ['Group CEO', 'CEO', 'HR Manager', 'Finance Manager', 'Tax Manager', 'HR Staff'];
+const payrollReadRoles = ['Group CEO', 'CEO', 'HR Manager', 'Finance Manager', 'Tax Manager', 'HR Staff', 'Tax Staff'];
+const employeeDetailRoles = ['Group CEO', 'CEO', 'HR Manager', 'HR Staff', 'Manager'];
+const employeeEditRoles = ['CEO', 'HR Manager', 'HR Staff'];
+
+// Own employee record stays self-service; another record needs the detail
+// endpoint's role ceiling (Finance/Tax alone cannot open it) AND employee.view.
+function EmployeeDetailRoute() {
+  useLocale();
+  const { id } = useParams();
+  const ownId = useAuthStore(state => state.user?.employee?.id);
+  return <RoleRoute allowedRoles={employeeDetailRoles} actions={['employee.view']} allowWhen={ownId != null && String(ownId) === id}><EmployeeDetailPage /></RoleRoute>;
+}
+
+// The edit form must also be able to read the record (employee.view).
+function EmployeeEditRoute() {
+  useLocale();
+  const user = useAuthStore(state => state.user);
+  return canAction(user, 'employee.view') ? <EmployeeFormPage /> : <Navigate to="/403" replace />;
+}
+
 // Role-based Companies Page Wrapper
 function CompaniesPageWrapper() {
+  useLocale();
   const { user } = useAuthStore();
   const isSuperAdmin = user?.roles?.includes('Super Admin');
   return isSuperAdmin ? <AdminCompaniesPage /> : <CompaniesPage />;
@@ -144,12 +185,224 @@ function CompaniesPageWrapper() {
 
 // Role-based Dashboard Wrapper - CEO/Group CEO gets CEO Dashboard, others get regular Dashboard
 function DashboardPageWrapper() {
+  useLocale();
   const { user } = useAuthStore();
-  const isCEO = user?.roles?.some((role) => ['CEO', 'Group CEO'].includes(role));
+  const isCEO = !user?.roles?.includes('Super Admin') && user?.roles?.some((role) => ['CEO', 'Group CEO'].includes(role));
   return isCEO ? <CEODashboardPage /> : <DashboardPage />;
 }
 
+// Keep the current page mounted underneath account dialogs, including its filters and draft state.
+function ApplicationRoutes() {
+  useLocale();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const user = useAuthStore(state => state.user);
+  const previousPage = useRef<Location | null>(null);
+  const path = location.pathname.replace(/\/$/, '');
+  const settingsTabs = ['profile', 'general', 'attendance', 'payroll', 'notifications', 'security'] as const;
+  const settingsTab = path === '/security/sessions' ? 'security'
+    : settingsTabs.find(tab => path === '/settings/' + tab);
+  const settingsOpen = path === '/settings' || settingsTab !== undefined;
+  const profileOpen = path === '/profile';
+  const accountOpen = settingsOpen || profileOpen;
+  useLayoutEffect(() => {
+    if (!accountOpen) previousPage.current = location;
+  }, [location, accountOpen]);
+  // Keep server-resolved roles/effectiveActions current: at most one /auth/me
+  // per minute on navigation and per 15s on tab focus (deduplicated in the store).
+  const refreshUserIfStale = useAuthStore(state => state.refreshUserIfStale);
+  useEffect(() => { void refreshUserIfStale(60_000); }, [location.pathname, refreshUserIfStale]);
+  useEffect(() => {
+    const onFocus = () => { if (document.visibilityState === 'visible') void refreshUserIfStale(15_000); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => { window.removeEventListener('focus', onFocus); document.removeEventListener('visibilitychange', onFocus); };
+  }, [refreshUserIfStale]);
+  // Native dialogs must not cover mandatory password/profile onboarding.
+  const onboardingRequired = user?.force_password_change === true ||
+    (user?.employee && (user.employee.profile_completed === false || !user.employee.national_id));
+  const closeAccount = () => {
+    if (previousPage.current) navigate(-1);
+    else navigate('/dashboard', { replace: true });
+  };
+  return <>
+      <Suspense fallback={<FullPageSpinner />}>
+      <Routes location={accountOpen ? previousPage.current ?? location : location}>
+        {/* Public routes */}
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/403" element={<ForbiddenPage />} />
+
+        {/* Protected routes */}
+        <Route
+          element={
+            <ProtectedRoute>
+              <Layout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/dashboard" element={<DashboardPageWrapper />} />
+
+          {/* CEO Routes - Keep /ceo-dashboard as alias for backwards compatibility */}
+          <Route path="/ceo-dashboard" element={<Navigate to="/dashboard" replace />} />
+          {/* All /ceo/* routes gated to CEO, Group CEO, HR Manager (Super Admin bypasses).
+              Defense in depth — backend RBAC remains the source of truth. */}
+          <Route path="/ceo/company-performance" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOCompanyPerformancePage /></RoleRoute>} />
+          <Route path="/ceo/workforce-analytics" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOWorkforceAnalyticsPage /></RoleRoute>} />
+          <Route path="/ceo/financial-overview" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'Finance Manager']} actions={['payroll.view']}><CEOFinancialOverviewPage /></RoleRoute>} />
+          <Route path="/ceo/reports/headcount" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOHeadcountReportPage /></RoleRoute>} />
+          <Route path="/ceo/reports/turnover" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOTurnoverReportPage /></RoleRoute>} />
+          <Route path="/ceo/reports/cost" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'Finance Manager']}><CEOCostReportPage /></RoleRoute>} />
+          <Route path="/ceo/reports/department" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEODepartmentReportPage /></RoleRoute>} />
+          <Route path="/ceo/kpi/dashboard" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOKPIDashboardPage /></RoleRoute>} />
+          <Route path="/ceo/kpi/company-goals" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOCompanyGoalsPage /></RoleRoute>} />
+          <Route path="/ceo/kpi/okr" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOOKRTrackingPage /></RoleRoute>} />
+          <Route path="/ceo/approvals" element={<RoleRoute allowedRoles={['CEO', 'Group CEO']}><ApprovalsRedirect /></RoleRoute>} />
+          <Route path="/ceo/budget-requests" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'Finance Manager']}><CEOBudgetRequestsPage /></RoleRoute>} />
+          <Route path="/ceo/leadership-team" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOLeadershipTeamPage /></RoleRoute>} />
+          <Route path="/ceo/succession-planning" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOSuccessionPlanningPage /></RoleRoute>} />
+          <Route path="/ceo/performance-summary" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOPerformanceSummaryPage /></RoleRoute>} />
+          <Route path="/ceo/talent-overview" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOTalentOverviewPage /></RoleRoute>} />
+          <Route path="/ceo/announcements" element={<AnnouncementsRedirect />} />
+          <Route path="/ceo/payroll-report" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'Finance Manager', 'HR Manager']} actions={['payroll.view']}><CEOPayrollReportPage /></RoleRoute>} />
+
+          <Route path="/employees" element={<RoleRoute allowedRoles={managerUpRoles} actions={['employee.view']}><EmployeesPage /></RoleRoute>} />
+          <Route path="/employees/create" element={<RoleRoute allowedRoles={hrStaffUpRoles} actions={['employee.create']}><EmployeeFormPage /></RoleRoute>} />
+          <Route path="/employees/:id" element={<EmployeeDetailRoute />} />
+          {/* The form reads GET /employees/:id (detail ceiling + employee.view) and saves PUT (HR Staff+ + employee.update). */}
+          <Route path="/employees/:id/edit" element={<RoleRoute allowedRoles={employeeEditRoles} actions={['employee.update']}><EmployeeEditRoute /></RoleRoute>} />
+          <Route path="/departments" element={<DepartmentsPage />} />
+          <Route path="/work-locations" element={<WorkLocationsPage />} />
+
+          {/* Admin pages — gated to admin-level roles */}
+          <Route path="/users" element={<RoleRoute allowedRoles={['HR Manager']}><UsersPage /></RoleRoute>} />
+          <Route path="/roles" element={<RoleRoute allowedRoles={[]}><RolesPage /></RoleRoute>} />
+          <Route path="/companies" element={<CompaniesPageWrapper />} />
+          <Route path="/company-assignments" element={<RoleRoute allowedRoles={[]}><CompanyAssignmentsPage /></RoleRoute>} />
+          <Route path="/company-features" element={<RoleRoute allowedRoles={[]}><CompanyFeaturesPage /></RoleRoute>} />
+          <Route path="/role-dashboard-config" element={<RoleRoute allowedRoles={[]}><RoleDashboardConfigPage /></RoleRoute>} />
+          <Route path="/system-config" element={<RoleRoute allowedRoles={[]}><SystemConfigPage /></RoleRoute>} />
+          <Route path="/audit-logs" element={<RoleRoute allowedRoles={['HR Manager']}><AuditLogsPage /></RoleRoute>} />
+          <Route path="/payroll-settings" element={<RoleRoute allowedRoles={['HR Manager', 'Finance Manager']}><PayrollSettingsPage /></RoleRoute>} />
+          <Route path="/approval-settings" element={<RoleRoute allowedRoles={['HR Manager']}><ApprovalSettingsPage /></RoleRoute>} />
+
+          {/* System Settings → redirect to SettingsPage with appropriate tab */}
+          <Route path="/settings/general" element={null} />
+          <Route path="/settings/attendance" element={null} />
+          <Route path="/settings/payroll" element={null} />
+          <Route path="/settings/security" element={null} />
+          <Route path="/settings/notifications" element={null} />
+          <Route path="/settings/integrations" element={<PlaceholderPage title={t("Integrations")} icon="plug" />} />
+          <Route path="/settings/backup" element={<PlaceholderPage title={t("Backup & Restore")} icon="database" />} />
+
+          {/* Security → redirect to SettingsPage security tab */}
+          <Route path="/security/api-keys" element={<PlaceholderPage title={t("API Keys")} icon="key" />} />
+          <Route path="/security/sessions" element={null} />
+          <Route path="/security/login-history" element={<PlaceholderPage title={t("Login History")} icon="history" />} />
+
+          {/* Attendance */}
+          <Route path="/attendance" element={<AttendancePage />} />
+
+          {/* Manager pages — Manager and up; /my-leave is self-service so unrestricted */}
+          <Route path="/my-team" element={<RoleRoute allowedRoles={['Manager', 'HR Manager', 'HR Staff', 'CEO', 'Group CEO']}><MyTeamPage /></RoleRoute>} />
+          <Route path="/team-attendance" element={<RoleRoute allowedRoles={['Manager', 'HR Manager', 'HR Staff', 'CEO', 'Group CEO']}><TeamAttendancePage /></RoleRoute>} />
+          <Route path="/team-overtime" element={<RoleRoute allowedRoles={['Manager', 'HR Manager', 'HR Staff', 'CEO', 'Group CEO']}><TeamOvertimePage /></RoleRoute>} />
+          <Route path="/leave-approval" element={<RoleRoute allowedRoles={['Manager', 'HR Manager', 'HR Staff', 'CEO', 'Group CEO']}><LeaveApprovalPage /></RoleRoute>} />
+          <Route path="/my-leave" element={<PersonalRoute feature="leave_enabled"><MyLeavePage /></PersonalRoute>} />
+          <Route path="/my-attendance" element={<PersonalRoute feature="attendance_enabled"><MyAttendancePage /></PersonalRoute>} />
+          <Route path="/documents" element={<PersonalRoute><EmployeeDocumentsPage /></PersonalRoute>} />
+          <Route path="/manager/templates" element={<TemplatesRedirect />} />
+          <Route path="/manager/announcements" element={<AnnouncementsRedirect />} />
+          <Route path="/manager/documents" element={<RoleRoute allowedRoles={['Manager', 'HR Manager', 'HR Staff']}><ManagerDocumentsPage /></RoleRoute>} />
+
+          {/* Employee pages */}
+          <Route path="/employee/templates" element={<TemplatesRedirect />} />
+          <Route path="/employee/announcements" element={<AnnouncementsRedirect />} />
+          <Route path="/employee/documents" element={<EmployeeDocumentsPage />} />
+
+          {/* Analytics (Group CEO + HR Manager) */}
+          <Route path="/analytics/workforce" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><WorkforceAnalyticsPage /></RoleRoute>} />
+          <Route path="/analytics/attendance" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><AttendanceReportsPage /></RoleRoute>} />
+          <Route path="/analytics/turnover" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><TurnoverAnalysisPage /></RoleRoute>} />
+          <Route path="/analytics/headcount" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><HeadcountTrendsPage /></RoleRoute>} />
+
+          {/* Leave Management */}
+          <Route path="/leave" element={<RoleRoute allowedRoles={managerUpRoles} actions={['leave.view_all']}><LeaveRequestsPage /></RoleRoute>} />
+          <Route path="/leave/policy" element={<RoleRoute allowedRoles={managerUpRoles} actions={['leave.view_all', 'leave.manage_type']}><LeavePolicyPage /></RoleRoute>} />
+          <Route path="/leave/entitlements" element={<RoleRoute allowedRoles={managerUpRoles} actions={['leave.view_all']}><LeaveEntitlementsPage /></RoleRoute>} />
+          <Route path="/leave/analytics" element={<RoleRoute allowedRoles={managerUpRoles} actions={['leave.view_all']}><LeaveAnalyticsPage /></RoleRoute>} />
+
+          {/* Payroll */}
+          <Route path="/payroll" element={<RoleRoute allowedRoles={payrollReadRoles} actions={['payroll.view']}><PayrollPage /></RoleRoute>} />
+          <Route path="/payroll/summary" element={<RoleRoute allowedRoles={['Group CEO']}><Navigate to="/ceo/payroll-report" replace /></RoleRoute>} />
+          <Route path="/payroll/freelance" element={<RoleRoute allowedRoles={payrollReadRoles} actions={['payroll.view']}><FreelanceInternshipPayrollPage /></RoleRoute>} />
+          <Route path="/contracts" element={<ContractsPage />} />
+          <Route path="/contracts/overview" element={<GroupContractsPage />} />
+
+          {/* Resources */}
+          <Route path="/templates" element={<TemplatesPage />} />
+          <Route path="/resources/templates" element={<TemplatesRedirect />} />
+          <Route path="/announcements" element={<AnnouncementsPage />} />
+          <Route path="/resources/announcements" element={<AnnouncementsRedirect />} />
+          <Route path="/positions" element={<PositionsPage />} />
+          <Route path="/holiday-calendar" element={<HolidayCalendarPage />} />
+          <Route path="/overtime" element={<OvertimePage />} />
+          <Route path="/allowances" element={<AllowancesPage />} />
+          <Route path="/deductions" element={<DeductionsPage />} />
+          <Route path="/settings" element={null} />
+          <Route path="/notifications" element={<NotificationsPage />} />
+          <Route path="/profile" element={null} />
+          <Route path="/settings/profile" element={null} />
+          <Route path="/requests" element={<RequestsPage />} />
+          <Route path="/movement" element={<MovementPage />} />
+          <Route path="/org-chart" element={<OrgChartPage />} />
+
+          {/* Performance */}
+          <Route path="/performance" element={<PerformancePage />} />
+          <Route path="/performance/kpi" element={<KPIDashboardPage />} />
+          <Route path="/performance/goals" element={<GoalsOKRsPage />} />
+
+          {/* Tax — Tax Manager/Staff, Finance Manager, HR Manager. Super Admin bypasses. */}
+          {(() => {
+            const taxRoles = ['Tax Manager', 'Tax Staff', 'Finance Manager', 'HR Manager'];
+            return (
+              <>
+                <Route path="/tax/pph21" element={<RoleRoute allowedRoles={taxRoles}><PPh21Page /></RoleRoute>} />
+                <Route path="/tax/pph-calculation" element={<RoleRoute allowedRoles={taxRoles}><TaxCalculationPage /></RoleRoute>} />
+                <Route path="/tax/pph-history" element={<RoleRoute allowedRoles={taxRoles}><PaymentHistoryPage /></RoleRoute>} />
+                <Route path="/tax/bpjs-kesehatan" element={<RoleRoute allowedRoles={taxRoles}><BPJSKesehatanPage /></RoleRoute>} />
+                <Route path="/tax/bpjs-ketenagakerjaan" element={<RoleRoute allowedRoles={taxRoles}><BPJSKetenagakerjaanPage /></RoleRoute>} />
+                <Route path="/tax/bpjs-reports" element={<RoleRoute allowedRoles={taxRoles}><BPJSReportsPage /></RoleRoute>} />
+                <Route path="/tax/espt" element={<RoleRoute allowedRoles={taxRoles}><ESPTPage /></RoleRoute>} />
+                <Route path="/tax/ebupot" element={<RoleRoute allowedRoles={taxRoles}><EBupotPage /></RoleRoute>} />
+                <Route path="/tax/monthly-reports" element={<RoleRoute allowedRoles={taxRoles}><MonthlyReportsPage /></RoleRoute>} />
+                <Route path="/tax/annual-reports" element={<RoleRoute allowedRoles={taxRoles}><AnnualReportsPage /></RoleRoute>} />
+                <Route path="/tax/rates" element={<RoleRoute allowedRoles={taxRoles}><TaxRatesPage /></RoleRoute>} />
+                <Route path="/tax/ptkp" element={<RoleRoute allowedRoles={taxRoles}><PTKPSettingsPage /></RoleRoute>} />
+                <Route path="/tax/company-npwp" element={<RoleRoute allowedRoles={taxRoles}><CompanyNPWPPage /></RoleRoute>} />
+              </>
+            );
+          })()}
+        </Route>
+
+        {/* Redirect root to dashboard */}
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+
+        {/* 404 */}
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
+      </Suspense>
+      {accountOpen && user && !onboardingRequired && <ProtectedRoute>
+        <Suspense fallback={null}>
+          <AccountSettingsPage active={settingsTab ?? 'profile'} onClose={closeAccount} />
+        </Suspense>
+      </ProtectedRoute>}
+  </>;
+}
+
 function App() {
+  useLocale();
   const { checkAuth, isLoading, user, isAuthenticated, refreshUser } = useAuthStore();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -213,165 +466,10 @@ function App() {
 
   return (
     <BrowserRouter>
-      <Suspense fallback={<FullPageSpinner />}>
-      <Routes>
-        {/* Public routes */}
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-        <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/403" element={<ForbiddenPage />} />
-
-        {/* Protected routes */}
-        <Route
-          element={
-            <ProtectedRoute>
-              <Layout />
-            </ProtectedRoute>
-          }
-        >
-          <Route path="/dashboard" element={<DashboardPageWrapper />} />
-
-          {/* CEO Routes - Keep /ceo-dashboard as alias for backwards compatibility */}
-          <Route path="/ceo-dashboard" element={<Navigate to="/dashboard" replace />} />
-          {/* All /ceo/* routes gated to CEO, Group CEO, HR Manager (Super Admin bypasses).
-              Defense in depth — backend RBAC remains the source of truth. */}
-          <Route path="/ceo/company-performance" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOCompanyPerformancePage /></RoleRoute>} />
-          <Route path="/ceo/workforce-analytics" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOWorkforceAnalyticsPage /></RoleRoute>} />
-          <Route path="/ceo/financial-overview" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'Finance Manager']}><CEOFinancialOverviewPage /></RoleRoute>} />
-          <Route path="/ceo/reports/headcount" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOHeadcountReportPage /></RoleRoute>} />
-          <Route path="/ceo/reports/turnover" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOTurnoverReportPage /></RoleRoute>} />
-          <Route path="/ceo/reports/cost" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'Finance Manager']}><CEOCostReportPage /></RoleRoute>} />
-          <Route path="/ceo/reports/department" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEODepartmentReportPage /></RoleRoute>} />
-          <Route path="/ceo/kpi/dashboard" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOKPIDashboardPage /></RoleRoute>} />
-          <Route path="/ceo/kpi/company-goals" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOCompanyGoalsPage /></RoleRoute>} />
-          <Route path="/ceo/kpi/okr" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOOKRTrackingPage /></RoleRoute>} />
-          <Route path="/ceo/approvals" element={<RoleRoute allowedRoles={['CEO', 'Group CEO']}><CEOApprovalsPage /></RoleRoute>} />
-          <Route path="/ceo/budget-requests" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'Finance Manager']}><CEOBudgetRequestsPage /></RoleRoute>} />
-          <Route path="/ceo/leadership-team" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOLeadershipTeamPage /></RoleRoute>} />
-          <Route path="/ceo/succession-planning" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOSuccessionPlanningPage /></RoleRoute>} />
-          <Route path="/ceo/performance-summary" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOPerformanceSummaryPage /></RoleRoute>} />
-          <Route path="/ceo/talent-overview" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOTalentOverviewPage /></RoleRoute>} />
-          <Route path="/ceo/announcements" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><CEOAnnouncementsPage /></RoleRoute>} />
-          <Route path="/ceo/payroll-report" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'Finance Manager', 'HR Manager']}><CEOPayrollReportPage /></RoleRoute>} />
-
-          <Route path="/employees" element={<EmployeesPage />} />
-          <Route path="/employees/create" element={<EmployeeFormPage />} />
-          <Route path="/employees/:id" element={<EmployeeDetailPage />} />
-          <Route path="/employees/:id/edit" element={<EmployeeFormPage />} />
-          <Route path="/departments" element={<DepartmentsPage />} />
-          <Route path="/work-locations" element={<WorkLocationsPage />} />
-
-          {/* Admin pages — gated to admin-level roles */}
-          <Route path="/users" element={<RoleRoute allowedRoles={['HR Manager']}><UsersPage /></RoleRoute>} />
-          <Route path="/roles" element={<RoleRoute allowedRoles={[]}><RolesPage /></RoleRoute>} />
-          <Route path="/companies" element={<CompaniesPageWrapper />} />
-          <Route path="/company-assignments" element={<RoleRoute allowedRoles={[]}><CompanyAssignmentsPage /></RoleRoute>} />
-          <Route path="/company-features" element={<RoleRoute allowedRoles={[]}><CompanyFeaturesPage /></RoleRoute>} />
-          <Route path="/role-dashboard-config" element={<RoleRoute allowedRoles={[]}><RoleDashboardConfigPage /></RoleRoute>} />
-          <Route path="/system-config" element={<RoleRoute allowedRoles={[]}><SystemConfigPage /></RoleRoute>} />
-          <Route path="/audit-logs" element={<RoleRoute allowedRoles={['HR Manager']}><AuditLogsPage /></RoleRoute>} />
-          <Route path="/payroll-settings" element={<RoleRoute allowedRoles={['HR Manager', 'Finance Manager']}><PayrollSettingsPage /></RoleRoute>} />
-          <Route path="/approval-settings" element={<RoleRoute allowedRoles={['HR Manager']}><ApprovalSettingsPage /></RoleRoute>} />
-
-          {/* System Settings → redirect to SettingsPage with appropriate tab */}
-          <Route path="/settings/general" element={<SettingsPage defaultTab="general" />} />
-          <Route path="/settings/notifications" element={<SettingsPage defaultTab="notifications" />} />
-          <Route path="/settings/integrations" element={<PlaceholderPage title="Integrations" icon="plug" />} />
-          <Route path="/settings/backup" element={<PlaceholderPage title="Backup & Restore" icon="database" />} />
-
-          {/* Security → redirect to SettingsPage security tab */}
-          <Route path="/security/api-keys" element={<PlaceholderPage title="API Keys" icon="key" />} />
-          <Route path="/security/sessions" element={<SettingsPage defaultTab="security" />} />
-          <Route path="/security/login-history" element={<PlaceholderPage title="Login History" icon="history" />} />
-
-          {/* Attendance */}
-          <Route path="/attendance" element={<AttendancePage />} />
-
-          {/* Manager pages — Manager and up; /my-leave is self-service so unrestricted */}
-          <Route path="/my-team" element={<RoleRoute allowedRoles={['Manager', 'HR Manager', 'HR Staff', 'CEO', 'Group CEO']}><MyTeamPage /></RoleRoute>} />
-          <Route path="/team-attendance" element={<RoleRoute allowedRoles={['Manager', 'HR Manager', 'HR Staff', 'CEO', 'Group CEO']}><TeamAttendancePage /></RoleRoute>} />
-          <Route path="/team-overtime" element={<RoleRoute allowedRoles={['Manager', 'HR Manager', 'HR Staff', 'CEO', 'Group CEO']}><TeamOvertimePage /></RoleRoute>} />
-          <Route path="/leave-approval" element={<RoleRoute allowedRoles={['Manager', 'HR Manager', 'HR Staff', 'CEO', 'Group CEO']}><LeaveApprovalPage /></RoleRoute>} />
-          <Route path="/my-leave" element={<MyLeavePage />} />
-          <Route path="/manager/templates" element={<RoleRoute allowedRoles={['Manager', 'HR Manager', 'HR Staff']}><TeamTemplatesPage /></RoleRoute>} />
-          <Route path="/manager/announcements" element={<RoleRoute allowedRoles={['Manager', 'HR Manager', 'HR Staff']}><TeamAnnouncementsPage /></RoleRoute>} />
-          <Route path="/manager/documents" element={<RoleRoute allowedRoles={['Manager', 'HR Manager', 'HR Staff']}><ManagerDocumentsPage /></RoleRoute>} />
-
-          {/* Employee pages */}
-          <Route path="/employee/templates" element={<EmployeeTemplatesPage />} />
-          <Route path="/employee/announcements" element={<EmployeeAnnouncementsPage />} />
-          <Route path="/employee/documents" element={<EmployeeDocumentsPage />} />
-
-          {/* Analytics (Group CEO + HR Manager) */}
-          <Route path="/analytics/workforce" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><WorkforceAnalyticsPage /></RoleRoute>} />
-          <Route path="/analytics/attendance" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><AttendanceReportsPage /></RoleRoute>} />
-          <Route path="/analytics/turnover" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><TurnoverAnalysisPage /></RoleRoute>} />
-          <Route path="/analytics/headcount" element={<RoleRoute allowedRoles={['CEO', 'Group CEO', 'HR Manager']}><HeadcountTrendsPage /></RoleRoute>} />
-
-          {/* Leave Management */}
-          <Route path="/leave" element={<LeaveRequestsPage />} />
-          <Route path="/leave/policy" element={<LeavePolicyPage />} />
-          <Route path="/leave/entitlements" element={<LeaveEntitlementsPage />} />
-          <Route path="/leave/analytics" element={<LeaveAnalyticsPage />} />
-
-          {/* Payroll */}
-          <Route path="/payroll" element={<PayrollPage />} />
-          <Route path="/payroll/freelance" element={<FreelanceInternshipPayrollPage />} />
-          <Route path="/contracts" element={<ContractsPage />} />
-          <Route path="/contracts/overview" element={<GroupContractsPage />} />
-
-          {/* Resources */}
-          <Route path="/resources/templates" element={<TemplatesPage />} />
-          <Route path="/resources/announcements" element={<AnnouncementsPage />} />
-          <Route path="/positions" element={<PositionsPage />} />
-          <Route path="/holiday-calendar" element={<HolidayCalendarPage />} />
-          <Route path="/overtime" element={<OvertimePage />} />
-          <Route path="/allowances" element={<AllowancesPage />} />
-          <Route path="/deductions" element={<DeductionsPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/requests" element={<RequestsPage />} />
-          <Route path="/movement" element={<MovementPage />} />
-          <Route path="/org-chart" element={<OrgChartPage />} />
-
-          {/* Performance */}
-          <Route path="/performance" element={<PerformancePage />} />
-          <Route path="/performance/kpi" element={<KPIDashboardPage />} />
-          <Route path="/performance/goals" element={<GoalsOKRsPage />} />
-
-          {/* Tax — Tax Manager/Staff, Finance Manager, HR Manager. Super Admin bypasses. */}
-          {(() => {
-            const taxRoles = ['Tax Manager', 'Tax Staff', 'Finance Manager', 'HR Manager'];
-            return (
-              <>
-                <Route path="/tax/pph21" element={<RoleRoute allowedRoles={taxRoles}><PPh21Page /></RoleRoute>} />
-                <Route path="/tax/pph-calculation" element={<RoleRoute allowedRoles={taxRoles}><TaxCalculationPage /></RoleRoute>} />
-                <Route path="/tax/pph-history" element={<RoleRoute allowedRoles={taxRoles}><PaymentHistoryPage /></RoleRoute>} />
-                <Route path="/tax/bpjs-kesehatan" element={<RoleRoute allowedRoles={taxRoles}><BPJSKesehatanPage /></RoleRoute>} />
-                <Route path="/tax/bpjs-ketenagakerjaan" element={<RoleRoute allowedRoles={taxRoles}><BPJSKetenagakerjaanPage /></RoleRoute>} />
-                <Route path="/tax/bpjs-reports" element={<RoleRoute allowedRoles={taxRoles}><BPJSReportsPage /></RoleRoute>} />
-                <Route path="/tax/espt" element={<RoleRoute allowedRoles={taxRoles}><ESPTPage /></RoleRoute>} />
-                <Route path="/tax/ebupot" element={<RoleRoute allowedRoles={taxRoles}><EBupotPage /></RoleRoute>} />
-                <Route path="/tax/monthly-reports" element={<RoleRoute allowedRoles={taxRoles}><MonthlyReportsPage /></RoleRoute>} />
-                <Route path="/tax/annual-reports" element={<RoleRoute allowedRoles={taxRoles}><AnnualReportsPage /></RoleRoute>} />
-                <Route path="/tax/rates" element={<RoleRoute allowedRoles={taxRoles}><TaxRatesPage /></RoleRoute>} />
-                <Route path="/tax/ptkp" element={<RoleRoute allowedRoles={taxRoles}><PTKPSettingsPage /></RoleRoute>} />
-                <Route path="/tax/company-npwp" element={<RoleRoute allowedRoles={taxRoles}><CompanyNPWPPage /></RoleRoute>} />
-              </>
-            );
-          })()}
-        </Route>
-
-        {/* Redirect root to dashboard */}
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-
-        {/* 404 */}
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
-      </Suspense>
+      <ApplicationRoutes />
 
       {/* Toast notifications */}
-      <Toaster
+      <ApplicationToaster
         position="top-right"
         toastOptions={{
           duration: 4000,
@@ -411,6 +509,7 @@ function App() {
 
 // Placeholder component for pages not yet implemented
 function PlaceholderPage({ title, icon }: { title: string; icon?: string }) {
+  useLocale();
   const getIcon = () => {
     switch (icon) {
       case 'settings':
@@ -504,17 +603,17 @@ function PlaceholderPage({ title, icon }: { title: string; icon?: string }) {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center py-20">
-      <div className="w-20 h-20 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl flex items-center justify-center text-slate-400 mb-6 shadow-inner">
+    <div className="ph-workflow ph-placeholder">
+      <div className="text-[var(--ph-muted)] mb-5 [&_svg]:w-5 [&_svg]:h-5">
         {getIcon()}
       </div>
-      <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
-      <p className="mt-2 text-gray-500">This page is under construction.</p>
-      <div className="mt-6 flex items-center gap-2 px-4 py-2 bg-amber-50 border border-amber-200 rounded-xl">
-        <svg className="h-5 w-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <h1 className="text-[var(--ph-ink)]">{title}</h1>
+      <p className="mt-2 text-gray-500">{t("This page is under construction.")}</p>
+      <div className="mt-6 inline-flex items-center gap-2 text-[var(--ph-muted)]">
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
         </svg>
-        <span className="text-sm text-amber-700 font-medium">Coming Soon</span>
+        <span className="text-sm">{t("Coming Soon")}</span>
       </div>
     </div>
   );

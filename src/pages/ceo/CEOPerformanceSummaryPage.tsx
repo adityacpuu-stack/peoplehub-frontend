@@ -1,13 +1,8 @@
+import { insightNumber, insightFixed } from '@/pages/ceo/insight-display';
+import { t, useLocale } from '@/i18n';
+import { ReportPage, ReportHeader, ReportSummary, ReportSection } from '@/pages/dashboard/ReportingLayout';
 import { useEffect, useState } from 'react';
-import {
-  Award,
-  TrendingUp,
-  Star,
-  AlertCircle,
-  Calendar,
-  CheckCircle,
-  Loader2,
-} from 'lucide-react';
+import { Calendar, Loader2 } from 'lucide-react';
 import {
   BarChart,
   Bar,
@@ -28,6 +23,7 @@ const RATING_COLORS = ['#ef4444', '#f59e0b', '#6366f1', '#10b981', '#8b5cf6'];
 const RATING_LABELS = ['Needs Improvement', 'Below Expectations', 'Meets Expectations', 'Exceeds Expectations', 'Outstanding'];
 
 export function CEOPerformanceSummaryPage() {
+  useLocale();
   const [groupData, setGroupData] = useState<GroupDashboard | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [reviewStats, setReviewStats] = useState({
@@ -71,7 +67,7 @@ export function CEOPerformanceSummaryPage() {
         // Calculate by department
         const deptMap = new Map<string, { total: number; sumRating: number }>();
         completedReviews.forEach(r => {
-          const dept = r.employee?.department?.name || 'Unknown';
+          const dept = r.employee?.department?.name || '';
           const existing = deptMap.get(dept) || { total: 0, sumRating: 0 };
           existing.total++;
           existing.sumRating += r.overall_rating || 0;
@@ -115,7 +111,7 @@ export function CEOPerformanceSummaryPage() {
       <div className="flex items-center justify-center py-20">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="h-8 w-8 text-indigo-600 animate-spin" />
-          <p className="text-gray-500 text-sm">Loading performance data...</p>
+          <p className="text-gray-500 text-sm">{t("Loading performance data...")}</p>
         </div>
       </div>
     );
@@ -126,93 +122,19 @@ export function CEOPerformanceSummaryPage() {
     : 0;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-900 to-slate-900 rounded-2xl shadow-xl overflow-hidden">
-        <div className="px-4 md:px-8 py-6 md:py-8 relative">
-          <div className="absolute inset-0 opacity-5">
-            <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
-              <defs>
-                <pattern id="perf-summary-pattern" width="60" height="60" patternUnits="userSpaceOnUse">
-                  <path d="M 60 0 L 0 0 0 60" fill="none" stroke="white" strokeWidth="1"/>
-                </pattern>
-              </defs>
-              <rect width="100%" height="100%" fill="url(#perf-summary-pattern)" />
-            </svg>
-          </div>
-
-          <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 md:w-14 md:h-14 bg-gradient-to-br from-yellow-400 to-amber-600 rounded-2xl flex items-center justify-center shadow-lg">
-                <Award className="h-6 w-6 md:h-7 md:w-7 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl md:text-2xl font-bold text-white">Performance Summary</h1>
-                <p className="text-slate-400 text-xs md:text-sm mt-1">Organization-wide performance overview</p>
-              </div>
-            </div>
-            <span className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur-xl rounded-xl text-sm text-white font-medium border border-white/10">
+    <ReportPage>{/* Header */}<ReportHeader>
+<div className="report-heading"><h1 className="text-xl md:text-2xl font-bold">{t("Performance Summary")}</h1><p className="text-xs md:text-sm mt-1">{t("Organization-wide performance overview")}</p></div>
+<div className="report-header-context"><span className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium border">
               <Calendar className="h-4 w-4" />
-              {new Date().getFullYear()} Review Cycle
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-md">
-              <Star className="h-5 w-5 text-white" />
-            </div>
-          </div>
-          <p className="text-xl md:text-2xl font-bold text-gray-900">{reviewStats.avgRating.toFixed(1)}</p>
-          <p className="text-xs text-gray-500">Avg Rating (out of 5)</p>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-md">
-              <CheckCircle className="h-5 w-5 text-white" />
-            </div>
-          </div>
-          <p className="text-xl md:text-2xl font-bold text-gray-900">{completionRate}%</p>
-          <p className="text-xs text-gray-500">Review Completion</p>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-violet-600 rounded-xl flex items-center justify-center shadow-md">
-              <TrendingUp className="h-5 w-5 text-white" />
-            </div>
-          </div>
-          <p className="text-xl md:text-2xl font-bold text-gray-900">{reviewStats.topPerformers}</p>
-          <p className="text-xs text-gray-500">Top Performers</p>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl flex items-center justify-center shadow-md">
-              <AlertCircle className="h-5 w-5 text-white" />
-            </div>
-          </div>
-          <p className="text-xl md:text-2xl font-bold text-gray-900">{reviewStats.needsImprovement}</p>
-          <p className="text-xs text-gray-500">Needs Development</p>
-        </div>
-      </div>
-
-      {/* Charts Row */}
-      <div className="grid lg:grid-cols-2 gap-6">
+              {new Date().getFullYear()}{' '}{t("Review Cycle")} </span></div>
+</ReportHeader>{/* Stats */}<ReportSummary><div className="report-metric"><div  className="report-metric-context"></div><p className="report-metric-value">{insightFixed(reviewStats.avgRating, 1)}</p><p className="report-metric-label">{t("Avg Rating (out of 5)")}</p></div><div className="report-metric"><div  className="report-metric-context"></div><p className="report-metric-value">{insightNumber(completionRate)}%</p><p className="report-metric-label">{t("Review Completion")}</p></div><div className="report-metric"><div  className="report-metric-context"></div><p className="report-metric-value">{insightNumber(reviewStats.topPerformers)}</p><p className="report-metric-label">{t("Top Performers")}</p></div><div className="report-metric"><div  className="report-metric-context"></div><p className="report-metric-value">{insightNumber(reviewStats.needsImprovement)}</p><p className="report-metric-label">{t("Needs Development")}</p></div></ReportSummary>{/* Charts Row */}<div className="grid lg:grid-cols-2 gap-6">
         {/* Rating Distribution */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-6">
-          <h3 className="text-base md:text-lg font-bold text-gray-900 mb-4">Rating Distribution</h3>
-          <div className="h-56 md:h-64">
+        <ReportSection><h3 className="text-base md:text-lg font-bold text-gray-900 mb-4">{t("Rating Distribution")}</h3><div className="h-56 md:h-64">
             {reviewStats.ratings.some(r => r.count > 0) ? (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={reviewStats.ratings.filter(r => r.count > 0)}
+                    data={reviewStats.ratings.filter(r => r.count > 0).map(item => ({ ...item, label: t(item.label) }))}
                     cx="50%"
                     cy="50%"
                     innerRadius={50}
@@ -225,48 +147,35 @@ export function CEOPerformanceSummaryPage() {
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value) => `${value} employees`} />
+                  <Tooltip formatter={(value) => t('{count} employees', { count: insightNumber(Number(value)) })} />
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-full text-gray-400">
-                No rating data available
-              </div>
+              <div className="flex items-center justify-center h-full text-gray-400">{t("No rating data available")} </div>
             )}
-          </div>
-        </div>
+          </div></ReportSection>
 
         {/* Performance by Department */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-6">
-          <h3 className="text-base md:text-lg font-bold text-gray-900 mb-4">Avg Score by Department</h3>
-          <div className="h-56 md:h-64">
+        <ReportSection><h3 className="text-base md:text-lg font-bold text-gray-900 mb-4">{t("Avg Score by Department")}</h3><div className="h-56 md:h-64">
             {reviewStats.byDepartment.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={reviewStats.byDepartment} layout="vertical" margin={{ top: 10, right: 10, left: 60, bottom: 0 }}>
+                <BarChart data={reviewStats.byDepartment.map(item => ({ ...item, name: item.name || t('Unknown') }))} layout="vertical" margin={{ top: 10, right: 10, left: 60, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis type="number" domain={[0, 5]} tick={{ fontSize: 11 }} stroke="#9ca3af" />
+                  <XAxis tickFormatter={insightNumber} type="number" domain={[0, 5]} tick={{ fontSize: 11 }} stroke="#9ca3af" />
                   <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} stroke="#9ca3af" width={60} />
-                  <Tooltip />
-                  <Bar dataKey="avgScore" fill="#6366f1" radius={[0, 4, 4, 0]} name="Avg Score" />
+                  <Tooltip formatter={(value) => typeof value === 'number' ? insightNumber(value) : value} />
+                  <Bar dataKey="avgScore" fill="#6366f1" radius={[0, 4, 4, 0]} name={t("Avg Score")} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-full text-gray-400">
-                No department data available
-              </div>
+              <div className="flex items-center justify-center h-full text-gray-400">{t("No department data available")} </div>
             )}
-          </div>
-        </div>
-      </div>
-
-      {/* Rating Breakdown */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-6">
-        <h3 className="text-base md:text-lg font-bold text-gray-900 mb-4">Detailed Rating Breakdown</h3>
-        <div className="space-y-4">
+          </div></ReportSection>
+      </div>{/* Rating Breakdown */}<ReportSection><h3 className="text-base md:text-lg font-bold text-gray-900 mb-4">{t("Detailed Rating Breakdown")}</h3><div className="space-y-4">
           {reviewStats.ratings.map((rating, index) => (
             <div key={index} className="flex items-center gap-4">
-              <div className="w-32 md:w-40 text-sm font-medium text-gray-700">{rating.label}</div>
+              <div className="w-32 md:w-40 text-sm font-medium text-gray-700">{t(rating.label)}</div>
               <div className="flex-1">
                 <div className="flex items-center gap-2">
                   <div className="flex-1 bg-gray-100 rounded-full h-3">
@@ -276,14 +185,12 @@ export function CEOPerformanceSummaryPage() {
                     />
                   </div>
                   <span className="text-sm font-medium text-gray-600 w-20 text-right">
-                    {rating.count} ({rating.percentage}%)
+                    {insightNumber(rating.count)} ({insightNumber(rating.percentage)}%)
                   </span>
                 </div>
               </div>
             </div>
           ))}
-        </div>
-      </div>
-    </div>
+        </div></ReportSection></ReportPage>
   );
 }

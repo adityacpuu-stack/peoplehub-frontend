@@ -3,7 +3,7 @@ import type { ApiResponse, PaginatedResponse, Position, PaginationParams } from 
 
 interface PositionListParams extends PaginationParams {
   company_id?: number;
-  department_id?: number;
+  department_id?: number | null;
   status?: string;
   search?: string;
 }
@@ -13,10 +13,10 @@ interface CreatePositionRequest {
   code?: string;
   description?: string;
   company_id: number;
-  department_id?: number;
-  level?: number;
-  min_salary?: number;
-  max_salary?: number;
+  department_id?: number | null;
+  level?: number | null;
+  min_salary?: number | null;
+  max_salary?: number | null;
   status?: string;
 }
 
@@ -60,7 +60,7 @@ export interface PositionOption {
 export const positionService = {
   // Lightweight dropdown options ({id, name, ...}, no pagination).
   // Prefer this over getAll() when populating a select.
-  getOptions: async (params?: { department_id?: number; company_id?: number }): Promise<PositionOption[]> => {
+  getOptions: async (params?: { department_id?: number | null; company_id?: number }): Promise<PositionOption[]> => {
     // No /positions/options route on the BE → would hit /:id with id="options".
     // Use the working list endpoint and project to options.
     const response = await api.get<{ success: boolean; data: PositionOption[] }>(

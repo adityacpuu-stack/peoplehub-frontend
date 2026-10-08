@@ -1,34 +1,12 @@
-import {
-  Users,
-  Building2,
-  Clock,
-  Calendar,
-  UserPlus,
-  ArrowRight,
-  BarChart3,
-  FileText,
-  CheckCircle,
-  DollarSign,
-  Wallet,
-} from 'lucide-react';
+import { t, useLocale, intlLocale } from '@/i18n';
+import { ArrowRight, CalendarDays, Clock3, FileCheck2, RefreshCw, UserPlus, Users, Wallet } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import {
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  BarChart,
-  Bar,
-} from 'recharts';
 import type { DashboardOverview } from '@/services/dashboard.service';
-import type { DashboardStats } from '@/types';
-import { formatNumber } from '@/lib/utils';
-
-const DEPARTMENT_COLORS = ['#3b82f6', '#6366f1', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ec4899', '#ef4444'];
+import type { DashboardStats, User } from '@/types';
+import { getNavigation } from '@/components/layout/navigation';
+import { useNavigationConfig } from '@/components/layout/useNavigationConfig';
+import { canAction } from '@/lib/actions';
+import './hr-dashboard.css';
 
 interface PayrollSummaryData {
   current_period: {
@@ -42,431 +20,75 @@ interface PayrollSummaryData {
   pending_adjustments: number;
   pending_overtime: number;
 }
-
 interface Props {
-  user: { employee?: { name?: string }; email?: string } | null;
+  user: User | null;
   stats: DashboardStats | null;
   overview: DashboardOverview | null;
   payrollSummary: PayrollSummaryData | null;
+  /** Payroll figures withheld for this account (no payroll.view / denied); shown as unavailable, never zero. */
+  payrollUnavailable?: boolean;
   greeting: () => string;
+  failed?: boolean;
+  onRetry: () => void;
 }
+const payrollStatuses: Record<string, string> = { draft: 'Draft', generated: 'Generated', pending: 'Pending', approved: 'Approved', paid: 'Paid', processed: 'Processed', finalized: 'Finalized', cancelled: 'Cancelled' };
+const numeric = (value: unknown) => value != null && Number.isFinite(Number(value)) ? Number(value) : null;
+const count = (value: unknown) => numeric(value)?.toLocaleString(intlLocale()) ?? '\u2014';
+const money = (value: unknown) => numeric(value) == null ? '\u2014' : new Intl.NumberFormat(intlLocale(), { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(value));
+const calendarDate = (value: string) => {
+  const date = new Date(value.slice(0, 10) + 'T00:00:00Z');
+  return Number.isNaN(date.getTime()) ? '\u2014' : date.toLocaleDateString(intlLocale(), { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+};
 
-export function HRDashboard({ user, stats, overview, payrollSummary, greeting }: Props) {
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(value);
-  };
-
-  const formatCompactCurrency = (value: number) => {
-    if (value >= 1_000_000_000) {
-      return `${(value / 1_000_000_000).toFixed(1)}B`;
-    }
-    if (value >= 1_000_000) {
-      return `${(value / 1_000_000).toFixed(0)}M`;
-    }
-    if (value >= 1_000) {
-      return `${(value / 1_000).toFixed(0)}K`;
-    }
-    return value.toString();
-  };
-
-  // Compute department data from overview
-  const departmentData = overview?.employee?.by_department
-    ? overview.employee.by_department.map((dept, index) => ({
-        id: `dept-${index}`,
-        name: dept.department,
-        value: dept.count,
-        color: DEPARTMENT_COLORS[index % DEPARTMENT_COLORS.length],
-      }))
-    : [];
-
-  const totalDeptEmployees = departmentData.reduce((sum, d) => sum + d.value, 0);
-  const departmentDataPercent = departmentData.map(d => ({
-    ...d,
-    percent: totalDeptEmployees > 0 ? Math.round((d.value / totalDeptEmployees) * 100) : 0,
-  }));
-
-  // Compute payroll data for display
-  const payrollPeriod = payrollSummary?.current_period;
-  const payrollChartData = payrollPeriod ? [
-    { name: 'Gross Salary', value: payrollPeriod.total_gross, fill: '#3b82f6' },
-    { name: 'Deductions', value: payrollPeriod.total_deductions, fill: '#ef4444' },
-    { name: 'Net Salary', value: payrollPeriod.total_net, fill: '#22c55e' },
-  ] : [];
-
-  return (
-    <div className="space-y-6">
-      {/* Header Banner with Gradient */}
-      <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-2xl shadow-xl overflow-hidden">
-        <div className="px-6 md:px-8 py-8 md:py-10 relative">
-          {/* Background Pattern */}
-          <div className="absolute inset-0 opacity-10">
-            <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
-              <defs>
-                <pattern id="dashboard-grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                  <path d="M 40 0 L 0 0 0 40" fill="none" stroke="white" strokeWidth="1"/>
-                </pattern>
-              </defs>
-              <rect width="100%" height="100%" fill="url(#dashboard-grid)" />
-            </svg>
-          </div>
-
-          <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-            <div className="flex-1">
-              <div className="flex items-center gap-4 mb-3">
-                <div className="w-14 h-14 bg-white/20 backdrop-blur-xl rounded-2xl flex items-center justify-center shadow-lg">
-                  <BarChart3 className="h-7 w-7 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-2xl md:text-3xl font-bold text-white">
-                    {greeting()}, {user?.employee?.name?.split(' ')[0] || user?.email?.split('@')[0]}!
-                  </h1>
-                  <p className="text-blue-100 text-sm mt-1">Here's your workforce overview for today</p>
-                </div>
-              </div>
-              <div className="flex flex-wrap items-center gap-3 mt-4">
-                <span className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-xl rounded-xl text-sm text-white font-medium">
-                  <Users className="h-4 w-4" />
-                  {formatNumber(stats?.active_employees || 0)} Active Employees
-                </span>
-                <span className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-xl rounded-xl text-sm text-white font-medium">
-                  <Building2 className="h-4 w-4" />
-                  {formatNumber(stats?.departments_count || 0)} Departments
-                </span>
-                <span className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-xl rounded-xl text-sm text-white font-medium">
-                  <Clock className="h-4 w-4" />
-                  {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Stats Cards - White with Gradient Icons */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-        {/* Total Employees */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
-          <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
-              <Users className="h-5 w-5 text-white" />
-            </div>
-            <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-1 rounded-lg">Active</span>
-          </div>
-          <p className="text-3xl font-bold text-gray-900 mb-1">{formatNumber(stats?.active_employees || 0)}</p>
-          <p className="text-sm text-gray-500">Active Employees</p>
-        </div>
-
-        {/* Departments */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
-          <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-              <Building2 className="h-5 w-5 text-white" />
-            </div>
-            <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-1 rounded-lg">Active</span>
-          </div>
-          <p className="text-3xl font-bold text-gray-900 mb-1">{formatNumber(stats?.departments_count || 0)}</p>
-          <p className="text-sm text-gray-500">Departments</p>
-        </div>
-
-        {/* New Hires */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
-          <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg">
-              <UserPlus className="h-5 w-5 text-white" />
-            </div>
-            <span className="inline-flex items-center px-2 py-1 bg-green-50 text-green-700 text-xs font-bold rounded-lg">
-              This Month
-            </span>
-          </div>
-          <p className="text-3xl font-bold text-gray-900 mb-1">{formatNumber(stats?.new_hires_this_month || 0)}</p>
-          <p className="text-sm text-gray-500">New Hires</p>
-        </div>
-
-        {/* Monthly Payroll */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
-          <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-lg">
-              <DollarSign className="h-5 w-5 text-white" />
-            </div>
-            <span className="inline-flex items-center px-2 py-1 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-lg">
-              This Month
-            </span>
-          </div>
-          <p className="text-3xl font-bold text-gray-900 mb-1">
-            {payrollPeriod ? formatCompactCurrency(payrollPeriod.total_net) : '-'}
-          </p>
-          <p className="text-sm text-gray-500">Net Payroll</p>
-        </div>
-      </div>
-
-      {/* Charts Row */}
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* Payroll Overview Chart */}
-        <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-shadow">
-          <div className="flex items-start justify-between mb-6">
-            <div>
-              <h3 className="text-lg font-bold text-gray-900">Payroll Overview</h3>
-              <p className="text-xs text-gray-500 mt-1">
-                {payrollPeriod ? `Period: ${payrollPeriod.period} • ${payrollPeriod.total_employees} employees` : 'Current month breakdown'}
-              </p>
-            </div>
-            <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-md">
-              <Wallet className="h-5 w-5 text-white" />
-            </div>
-          </div>
-          {payrollPeriod ? (
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={payrollChartData}
-                  margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="name" tick={{ fontSize: 12 }} stroke="#9ca3af" />
-                  <YAxis
-                    tick={{ fontSize: 12 }}
-                    stroke="#9ca3af"
-                    tickFormatter={(value) => formatCompactCurrency(value)}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'white',
-                      border: 'none',
-                      borderRadius: '12px',
-                      boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)',
-                    }}
-                    formatter={(value) => [formatCurrency(value as number), 'Amount']}
-                  />
-                  <Bar dataKey="value" radius={[8, 8, 0, 0]}>
-                    {payrollChartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.fill} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className="h-64 flex flex-col items-center justify-center text-gray-400">
-              <Wallet className="h-12 w-12 mb-3 opacity-50" />
-              <p className="text-sm">No payroll data for current period</p>
-              <p className="text-xs mt-1">Payroll data will appear once processed</p>
-            </div>
-          )}
-        </div>
-
-        {/* Department Distribution */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-shadow">
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <h3 className="text-lg font-bold text-gray-900">Department Distribution</h3>
-              <p className="text-xs text-gray-500 mt-1">Employee by department</p>
-            </div>
-            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center shadow-md">
-              <Building2 className="h-5 w-5 text-white" />
-            </div>
-          </div>
-          {departmentDataPercent.length > 0 ? (
-            <>
-              <div className="h-48">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={departmentDataPercent}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={50}
-                      outerRadius={70}
-                      paddingAngle={3}
-                      dataKey="value"
-                    >
-                      {departmentDataPercent.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(value) => [`${value ?? 0} employees`, 'Count']} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="grid grid-cols-2 gap-2 mt-2 max-h-32 overflow-y-auto">
-                {departmentDataPercent.map((dept) => (
-                  <div key={dept.id} className="flex items-center gap-2 text-sm">
-                    <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: dept.color }} />
-                    <span className="text-gray-600 truncate" title={dept.name}>{dept.name}</span>
-                    <span className="text-gray-400 ml-auto">{dept.percent}%</span>
-                  </div>
-                ))}
-              </div>
-            </>
-          ) : (
-            <div className="h-48 flex items-center justify-center text-gray-400">
-              <p className="text-sm">No department data available</p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Bottom Row */}
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* Payroll Summary */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-shadow">
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <h3 className="text-lg font-bold text-gray-900">Payroll Summary</h3>
-              <p className="text-xs text-gray-500 mt-1">{payrollPeriod?.period || 'Current period'}</p>
-            </div>
-            <Link to="/payroll" className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1">
-              View All <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 rounded-xl bg-blue-50 border border-blue-100">
-              <div className="flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full bg-blue-500" />
-                <span className="text-sm font-medium text-gray-700">Gross Salary</span>
-              </div>
-              <span className="font-bold text-blue-600 text-sm">
-                {payrollPeriod ? formatCurrency(payrollPeriod.total_gross) : '-'}
-              </span>
-            </div>
-            <div className="flex items-center justify-between p-3 rounded-xl bg-red-50 border border-red-100">
-              <div className="flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full bg-red-500" />
-                <span className="text-sm font-medium text-gray-700">Total Deductions</span>
-              </div>
-              <span className="font-bold text-red-600 text-sm">
-                {payrollPeriod ? formatCurrency(payrollPeriod.total_deductions) : '-'}
-              </span>
-            </div>
-            <div className="flex items-center justify-between p-3 rounded-xl bg-green-50 border border-green-100">
-              <div className="flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full bg-green-500" />
-                <span className="text-sm font-medium text-gray-700">Net Salary</span>
-              </div>
-              <span className="font-bold text-green-600 text-sm">
-                {payrollPeriod ? formatCurrency(payrollPeriod.total_net) : '-'}
-              </span>
-            </div>
-            <div className="flex items-center justify-between p-3 rounded-xl bg-purple-50 border border-purple-100">
-              <div className="flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full bg-purple-500" />
-                <span className="text-sm font-medium text-gray-700">Employees</span>
-              </div>
-              <span className="font-bold text-purple-600">
-                {payrollPeriod?.total_employees ?? '-'}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Pending Requests */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-shadow">
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <h3 className="text-lg font-bold text-gray-900">Pending Approvals</h3>
-              <p className="text-xs text-gray-500 mt-1">Requests awaiting action</p>
-            </div>
-            <Link to="/leave" className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1">
-              View All <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-100">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl flex items-center justify-center shadow-md">
-                  <Calendar className="h-5 w-5 text-white" />
-                </div>
-                <div>
-                  <p className="font-semibold text-gray-900">Leave Requests</p>
-                  <p className="text-xs text-gray-500">Awaiting approval</p>
-                </div>
-              </div>
-              <span className="text-2xl font-bold text-amber-600">{overview?.leave?.pending_requests ?? stats?.pending_requests?.leave ?? 0}</span>
-            </div>
-            <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-md">
-                  <Clock className="h-5 w-5 text-white" />
-                </div>
-                <div>
-                  <p className="font-semibold text-gray-900">Overtime</p>
-                  <p className="text-xs text-gray-500">Awaiting approval</p>
-                </div>
-              </div>
-              <span className="text-2xl font-bold text-blue-600">{stats?.pending_requests?.overtime ?? 0}</span>
-            </div>
-            {overview?.leave?.approved_this_month !== undefined && (
-              <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-green-50 to-emerald-50 border border-green-100">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-md">
-                    <CheckCircle className="h-5 w-5 text-white" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900">Approved This Month</p>
-                    <p className="text-xs text-gray-500">Leave requests</p>
-                  </div>
-                </div>
-                <span className="text-2xl font-bold text-green-600">{overview.leave.approved_this_month}</span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-shadow">
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <h3 className="text-lg font-bold text-gray-900">Quick Actions</h3>
-              <p className="text-xs text-gray-500 mt-1">Frequently used features</p>
-            </div>
-            <div className="w-10 h-10 bg-gradient-to-br from-gray-500 to-gray-600 rounded-xl flex items-center justify-center shadow-md">
-              <FileText className="h-5 w-5 text-white" />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Link
-              to="/employees/create"
-              className="flex flex-col items-center gap-2 p-4 rounded-xl bg-gray-50 hover:bg-blue-50 border border-gray-100 hover:border-blue-200 transition-all group"
-            >
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
-                <UserPlus className="h-5 w-5 text-white" />
-              </div>
-              <span className="text-xs font-medium text-gray-600 group-hover:text-blue-700">Add Employee</span>
-            </Link>
-            <Link
-              to="/attendance"
-              className="flex flex-col items-center gap-2 p-4 rounded-xl bg-gray-50 hover:bg-indigo-50 border border-gray-100 hover:border-indigo-200 transition-all group"
-            >
-              <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
-                <Clock className="h-5 w-5 text-white" />
-              </div>
-              <span className="text-xs font-medium text-gray-600 group-hover:text-indigo-700">Attendance</span>
-            </Link>
-            <Link
-              to="/leave"
-              className="flex flex-col items-center gap-2 p-4 rounded-xl bg-gray-50 hover:bg-purple-50 border border-gray-100 hover:border-purple-200 transition-all group"
-            >
-              <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
-                <Calendar className="h-5 w-5 text-white" />
-              </div>
-              <span className="text-xs font-medium text-gray-600 group-hover:text-purple-700">Leave</span>
-            </Link>
-            <Link
-              to="/departments"
-              className="flex flex-col items-center gap-2 p-4 rounded-xl bg-gray-50 hover:bg-amber-50 border border-gray-100 hover:border-amber-200 transition-all group"
-            >
-              <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
-                <Building2 className="h-5 w-5 text-white" />
-              </div>
-              <span className="text-xs font-medium text-gray-600 group-hover:text-amber-700">Departments</span>
-            </Link>
-          </div>
-        </div>
-      </div>
+export function HRDashboard({ user, stats, overview, payrollSummary, payrollUnavailable = false, greeting, failed, onRetry }: Props) {
+  useLocale();
+  useNavigationConfig();
+  const navigation = getNavigation(user);
+  const can = (path: string) => navigation.links.some(link => link.path === path);
+  const canCreate = can('/employees') && user?.roles.some(role => ['Super Admin', 'Group CEO', 'CEO', 'HR Manager', 'HR Staff'].includes(role))
+    && canAction(user, 'employee.create');
+  const name = user?.employee?.name?.split(' ')[0] || user?.email?.split('@')[0] || t('there');
+  const header = <header className="hr-home-heading"><div><span className="hr-home-eyebrow">{t("People & Culture")}</span><h1>{greeting()}, {name}.</h1><p>{t("Your workforce and daily priorities, at a glance.")}</p></div><div className="hr-home-actions"><button className="hr-refresh" onClick={onRetry} aria-label={t("Refresh dashboard")}><RefreshCw size={17} /></button>{canCreate && <Link className="hr-primary-action" to="/employees/create"><UserPlus size={17} />{t("Add employee")}</Link>}</div></header>;
+  if (failed || !stats || !overview || (!payrollSummary && !payrollUnavailable)) return <div className="hr-home">{header}<section className="hr-home-error" role="alert"><h2>{t("Dashboard data could not be loaded")}</h2><p>{t("Try again to load workforce, request and payroll summaries.")}</p><button className="hr-primary-action" onClick={onRetry}><RefreshCw size={16} />{t("Try again")}</button></section></div>;
+  const payroll = payrollSummary?.current_period ?? null;
+  const departments = overview.employee.by_department;
+  const largestDepartment = Math.max(0, ...departments.map(item => numeric(item.count) ?? 0));
+  const pending = [
+    { label: 'Leave requests', detail: 'Review submitted leave', value: overview.leave.pending_requests ?? stats.pending_requests.leave, path: '/leave', icon: CalendarDays },
+    { label: 'Overtime requests', detail: 'Review overtime submissions', value: stats.pending_requests.overtime, path: '/overtime', icon: Clock3 },
+    // Without payroll figures the count renders as "—" (count(undefined)), never 0.
+    { label: 'Payroll adjustments', detail: 'Review pending adjustments', value: payrollSummary?.pending_adjustments, path: '/payroll', icon: FileCheck2 },
+  ].filter(item => can(item.path) && (item.path !== '/payroll' || payrollSummary));
+  return <div className="hr-home">
+    {header}
+    <div className="hr-home-context"><span><span className="hr-scope-dot" />{t("Assigned company scope")}</span><time>{new Date().toLocaleDateString(intlLocale(), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' })}{' '}{t("/ WIB")}</time></div>
+    <section className="hr-workforce-metrics" aria-label={t("Workforce summary")}>
+      <div><span>{t("Active employees")}</span><strong>{count(stats.active_employees)}</strong>{can('/employees') ? <Link to="/employees">{t("Open employee directory")} <ArrowRight size={13} /></Link> : <small>{t("Within your assigned scope")}</small>}</div>
+      <div><span>{t("New joiners")}</span><strong>{count(stats.new_hires_this_month)}</strong><small>{t("This month")}</small></div>
+      <div><span>{t("Departments")}</span><strong>{count(stats.departments_count)}</strong><small>{t("Across your assigned companies")}</small></div>
+      {can('/leave') && <div><span>{t("On leave today")}</span><strong>{count(overview.leave.on_leave_today)}</strong><small>{t("Approved leave")}</small></div>}
+    </section>
+    <div className="hr-home-top-grid">
+      <section className="hr-home-panel hr-priorities" aria-labelledby="hr-priorities"><div className="hr-panel-heading"><div><h2 id="hr-priorities">{t("Needs attention")}</h2><p>{t("Pending work across your assigned companies")}</p></div><span className="hr-section-symbol"><FileCheck2 size={20} /></span></div>
+        {pending.length ? <div className="hr-priority-list">{pending.map(item => <Link key={item.path} to={item.path}><span className="hr-priority-icon"><item.icon size={19} /></span><span className="hr-priority-label"><strong>{t(item.label)}</strong><small>{t(item.detail)}</small></span><b data-pending={(numeric(item.value) ?? 0) > 0}>{count(item.value)}</b><ArrowRight size={16} /></Link>)}</div> : <p className="hr-empty">{t("No review modules are enabled for your account.")}</p>}
+        {can('/requests') && <Link className="hr-panel-link" to="/requests">{t("Open My Approval")} <ArrowRight size={15} /></Link>}
+      </section>
+      {can('/payroll') && <section className="hr-home-panel hr-payroll-summary" aria-labelledby="hr-payroll"><div className="hr-panel-heading"><div><h2 id="hr-payroll">{t("Payroll summary")}</h2><p>{payroll ? t('Period {period} / {count} employees', { period: payroll.period, count: count(payroll.total_employees) }) : t("Current payroll period")}</p></div><span className="hr-section-symbol"><Wallet size={20} /></span></div>
+        {!payrollSummary ? <div className="hr-empty" data-testid="payroll-unavailable"><strong>{t("Payroll figures unavailable")}</strong><p>{t("Your access does not include payroll totals.")}</p></div>
+        : payroll ? <><div className="hr-payroll-total"><span>{t("Net payroll")}</span><strong>{money(payroll.total_net)}</strong><span className="hr-payroll-status">{payrollStatuses[payroll.status] ? t(payrollStatuses[payroll.status]) : payroll.status}</span></div><dl className="hr-payroll-breakdown"><div><dt>{t("Gross salary")}</dt><dd>{money(payroll.total_gross)}</dd></div><div><dt>{t("Deductions")}</dt><dd>{money(payroll.total_deductions)}</dd></div></dl></> : <div className="hr-empty"><strong>{t("No payroll for this period")}</strong><p>{t("The summary will appear after payroll is generated.")}</p></div>}
+        <Link className="hr-panel-link" to="/payroll">{t("Open payroll")} <ArrowRight size={15} /></Link>
+      </section>}
     </div>
-  );
+    <div className="hr-home-bottom-grid">
+      <section className="hr-home-panel" aria-labelledby="hr-departments"><div className="hr-panel-heading"><div><h2 id="hr-departments">{t("Workforce by department")}</h2><p>{t("Headcount in your assigned company scope")}</p></div><Users size={19} /></div>
+        {departments.length ? <ul className="hr-department-list">{departments.map((department, index) => <li key={`${department.department}-${index}`}><div><span>{department.department}</span><strong>{count(department.count)}</strong></div><div className="hr-department-track" aria-hidden="true"><span style={{ width: `${largestDepartment > 0 ? Math.min(100, Math.max(0, (numeric(department.count) ?? 0) / largestDepartment * 100)) : 0}%` }} /></div></li>)}</ul> : <p className="hr-empty">{t("No department data available.")}</p>}
+        {can('/departments') && <Link className="hr-panel-link" to="/departments">{t("Manage departments")} <ArrowRight size={15} /></Link>}
+      </section>
+      {can('/leave') && <section className="hr-home-panel" aria-labelledby="hr-upcoming"><div className="hr-panel-heading"><div><h2 id="hr-upcoming">{t("Upcoming leave")}</h2><p>{t("Plan ahead for approved time off")}</p></div><CalendarDays size={19} /></div>
+        {overview.leave.upcoming_leaves.length ? <ul className="hr-upcoming-list">{overview.leave.upcoming_leaves.map((leave, index) => <li key={`${leave.employee_name}-${leave.start_date}-${index}`}><span className="hr-person-initial" aria-hidden="true">{leave.employee_name.trim().charAt(0)}</span><div><strong>{leave.employee_name}</strong><span>{leave.leave_type}</span><time>{calendarDate(leave.start_date)}{' – '} {calendarDate(leave.end_date)}</time></div></li>)}</ul> : <p className="hr-empty">{t("No upcoming approved leave in this overview.")}</p>}
+        <Link className="hr-panel-link" to="/leave">{t("View leave requests")} <ArrowRight size={15} /></Link>
+      </section>}
+    </div>
+    <footer className="hr-home-footer"><span>{t("PeopleHub / PFIGroups")}</span><span>{t("People & Culture workspace")}</span></footer>
+  </div>;
 }

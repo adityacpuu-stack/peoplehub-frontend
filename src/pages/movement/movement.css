@@ -1,0 +1,69 @@
+.movement-note { font-size:12px; color:var(--ph-muted, #65716b); line-height:1.6; }
+.movement-note summary { cursor:pointer; padding:10px 0; white-space:nowrap; }
+.movement-note[open] { flex-basis:100%; }
+.movement-note p { max-width:75ch; padding-bottom:6px; }
+.movement-search { min-width:180px; flex:1 1 240px; }
+.movement-search input { border:1px solid var(--ph-line, #e4e9e6); border-radius:6px; padding:9px 11px; font-size:14px; width:100%; color:var(--ph-ink, #24302b); background:transparent; }
+.movement-toolbar p { font-size:13px; color:var(--ph-muted, #65716b); }
+.movement-columns,.movement-record { display:grid; grid-template-columns:minmax(160px,1.15fr) minmax(130px,1fr) minmax(130px,1fr) 135px 150px; gap:22px; padding:14px 0; align-items:start; }
+.movement-columns { padding:10px 0; font-size:12px; color:var(--ph-muted, #65716b); border-bottom:1px solid var(--ph-line, #e4e9e6); }
+.movement-record { border-bottom:1px solid var(--ph-line, #e4e9e6); font-size:14px; }
+.movement-person h3 { font-size:14px; font-weight:600; overflow-wrap:anywhere; }
+.movement-person p { font-size:12px; color:var(--ph-muted, #65716b); margin-top:4px; }
+.movement-person>span { font-size:12px; color:var(--ph-muted, #65716b); display:block; margin-top:4px; }
+.movement-state { min-width:0; font-size:14px; line-height:1.55; overflow-wrap:anywhere; }
+.movement-state strong { font-weight:400; }
+.movement-state span { display:block; font-size:12px; color:var(--ph-muted, #65716b); margin-top:3px; font-variant-numeric:tabular-nums; }
+.movement-effective { font-size:13px; line-height:1.6; font-variant-numeric:tabular-nums; }
+.movement-actions { display:flex; gap:8px 12px; align-items:center; flex-wrap:wrap; }
+.movement-actions>.ow-status { margin-right:auto; }
+.movement-actions>.ow-button { background:transparent; padding:4px 0; min-height:28px; border:0; font-size:13px; font-weight:400; color:var(--ph-accent, #187451); }
+.movement-actions>div { display:flex; gap:14px; width:100%; }
+.movement-actions>div button { font-size:12px; color:var(--ph-muted, #65716b); padding:4px 0; }
+.movement-actions>div button:hover { color:var(--ph-accent, #187451); text-decoration:underline; }
+.movement-mobile-label { display:none; }
+.movement-detail-meta { display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:14px; margin-bottom:20px; }
+.movement-comparison { display:grid; grid-template-columns:1fr 1fr; gap:24px; border-block:1px solid var(--ph-line, #e4e9e6); padding-block:20px; }
+.movement-comparison h3 { font-size:12px; color:var(--ph-muted, #65716b); margin-bottom:8px; }
+.movement-detail { display:grid; grid-template-columns:120px minmax(0,1fr); gap:14px; margin:22px 0; font-size:14px; }
+.movement-detail dt { color:var(--ph-muted, #65716b); font-size:12px; }
+.movement-detail dd { white-space:pre-wrap; overflow-wrap:anywhere; }
+.movement-dialog-actions { display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap; border-top:1px solid var(--ph-line, #e4e9e6); padding-top:18px; }
+.movement-dialog textarea { width:100%; min-width:0; border:1px solid var(--ph-line, #e4e9e6); border-radius:6px; padding:10px; font-size:14px; color:var(--ph-ink, #24302b); resize:vertical; }
+.movement-form :is(input,select,textarea) { font-size:14px; border-color:var(--ph-line, #e4e9e6); border-radius:6px; }
+.movement-form :is(input,select,textarea):focus-visible,.movement-workspace :focus-visible { outline:2px solid var(--ph-accent, #187451); outline-offset:3px; }
+.movement-form .text-xs { font-size:12px; }
+.movement-editor.ph-account-dialog.ow-dialog { max-width:860px; }
+.movement-editor.operations-refresh-dialog .ops-movement-section { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px 22px; padding:20px 0; }
+.movement-editor.operations-refresh-dialog .ops-movement-section:first-child { padding-top:0; }
+.movement-editor.operations-refresh-dialog .ops-movement-section > h3 { grid-column:1/-1; margin:0; font-size:14px; font-weight:600; }
+.movement-editor.operations-refresh-dialog .ops-movement-section > :is(div,label) { min-width:0; margin:0; }
+.movement-editor .movement-employee-fields > .ph-form-grid { grid-column:1/-1; gap:22px; }
+.movement-editor .movement-employee-fields > div:first-of-type:last-of-type { grid-column:1/-1; }
+.movement-editor .ops-movement-section > div > .flex { flex-wrap:wrap; align-items:baseline; gap:6px 12px; }
+.movement-editor .ops-movement-section > div > .flex > .flex { flex-wrap:wrap; gap:6px 12px; }
+.movement-editor .ops-movement-section :is(.text-blue-600,.text-indigo-600) { color:#187451; }
+.movement-editor.operations-refresh-dialog .ops-movement-section label { font-size:12px; color:#496153; }
+.movement-editor.operations-refresh-dialog .ops-movement-section textarea { min-height:88px; }
+.movement-editor .ow-dialog-header p { margin-top:5px; line-height:1.5; }
+@media(max-width:640px) {
+  .movement-editor.operations-refresh-dialog .ops-movement-section { grid-template-columns:minmax(0,1fr); gap:16px; }
+  .movement-editor .movement-employee-fields > .ph-form-grid { grid-template-columns:minmax(0,1fr); gap:16px; }
+}
+@media(max-width:1150px) { .movement-columns,.movement-record { grid-template-columns:minmax(140px,1.1fr) minmax(110px,1fr) minmax(110px,1fr) 110px 105px; gap:14px; } }
+@media(max-width:760px) {
+  .movement-search { flex-basis:100%; }
+  .movement-columns { display:none; }
+  .movement-record { grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:16px; padding:18px 0; }
+  .movement-person { grid-column:1/-1; }
+  .movement-mobile-label { display:block; color:var(--ph-muted, #65716b); font-size:12px; margin-bottom:5px; }
+  .movement-actions { justify-content:flex-end; }
+  .movement-actions>.ow-status { margin-right:0; }
+  .movement-actions>div { justify-content:flex-end; }
+  .movement-comparison { gap:16px; }
+  .movement-detail { grid-template-columns:90px minmax(0,1fr); }
+}
+@media(max-width:767px) {
+  .movement-workspace .ow-filters>.movement-search,.movement-workspace .ow-filters>.movement-note { grid-column:1/-1; }
+  .movement-search { min-width:0; }
+}

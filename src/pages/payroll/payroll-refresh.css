@@ -1,0 +1,75 @@
+.ow-payroll.payroll-workspace { color:#243b32; }
+.ow-payroll .ow-header { margin-bottom:22px; }
+.ow-payroll .ow-header h1 { font-size:28px; line-height:1.25; letter-spacing:-.8px; color:#163e2f; margin-bottom:8px; }
+.ow-payroll .ow-header p { font-size:14px; color:#718077; }
+.ow-payroll .ow-workspace { border:1px solid #e1e8e3; border-radius:12px; background:#fff; overflow:hidden; }
+.ow-payroll .pw-controls { padding:22px 24px 18px; gap:14px; border-bottom:1px solid #e8eee9; }
+.ow-payroll .pw-controls :is(input,select) { min-height:40px; font-size:13px; border-color:#e1e8e3; border-radius:8px; }
+.ow-payroll .pw-controls .pw-search { max-width:360px; }
+.ow-payroll .ow-button { border-radius:8px; min-height:38px; font-weight:500; }
+.ow-payroll .pw-table .ow-button { min-height:32px; }
+.ow-payroll .ow-primary,.payroll-refresh-dialog :is(.ow-primary,.ph-button-primary) { background:#176b4a; border-color:#176b4a; color:white; }
+.ow-payroll .ow-primary:hover:not(:disabled) { background:#115439; }
+.ow-payroll .pw-stages { padding:0 24px; gap:26px; background:#fbfcfa; border-color:#e8eee9; }
+.ow-payroll .pw-stages > button { padding:15px 0; font-size:13px; }
+.ow-payroll .pw-stages > button[aria-selected=true] { color:#176b4a; border-color:#176b4a; }
+.ow-payroll .pw-stages em { min-width:22px; padding:2px 6px; border-radius:5px; background:#edf2ec; text-align:center; font-size:11px; }
+.ow-payroll .pw-toolbar { padding:14px 24px; min-height:58px; }
+.ow-payroll .pw-table th { padding:12px 20px; background:#f8faf8; color:#718077; font-size:11px; }
+.ow-payroll .pw-table td { padding:18px 20px; border-color:#edf1ed; font-size:13px; }
+.ow-payroll .pw-table :is(th,td):first-child { padding-left:24px; }
+.ow-payroll .pw-table :is(th,td):last-child { padding-right:24px; }
+.ow-payroll .pw-table tbody tr:hover { background:#fafcf9; }
+.ow-payroll .pw-table .pw-selected { background:#eff6ed; }
+.ow-payroll .ow-status { padding:4px 9px; border-radius:6px; font-size:11px; }
+.ow-payroll .pw-ledger-footer { padding:16px 24px; background:#fbfcfa; border-color:#edf1ed; }
+.ow-payroll .pw-ledger-summary { justify-content:space-between; gap:18px 28px; }
+.ow-payroll .pw-ledger-summary > div { flex-direction:column; align-items:start; gap:6px; }
+.ow-payroll .pw-ledger-summary dd { font-size:18px; color:#163e2f; }
+.ow-payroll .pw-pagination { padding:16px 24px; background:#fff; }
+.ow-payroll .pw-preview-notice { padding:16px 24px; border-bottom:1px solid #e8eee9; }
+.ow-payroll .pw-export-menu { border-color:#e1e8e3; border-radius:10px; }
+.payroll-refresh-dialog.ph-account-dialog { border-radius:14px; }
+.payroll-refresh-dialog.ow-dialog[open] { display:flex; flex-direction:column; overflow:hidden; }
+.payroll-refresh-dialog :is(.ow-dialog-header,.ph-dialog-header) { padding:22px 26px; background:#fbfcfa; border-color:#e1e8e3; flex-shrink:0; }
+.payroll-refresh-dialog :is(.ow-dialog-header,.ph-dialog-header) h2 { color:#163e2f; font-size:21px; }
+.payroll-refresh-dialog .pw-detail-identity { padding:18px 26px; flex-shrink:0; border-color:#e8eee9; }
+.payroll-refresh-dialog .pw-detail-identity h3 { font-size:18px; color:#163e2f; }
+.payroll-refresh-dialog .pw-detail-content { padding:22px 26px; overflow-y:auto; min-height:0; overscroll-behavior:contain; }
+.payroll-refresh-dialog .pw-detail-totals { background:#f3f8ef; border:1px solid #dce7d5; border-radius:9px; padding:20px; gap:16px; }
+.payroll-refresh-dialog .pw-detail-totals :is(strong,.text-3xl,.text-2xl) { color:#176b4a; font-size:24px; }
+.payroll-refresh-dialog .pw-breakdown-section { padding:18px 0; border-color:#e8eee9; }
+.payroll-refresh-dialog .pw-breakdown-section h3,.payroll-refresh-dialog :is(.pw-section-title,.pw-legend,.pw-bpjs-columns h4) { color:#386346; font-size:14px; }
+.payroll-refresh-dialog .pw-policy-facts { padding:18px; border:1px solid #e1e8e3; border-radius:9px; background:#fbfcfa; gap:18px 24px; }
+.payroll-refresh-dialog .pw-bpjs-columns { gap:26px; }
+.payroll-refresh-dialog .pw-bpjs-columns .ph-kv > div { border-color:#edf1ed; }
+.payroll-refresh-dialog .pw-calculation-scroll { border:1px solid #e1e8e3; border-radius:9px; margin-bottom:20px; }
+.payroll-refresh-dialog .pw-calculation-scroll table { font-size:12px; }
+.payroll-refresh-dialog .pw-payment-hold { padding:18px; background:#fffaf0; border:1px solid #eddfc0; border-radius:9px; }
+.payroll-refresh-dialog.pw-preparation-dialog .ph-dialog-body { padding:22px 26px; }
+.payroll-refresh-dialog .pw-preparation { gap:20px; }
+.payroll-refresh-dialog .pw-preparation > .ph-form-grid { padding:18px; background:#f5f8f2; border:1px solid #e1e8e3; border-radius:9px; }
+.payroll-refresh-dialog .pw-preparation :is(input:not([type=checkbox]):not([type=radio]),select,textarea) { border-radius:8px; font-size:13px; }
+.payroll-refresh-dialog .pw-preparation :is(label,.ph-label) { font-size:12px; }
+.payroll-refresh-dialog .pw-preparation .ph-section { padding:18px 0; border-color:#e8eee9; }
+.payroll-refresh-dialog .pw-disclosure { border-color:#e1e8e3; padding-top:18px; }
+.payroll-refresh-dialog .pw-disclosure > summary { color:#386346; font-size:14px; padding-bottom:8px; }
+.payroll-refresh-dialog .pw-preparation .pw-rule-group { padding:18px; background:#fbfcfa; border:1px solid #e1e8e3; border-radius:9px; }
+.payroll-refresh-dialog .pw-editor-actions { gap:10px; border-color:#e1e8e3; }
+.payroll-refresh-dialog .pw-preview-totals { padding:18px; background:#f3f8ef; border:1px solid #dce7d5; border-radius:9px; }
+.payroll-refresh-dialog .pw-preview-totals dd { color:#176b4a; font-size:22px; }
+.payroll-refresh-dialog .pw-preview-table { border:1px solid #e1e8e3; border-radius:9px; }
+.payroll-refresh-dialog .pw-preview-table th,.payroll-refresh-dialog .pw-preview-table td { padding:13px 16px; font-size:12px; border-color:#edf1ed; }
+@media(max-width:767px) {
+  .ow-payroll .ow-header h1 { font-size:25px; }
+  .ow-payroll .ow-header p { font-size:13px; }
+  .ow-payroll :is(.pw-controls,.pw-toolbar,.pw-ledger-footer,.pw-pagination,.pw-preview-notice) { padding:16px; }
+  .ow-payroll .pw-stages { padding:0 16px; gap:18px; }
+  .ow-payroll .pw-stages > button { font-size:12px; padding:12px 0; }
+  .ow-payroll .pw-ledger-summary dd { font-size:16px; }
+  .payroll-refresh-dialog :is(.ow-dialog-header,.ph-dialog-header) { padding:18px; }
+  .payroll-refresh-dialog :is(.pw-detail-identity,.pw-detail-content),.payroll-refresh-dialog.pw-preparation-dialog .ph-dialog-body { padding:18px; }
+  .payroll-refresh-dialog .pw-detail-totals { padding:16px; }
+  .payroll-refresh-dialog .pw-detail-totals :is(strong,.text-3xl,.text-2xl) { font-size:21px; }
+  .payroll-refresh-dialog .pw-preparation > .ph-form-grid { padding:14px; }
+}

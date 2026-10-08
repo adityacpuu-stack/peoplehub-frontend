@@ -1,18 +1,9 @@
+import { insightNumber } from '@/pages/ceo/insight-display';
+import { t, useLocale, intlLocale } from '@/i18n';
+import './tax-workflows.css';
+import { Modal } from '@/components/ui';
 import { useState } from 'react';
-import {
-  Users,
-  Edit2,
-  Save,
-  X,
-  Info,
-  Calendar,
-  CheckCircle,
-  History,
-  UserCircle,
-  Heart,
-  Baby,
-  AlertTriangle,
-} from 'lucide-react';
+import { Users, Info, CheckCircle, History, UserCircle, Heart, Baby, AlertTriangle } from 'lucide-react';
 
 interface PTKPCategory {
   id: string;
@@ -116,17 +107,18 @@ const ptkpCategories: PTKPCategory[] = [
 
 // PTKP Base components
 const ptkpComponents = [
-  { label: 'PTKP Wajib Pajak', amount: 54000000, icon: UserCircle, color: 'blue' },
-  { label: 'Tambahan Kawin', amount: 4500000, icon: Heart, color: 'rose' },
-  { label: 'Tambahan per Tanggungan (max 3)', amount: 4500000, icon: Baby, color: 'amber' },
-  { label: 'Tambahan Istri Bekerja', amount: 54000000, icon: Users, color: 'purple' },
+  { get label() { return t('PTKP Wajib Pajak'); }, amount: 54000000, icon: UserCircle, color: 'blue' },
+  { get label() { return t('Tambahan Kawin'); }, amount: 4500000, icon: Heart, color: 'rose' },
+  { get label() { return t('Tambahan per Tanggungan (max 3)'); }, amount: 4500000, icon: Baby, color: 'amber' },
+  { get label() { return t('Tambahan Istri Bekerja'); }, amount: 54000000, icon: Users, color: 'purple' },
 ];
 
 export function PTKPSettingsPage() {
+  useLocale();
   const [selectedCategory, setSelectedCategory] = useState<PTKPCategory | null>(null);
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('id-ID', {
+    return new Intl.NumberFormat(intlLocale(), {
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0,
@@ -141,88 +133,55 @@ export function PTKPSettingsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="ph-workflow tax-workflow">
       {/* Header */}
-      <div className="bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 rounded-2xl p-6 text-white">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm">
-              <Users className="w-8 h-8" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold">PTKP Settings</h1>
-              <p className="text-blue-100">Penghasilan Tidak Kena Pajak</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 px-4 py-2 bg-white/20 rounded-lg backdrop-blur-sm">
-            <Calendar className="w-4 h-4" />
-            <span className="text-sm">Berlaku sejak: Tahun 2016</span>
-          </div>
-        </div>
-      </div>
+      <header className="ph-page-header tax-page-header"><div><h1>{t("PTKP Settings")}</h1><p>{t("Penghasilan Tidak Kena Pajak")}</p></div><div className="ph-actions tax-header-actions"><span className="text-sm">{t("Berlaku sejak: Tahun 2016")}</span></div></header>
+      <p className="ph-callout tax-notice" role="note">{t("Referensi kategori PTKP dan rincian komponennya. Halaman ini tidak mengubah status PTKP karyawan atau konfigurasi payroll.")}</p>
 
       {/* Info Alert */}
-      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+      <div className="ph-section tax-section tax-reference-note">
         <div className="flex items-start gap-3">
-          <div className="p-2 bg-blue-100 rounded-lg">
-            <Info className="w-5 h-5 text-blue-600" />
-          </div>
+          <Info className="w-5 h-5 text-blue-600" />
           <div>
-            <p className="font-medium text-blue-800">Tentang PTKP</p>
-            <p className="text-sm text-blue-600 mt-1">
-              PTKP (Penghasilan Tidak Kena Pajak) adalah batas penghasilan minimum yang tidak dikenakan pajak. PTKP
-              digunakan sebagai pengurang dalam perhitungan Penghasilan Kena Pajak (PKP) untuk menentukan PPh 21
-              terutang.
-            </p>
+            <p className="font-medium text-blue-800">{t("Tentang PTKP")}</p>
+            <p className="text-sm text-blue-600 mt-1">{t("PTKP (Penghasilan Tidak Kena Pajak) adalah batas penghasilan minimum yang tidak dikenakan pajak. PTKP digunakan sebagai pengurang dalam perhitungan Penghasilan Kena Pajak (PKP) untuk menentukan PPh 21 terutang.")} </p>
           </div>
         </div>
       </div>
 
       {/* PTKP Components */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="tax-summary">
         {ptkpComponents.map((component, index) => {
           const Icon = component.icon;
           return (
-            <div key={index} className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
+            <div key={index} className="tax-summary-item">
               <div className="flex items-center gap-3 mb-3">
-                <div className={`p-2 rounded-lg bg-${component.color}-100`}>
-                  <Icon className={`w-5 h-5 text-${component.color}-600`} />
-                </div>
+                <Icon className={`w-5 h-5 text-${component.color}-600`} />
                 <span className="text-sm text-gray-500">{component.label}</span>
               </div>
               <p className="text-xl font-bold text-gray-900">{formatCurrency(component.amount)}</p>
-              <p className="text-xs text-gray-400 mt-1">per tahun</p>
+              <p className="text-xs text-gray-400 mt-1">{t("per tahun")}</p>
             </div>
           );
         })}
       </div>
 
       {/* PTKP Table */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="ph-section tax-section tax-register">
         <div className="p-6 border-b border-gray-100">
-          <h3 className="text-lg font-semibold text-gray-900">Daftar Kategori PTKP</h3>
-          <p className="text-sm text-gray-500 mt-1">Berdasarkan PMK No. 101/PMK.010/2016</p>
+          <h3 className="text-lg font-semibold text-gray-900">{t("Daftar Kategori PTKP")}</h3>
+          <p className="text-sm text-gray-500 mt-1">{t("Berdasarkan PMK No. 101/PMK.010/2016")}</p>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="ph-table-scroll tax-table-scroll">
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  Kode
-                </th>
-                <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  Keterangan
-                </th>
-                <th className="text-right px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  PTKP per Tahun
-                </th>
-                <th className="text-right px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  PTKP per Bulan
-                </th>
-                <th className="text-center px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  Aksi
-                </th>
+                <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500">{t("Kode")} </th>
+                <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500">{t("Keterangan")} </th>
+                <th className="text-right px-6 py-4 text-xs font-semibold text-gray-500">{t("PTKP per Tahun")} </th>
+                <th className="text-right px-6 py-4 text-xs font-semibold text-gray-500">{t("PTKP per Bulan")} </th>
+                <th className="text-center px-6 py-4 text-xs font-semibold text-gray-500">{t("Aksi")} </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -234,7 +193,7 @@ export function PTKPSettingsPage() {
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <span className="text-gray-900">{category.description}</span>
+                    <span className="text-gray-900">{t(category.description)}</span>
                   </td>
                   <td className="px-6 py-4 text-right">
                     <span className="font-bold text-gray-900">{formatCurrency(category.amount)}</span>
@@ -243,9 +202,9 @@ export function PTKPSettingsPage() {
                     <span className="text-gray-600">{formatCurrency(category.amount / 12)}</span>
                   </td>
                   <td className="px-6 py-4 text-center">
-                    <button
+                    <button type="button" aria-label={t("Detail")}
                       onClick={() => setSelectedCategory(category)}
-                      className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                      className="ph-button tax-button"
                     >
                       <Info className="w-4 h-4" />
                     </button>
@@ -258,39 +217,39 @@ export function PTKPSettingsPage() {
       </div>
 
       {/* Legend */}
-      <div className="bg-white rounded-xl p-6 border border-gray-100 shadow-sm">
-        <h4 className="font-medium text-gray-900 mb-4">Keterangan Kode PTKP</h4>
+      <div className="ph-section tax-section">
+        <h4 className="font-medium text-gray-900 mb-4">{t("Keterangan Kode PTKP")}</h4>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="flex items-center gap-3">
-            <span className="inline-flex px-3 py-1 rounded-full text-sm font-bold bg-blue-100 text-blue-700">TK</span>
-            <span className="text-gray-600">Tidak Kawin</span>
+            <span className="inline-flex px-3 py-1 rounded-full text-sm font-bold bg-blue-100 text-blue-700">{t("TK")}</span>
+            <span className="text-gray-600">{t("Tidak Kawin")}</span>
           </div>
           <div className="flex items-center gap-3">
-            <span className="inline-flex px-3 py-1 rounded-full text-sm font-bold bg-rose-100 text-rose-700">K</span>
-            <span className="text-gray-600">Kawin</span>
+            <span className="inline-flex px-3 py-1 rounded-full text-sm font-bold bg-rose-100 text-rose-700">{t("K")}</span>
+            <span className="text-gray-600">{t("Kawin")}</span>
           </div>
           <div className="flex items-center gap-3">
-            <span className="inline-flex px-3 py-1 rounded-full text-sm font-bold bg-purple-100 text-purple-700">K/I</span>
-            <span className="text-gray-600">Kawin, Penghasilan Istri Digabung</span>
+            <span className="inline-flex px-3 py-1 rounded-full text-sm font-bold bg-purple-100 text-purple-700">{t("K/I")}</span>
+            <span className="text-gray-600">{t("Kawin, Penghasilan Istri Digabung")}</span>
           </div>
         </div>
         <div className="mt-4 text-sm text-gray-500">
-          <p>• Angka setelah garis miring (/0, /1, /2, /3) menunjukkan jumlah tanggungan</p>
-          <p>• Maksimal tanggungan yang diperhitungkan adalah 3 orang</p>
+          <p>{t("• Angka setelah garis miring (/0, /1, /2, /3) menunjukkan jumlah tanggungan")}</p>
+          <p>{t("• Maksimal tanggungan yang diperhitungkan adalah 3 orang")}</p>
         </div>
       </div>
 
       {/* Note */}
-      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+      <div className="ph-section tax-section">
         <div className="flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
           <div>
-            <p className="font-medium text-amber-800">Catatan Penting</p>
+            <p className="font-medium text-amber-800">{t("Catatan Penting")}</p>
             <ul className="text-sm text-amber-600 mt-2 space-y-1 list-disc list-inside">
-              <li>Tanggungan yang diperhitungkan adalah anggota keluarga sedarah dan semenda dalam garis keturunan lurus</li>
-              <li>Tanggungan harus tidak memiliki penghasilan dan menjadi tanggungan sepenuhnya</li>
-              <li>Anak yang diperhitungkan: anak kandung, anak angkat, anak tiri yang belum berusia 21 tahun atau belum menikah</li>
-              <li>K/I berlaku jika istri bekerja dan penghasilan digabung dengan suami</li>
+              <li>{t("Tanggungan yang diperhitungkan adalah anggota keluarga sedarah dan semenda dalam garis keturunan lurus")}</li>
+              <li>{t("Tanggungan harus tidak memiliki penghasilan dan menjadi tanggungan sepenuhnya")}</li>
+              <li>{t("Anak yang diperhitungkan: anak kandung, anak angkat, anak tiri yang belum berusia 21 tahun atau belum menikah")}</li>
+              <li>{t("K/I berlaku jika istri bekerja dan penghasilan digabung dengan suami")}</li>
             </ul>
           </div>
         </div>
@@ -300,89 +259,54 @@ export function PTKPSettingsPage() {
       <div className="flex items-center justify-between text-sm text-gray-500">
         <div className="flex items-center gap-2">
           <History className="w-4 h-4" />
-          <span>Berlaku sejak: 1 Januari 2016</span>
+          <span>{t("Berlaku sejak: 1 Januari 2016")}</span>
         </div>
         <div className="flex items-center gap-2">
           <CheckCircle className="w-4 h-4 text-emerald-500" />
-          <span>PMK No. 101/PMK.010/2016</span>
+          <span>{t("PMK No. 101/PMK.010/2016")}</span>
         </div>
       </div>
 
       {/* Detail Modal */}
       {selectedCategory && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full">
-            <div className="p-6 border-b border-gray-100">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900">Detail PTKP</h3>
-                <button
-                  onClick={() => setSelectedCategory(null)}
-                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6 space-y-6">
+        <Modal isOpen={true} onClose={() => setSelectedCategory(null)} title={t("Detail PTKP")} size="lg">
+<div className="ph-workflow tax-workflow tax-detail"><div className="tax-dialog-body">
               {/* Category Header */}
               <div className="text-center">
                 <span className={`inline-flex px-4 py-2 rounded-full text-lg font-bold ${getStatusColor(selectedCategory.code)}`}>
                   {selectedCategory.code}
                 </span>
-                <p className="mt-2 text-gray-600">{selectedCategory.description}</p>
+                <p className="mt-2 text-gray-600">{t(selectedCategory.description)}</p>
               </div>
 
               {/* Breakdown */}
               <div className="space-y-3">
-                <h5 className="font-medium text-gray-900">Rincian Perhitungan</h5>
-                <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">PTKP Wajib Pajak</span>
-                    <span className="font-medium">{formatCurrency(selectedCategory.breakdown.wp)}</span>
-                  </div>
+                <h5 className="font-medium text-gray-900">{t("Rincian Perhitungan")}</h5>
+                <div className="ph-section tax-section tax-stack">
+                  <dl className="ph-kv tax-kv-row"><dt>{t("PTKP Wajib Pajak")}</dt><dd>{formatCurrency(selectedCategory.breakdown.wp)}</dd></dl>
                   {selectedCategory.breakdown.kawin > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Tambahan Kawin</span>
-                      <span className="font-medium">{formatCurrency(selectedCategory.breakdown.kawin)}</span>
-                    </div>
+                    <dl className="ph-kv tax-kv-row"><dt>{t("Tambahan Kawin")}</dt><dd>{formatCurrency(selectedCategory.breakdown.kawin)}</dd></dl>
                   )}
                   {selectedCategory.breakdown.tanggungan > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">
-                        Tambahan Tanggungan ({selectedCategory.breakdown.tanggungan / 4500000} orang)
-                      </span>
-                      <span className="font-medium">{formatCurrency(selectedCategory.breakdown.tanggungan)}</span>
-                    </div>
+                    <dl className="ph-kv tax-kv-row"><dt>{t("Tambahan Tanggungan (")}{' '}{insightNumber(selectedCategory.breakdown.tanggungan / 4500000)}{' '}{t("orang)")} </dt><dd>{formatCurrency(selectedCategory.breakdown.tanggungan)}</dd></dl>
                   )}
-                  <div className="border-t border-gray-200 pt-3 flex justify-between">
-                    <span className="font-medium text-gray-900">Total PTKP per Tahun</span>
-                    <span className="font-bold text-blue-600">{formatCurrency(selectedCategory.amount)}</span>
-                  </div>
+                  <dl className="ph-kv tax-kv-row"><dt>{t("Total PTKP per Tahun")}</dt><dd>{formatCurrency(selectedCategory.amount)}</dd></dl>
                 </div>
               </div>
 
               {/* Monthly */}
-              <div className="bg-blue-50 rounded-xl p-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">PTKP per Bulan</span>
-                  <span className="text-xl font-bold text-blue-600">
+              <div className="ph-section tax-section">
+                <dl className="ph-kv tax-kv-row"><dt>{t("PTKP per Bulan")}</dt><dd>
                     {formatCurrency(selectedCategory.amount / 12)}
-                  </span>
-                </div>
+                  </dd></dl>
               </div>
-            </div>
-
-            <div className="p-6 border-t border-gray-100">
-              <button
+            </div><div className="ph-dialog-footer tax-dialog-actions">
+              <button type="button"
                 onClick={() => setSelectedCategory(null)}
-                className="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-              >
-                Tutup
-              </button>
-            </div>
-          </div>
-        </div>
+                className="ph-button tax-button ph-button-primary"
+              >{t("Tutup")} </button>
+            </div></div>
+</Modal>
       )}
     </div>
   );

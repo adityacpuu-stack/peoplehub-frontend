@@ -1,10 +1,11 @@
+import { t, useLocale } from '@/i18n';
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
-import { AlertCircle } from 'lucide-react';
+import { AuthLayout } from './components/AuthLayout';
 import { authService } from '@/services/auth.service';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { ResetPasswordMobile } from './components/ResetPasswordMobile';
@@ -26,6 +27,7 @@ const resetPasswordSchema = z.object({
 type ResetPasswordFormData = z.infer<typeof resetPasswordSchema>;
 
 export function ResetPasswordPage() {
+  useLocale();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
@@ -57,7 +59,7 @@ export function ResetPasswordPage() {
 
   const onSubmit = async (data: ResetPasswordFormData) => {
     if (!token || !email) {
-      toast.error('Invalid reset link');
+      toast.error(t("Invalid reset link"));
       return;
     }
 
@@ -70,10 +72,10 @@ export function ResetPasswordPage() {
         password_confirmation: data.password_confirmation,
       });
       setIsSuccess(true);
-      toast.success('Password reset successfully!');
+      toast.success(t("Password reset successfully!"));
     } catch (error: unknown) {
       const err = error as { response?: { data?: { message?: string } } };
-      toast.error(err.response?.data?.message || 'Failed to reset password. The link may have expired.', { id: 'api-error' });
+      toast.error(err.response?.data?.message || t('Failed to reset password. The link may have expired.'), { id: 'api-error' });
     } finally {
       setIsLoading(false);
     }
@@ -85,30 +87,11 @@ export function ResetPasswordPage() {
 
   // Invalid token or email state
   if (!token || !email) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50 p-6">
-        <div className="w-full max-w-md text-center">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <AlertCircle className="h-8 w-8 text-red-600" />
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Invalid Reset Link</h2>
-          <p className="text-gray-600 mb-6">
-            This password reset link is invalid or has expired. Please request a new one.
-          </p>
-          <Link
-            to="/forgot-password"
-            className="
-              inline-flex items-center justify-center gap-2 h-12 px-6 rounded-xl font-semibold text-white
-              bg-gradient-to-r from-blue-600 to-indigo-600
-              hover:from-blue-700 hover:to-indigo-700
-              transition-all duration-200 shadow-lg shadow-blue-500/25
-            "
-          >
-            Request New Link
-          </Link>
-        </div>
-      </div>
-    );
+    return <AuthLayout employeePortal recovery>
+      <h1>{t("Invalid Reset Link")}</h1>
+      <p>{t("This password reset link is invalid or has expired. Please request a new one.")}</p>
+      <Link to="/forgot-password" className="ph-auth-submit">{t("Request New Link")}</Link>
+    </AuthLayout>;
   }
 
   const sharedProps = {

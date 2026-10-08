@@ -54,7 +54,7 @@ const optionalYear = z.preprocess(
     .number()
     .int('Year must be a whole number')
     .min(1950, 'Year must be 1950 or later')
-    .max(currentYear + 10, `Year cannot exceed ${currentYear + 10}`)
+    .max(currentYear + 10, 'Year cannot exceed {year}')
     .optional(),
 );
 
@@ -65,7 +65,7 @@ const optionalCount = (max = 20) =>
       .number()
       .int('Must be a whole number')
       .min(0, 'Must be 0 or more')
-      .max(max, `Maximum ${max}`)
+      .max(max, 'Maximum {max}')
       .optional(),
   );
 
@@ -107,7 +107,8 @@ export const profileSchema = z.object({
   emergency_contact_address: optionalLongText,
 
   // Education
-  last_education: z.enum(educationLevels).optional().or(z.literal('').transform(() => '' as const)),
+  // The enum already includes the empty option; avoid a union masking its message.
+  last_education: z.enum(educationLevels, { error: 'Select a valid education level' }).optional(),
   education_major: optionalString,
   education_institution: optionalString,
   graduation_year: optionalYear,

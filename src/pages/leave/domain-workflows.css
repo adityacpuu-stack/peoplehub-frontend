@@ -1,0 +1,54 @@
+.dw-form, .dw-detail, .dw-confirm, .dw-allocation { color: var(--ph-ink, #24302b); font-size: 14px; line-height: 1.5; min-width: 0; }
+.dw-form, .dw-detail, .dw-confirm { padding: 24px; }
+.dw-form-content { display: grid; gap: 24px; }
+.dw-section { margin: 0; padding: 0 0 24px; border: 0; border-bottom: 1px solid var(--ph-line, #e4e9e6); background: transparent; border-radius: 0; min-width: 0; }
+.dw-section:last-child { border-bottom: 0; padding-bottom: 0; }
+.dw-section > h3, .dw-section-heading { color: var(--ph-ink, #24302b); font-size: 14px; font-weight: 600; margin: 0 0 16px; text-transform: none; letter-spacing: normal; }
+.dw-section > p { color: var(--ph-muted, #65716b); margin: -8px 0 16px; font-size: 12px; }
+.dw-fields { display: grid; gap: 16px; }
+.dw-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.dw-form-grid > *, .dw-fields > * { min-width: 0; }
+.dw-full { grid-column: 1 / -1; }
+.dw-form :is(input:not([type=radio]):not([type=checkbox]), select, textarea), .dw-confirm textarea { width: 100%; min-width: 0; max-width: 100%; border: 1px solid var(--ph-line, #e4e9e6); border-radius: 6px; background: #fff; padding: 9px 11px; color: var(--ph-ink, #24302b); font: inherit; box-shadow: none; }
+.dw-form :is(input, select, textarea):focus-visible, .dw-confirm textarea:focus-visible { outline: 2px solid var(--ph-accent, #187451); outline-offset: 2px; }
+.dw-form :is(input, select, textarea):disabled { background: #f5f6f7; color: var(--ph-muted, #65716b); cursor: not-allowed; }
+.dw-form :is(input[type=radio], input[type=checkbox]) { accent-color: var(--ph-accent, #187451); }
+.dw-form label { font-size: 14px; color: var(--ph-ink, #24302b); }
+.dw-form label + :is(input, select, textarea) { margin-top: 0; }
+.dw-checks { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: center; }
+.dw-checks label { display: inline-flex; gap: 8px; align-items: center; }
+.dw-inline { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 0; border-block: 1px solid var(--ph-line, #e4e9e6); }
+.dw-inline strong { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.dw-context { margin-top: 16px; padding: 12px 0 0; border-top: 1px solid var(--ph-line, #e4e9e6); }
+.dw-context > .flex { flex-wrap: wrap; }
+.dw-note { color: var(--ph-muted, #65716b); font-size: 12px; line-height: 1.6; }
+.dw-callout { padding: 12px 14px; margin-block: 16px; background: #f5f8f6; border-left: 3px solid var(--ph-line, #e4e9e6); border-radius: 0; font-size: 13px; line-height: 1.6; }
+.dw-callout p { margin: 0; }
+.dw-warning { background: #fff9ed; border-color: #d7a54d; color: #815b17; }
+.dw-money { color: var(--ph-ink, #24302b); font-weight: 600; font-variant-numeric: tabular-nums; }
+.dw-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 10px; border-top: 1px solid var(--ph-line, #e4e9e6); padding: 20px 0 0; margin-top: 24px; background: #fff; }
+.dw-actions > button { flex: 0 1 auto; width: auto; min-width: 84px; border-radius: 6px; }
+.dw-actions > button:first-child { margin-right: auto; }
+.dw-danger { color: #ad3535; border-color: #e8cccc; background: #fff; }
+.dw-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 24px; }
+.dw-kv { margin: 0; display: grid; gap: 0; }
+.dw-kv > div { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(0, 1.5fr); gap: 18px; padding: 12px 0; border-bottom: 1px solid var(--ph-line, #e4e9e6); align-items: baseline; }
+.dw-kv dt { font-size: 12px; color: var(--ph-muted, #65716b); }
+.dw-kv dd { margin: 0; font-size: 14px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.dw-kv a { color: var(--ph-accent, #187451); text-decoration: underline; }
+.dw-table-scroll { overflow-x: auto; max-width: 100%; }
+.dw-table-scroll table { min-width: 520px; }
+.dw-allocation { display: grid; gap: 16px; }
+.dw-allocation .dw-callout { margin: 0; }
+.dw-allocation-summary { display: flex; flex-wrap: wrap; gap: 24px; padding: 16px 0; border-block: 1px solid var(--ph-line, #e4e9e6); }
+.dw-allocation-summary dt { font-size: 12px; color: var(--ph-muted, #65716b); }
+.dw-allocation-summary dd { margin: 4px 0 0; font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.dw-allocation details > summary { cursor: pointer; color: var(--ph-muted, #65716b); font-size: 13px; }
+.dw-confirm > p { margin: 0 0 20px; }
+.dw-confirm .ph-field { display: grid; gap: 8px; }
+@media (max-width: 600px) {
+  .dw-form, .dw-detail, .dw-confirm { padding: 18px; }
+  .dw-form-grid, .dw-detail-grid { grid-template-columns: minmax(0, 1fr); }
+  .dw-kv > div { grid-template-columns: minmax(100px, 1fr) minmax(0, 1.25fr); gap: 12px; }
+  .dw-actions > button { min-width: 0; }
+}

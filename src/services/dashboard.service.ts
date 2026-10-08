@@ -44,6 +44,7 @@ export interface DashboardOverview {
     }>;
     by_type: Array<{ type: string; count: number }>;
   };
+  /** null when the caller lacks payroll.view (see unavailable_sections) — never zero-filled. */
   payroll: {
     current_period: {
       period: string;
@@ -55,7 +56,9 @@ export interface DashboardOverview {
     } | null;
     pending_adjustments: number;
     pending_overtime: number;
-  };
+  } | null;
+  /** Financial sections omitted for this caller. Absent on older servers. */
+  unavailable_sections?: string[];
   performance: {
     active_cycles: number;
     pending_reviews: number;
@@ -152,6 +155,7 @@ export interface GroupDashboard {
     employees: number;
     percentage: number;
   }[];
+  /** null when the caller lacks payroll.view (see unavailable_sections) — never zero-filled. */
   payroll_summary: {
     total_monthly_payroll: number;
     avg_salary: number;
@@ -160,9 +164,11 @@ export interface GroupDashboard {
       total_payroll: number;
       employee_count: number;
     }[];
-  };
+  } | null;
   recent_activities: GroupActivity[];
   alerts: DashboardAlert[];
+  /** Financial sections omitted for this caller. Absent on older servers. */
+  unavailable_sections?: string[];
 }
 
 export interface CompanyOverview {
