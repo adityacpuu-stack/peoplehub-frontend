@@ -87,10 +87,14 @@ const sidebarLinks = async (page: Page) => {
 
 for (const roles of [['IT Admin'], ['IT Admin', 'Employee']]) {
   test(`IT workspace navigation and dashboard: ${roles.join('+')}`, async ({ page }) => {
+    const modules: string[] = [];
+    page.on('request', req => { if (req.resourceType() === 'script') modules.push(new URL(req.url()).pathname); });
     const s = await setup(page, { roles });
     await page.goto('/dashboard');
     await expect(page.getByRole('link', { name: 'Open Microsoft 365 accounts' })).toBeVisible();
     await expect(page.locator('.ow-metrics')).toContainText('Without work email');
+    // Role-specific dashboards and charts must stay lazy on the IT landing page.
+    expect(modules.filter(path => /vendor-charts|PayrollPage-|HRDashboard-|TaxDashboardPage-|SuperAdminDashboard-/.test(path))).toEqual([]);
     const links = await sidebarLinks(page);
     for (const href of ['/dashboard', '/it/accounts', '/requests', '/my-leave', '/my-attendance', '/documents']) expect(links).toContain(href);
     expect(links).not.toContain('/templates');

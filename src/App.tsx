@@ -13,7 +13,10 @@ import { FullPageSpinner } from '@/components/ui';
 import { ProfileCompletionModal, PasswordChangeModal } from '@/components/profile';
 
 // Eager imports — small pages loaded early (login flow + 403).
-import { LoginPage, ForgotPasswordPage, ResetPasswordPage, ForbiddenPage } from '@/pages';
+import { LoginPage } from '@/pages/auth/LoginPage';
+import { ForgotPasswordPage } from '@/pages/auth/ForgotPasswordPage';
+import { ResetPasswordPage } from '@/pages/auth/ResetPasswordPage';
+import { ForbiddenPage } from '@/pages/auth/ForbiddenPage';
 
 function TemplatesRedirect() {
   useLocale();

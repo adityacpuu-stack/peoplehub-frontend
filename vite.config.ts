@@ -23,8 +23,10 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          'vendor-ui': ['lucide-react', 'recharts', 'react-hot-toast'],
+          'vendor-react': ['react', 'react-dom', 'react-dom/client', 'react-router-dom'],
+          // Charts are used by reporting pages, not the login/IT workspace.
+          'vendor-ui': ['lucide-react', 'react-hot-toast'],
+          'vendor-charts': ['recharts'],
           'vendor-form': ['react-hook-form', '@hookform/resolvers', 'zod'],
           'vendor-utils': ['axios', 'date-fns', 'clsx'],
         },

@@ -1,19 +1,19 @@
 import { t, useLocale } from '@/i18n';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
 import { PageSpinner } from '@/components/ui';
 import { dashboardService, type DashboardOverview, type TeamDashboard, type GroupDashboard, type MyDashboard, type SuperAdminStats, type AuditLogEntry, type AuditStatistics } from '@/services/dashboard.service';
 import { leaveService } from '@/services/leave.service';
 import { useAuthStore } from '@/stores/auth.store';
 import { canAction } from '@/lib/actions';
 import type { DashboardStats, LeaveRequest } from '@/types';
-import { TaxDashboardPage } from './TaxDashboardPage';
-import { SuperAdminDashboard } from './SuperAdminDashboard';
-import { GroupCEODashboard } from './GroupCEODashboard';
-import { ManagerDashboard } from './ManagerDashboard';
-import { EmployeeDashboard } from './EmployeeDashboard';
-import { HRDashboard } from './HRDashboard';
-import { FinanceDashboard } from './FinanceDashboard';
-import { ItDashboard } from '@/pages/it/ItDashboard';
+const TaxDashboardPage = lazy(() => import('./TaxDashboardPage').then(m => ({ default: m.TaxDashboardPage })));
+const SuperAdminDashboard = lazy(() => import('./SuperAdminDashboard').then(m => ({ default: m.SuperAdminDashboard })));
+const GroupCEODashboard = lazy(() => import('./GroupCEODashboard').then(m => ({ default: m.GroupCEODashboard })));
+const ManagerDashboard = lazy(() => import('./ManagerDashboard').then(m => ({ default: m.ManagerDashboard })));
+const EmployeeDashboard = lazy(() => import('./EmployeeDashboard').then(m => ({ default: m.EmployeeDashboard })));
+const HRDashboard = lazy(() => import('./HRDashboard').then(m => ({ default: m.HRDashboard })));
+const FinanceDashboard = lazy(() => import('./FinanceDashboard').then(m => ({ default: m.FinanceDashboard })));
+const ItDashboard = lazy(() => import('@/pages/it/ItDashboard').then(m => ({ default: m.ItDashboard })));
 
 // Payroll summary type for HR dashboard
 interface PayrollSummaryData {
@@ -30,6 +30,10 @@ interface PayrollSummaryData {
 }
 
 export function DashboardPage() {
+  return <Suspense fallback={<PageSpinner />}><DashboardContent /></Suspense>;
+}
+
+function DashboardContent() {
   useLocale();
   const { user } = useAuthStore();
   const employeeId = user?.employee?.id;
