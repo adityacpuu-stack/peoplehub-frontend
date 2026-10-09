@@ -1,7 +1,7 @@
 import { t } from '@/i18n';
 
 // Translate known system identifiers only; preserve custom roles and unknown values.
-const roles = new Set(['Super Admin', 'Group CEO', 'CEO', 'HR Manager', 'HR Staff', 'Manager', 'Employee', 'User', 'Finance Manager', 'Finance Staff', 'Tax Manager', 'Tax Staff']);
+const roles = new Set(['Super Admin', 'Group CEO', 'CEO', 'HR Manager', 'HR Staff', 'Manager', 'Employee', 'User', 'Finance Manager', 'Finance Staff', 'Tax Manager', 'Tax Staff', 'IT Admin']);
 export const roleLabel = (value: string) => roles.has(value) ? t(value) : value;
 
 const companyTypes: Record<string, string> = { holding: 'Holding', subsidiary: 'Subsidiary', branch: 'Branch' };

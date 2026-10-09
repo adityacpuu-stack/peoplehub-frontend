@@ -14,7 +14,7 @@ import type { UpdateProfileDTO } from '@/services/profile.service';
 import type { Employee } from '@/types';
 import { profileSchema, type ProfileFormInput, type ProfileFormValues } from '@/schemas/profile.schema';
 
-const roleLabels: Record<string, string> = { 'Super Admin': 'Super Admin', 'Group CEO': 'Group CEO', CEO: 'CEO', 'HR Manager': 'HR Manager', 'HR Staff': 'HR Staff', 'Tax Manager': 'Tax Manager', 'Tax Staff': 'Tax Staff', 'Finance Manager': 'Finance Manager', Manager: 'Manager', Employee: 'Employee', User: 'User' };
+const roleLabels: Record<string, string> = { 'Super Admin': 'Super Admin', 'Group CEO': 'Group CEO', CEO: 'CEO', 'HR Manager': 'HR Manager', 'HR Staff': 'HR Staff', 'Tax Manager': 'Tax Manager', 'Tax Staff': 'Tax Staff', 'Finance Manager': 'Finance Manager', Manager: 'Manager', 'IT Admin': 'IT Admin', Employee: 'Employee', User: 'User' };
 
 // Helper functions
 const formatDate = (dateStr: string | undefined | null) => {

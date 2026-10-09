@@ -85,6 +85,8 @@ const GoalsOKRsPage = lazyNamed(() => import('@/pages/performance/GoalsOKRsPage'
 const AccountSettingsPage = lazyNamed(() => import('@/pages/settings/AccountSettingsPage' as never), 'AccountSettingsPage');
 const NotificationsPage = lazyNamed(() => import('@/pages/notifications/NotificationsPage' as never), 'NotificationsPage');
 const RequestsPage = lazyNamed(() => import('@/pages/requests/RequestsPage' as never), 'RequestsPage');
+const ItAccountsPage = lazyNamed(() => import('@/pages/it/ItAccountsPage' as never), 'ItAccountsPage');
+const ItApprovalSettingsPage = lazyNamed(() => import('@/pages/it/ItApprovalSettingsPage' as never), 'ItApprovalSettingsPage');
 
 // HR Operations (Attendance / Leave / Overtime / Payroll)
 const AttendancePage = lazyNamed(() => import('@/pages/attendance/AttendancePage'), 'AttendancePage');
@@ -355,6 +357,9 @@ function ApplicationRoutes() {
           <Route path="/profile" element={null} />
           <Route path="/settings/profile" element={null} />
           <Route path="/requests" element={<RequestsPage />} />
+          {/* IT workspace: exact IT Admin role (Super Admin bypasses); the API enforces scope independently. */}
+          <Route path="/it/accounts" element={<RoleRoute allowedRoles={['IT Admin']}><ItAccountsPage /></RoleRoute>} />
+          <Route path="/it/approval-settings" element={<RoleRoute allowedRoles={['IT Admin']}><ItApprovalSettingsPage /></RoleRoute>} />
           <Route path="/movement" element={<MovementPage />} />
           <Route path="/org-chart" element={<OrgChartPage />} />
 

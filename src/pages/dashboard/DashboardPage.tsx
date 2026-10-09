@@ -13,6 +13,7 @@ import { ManagerDashboard } from './ManagerDashboard';
 import { EmployeeDashboard } from './EmployeeDashboard';
 import { HRDashboard } from './HRDashboard';
 import { FinanceDashboard } from './FinanceDashboard';
+import { ItDashboard } from '@/pages/it/ItDashboard';
 
 // Payroll summary type for HR dashboard
 interface PayrollSummaryData {
@@ -56,6 +57,8 @@ export function DashboardPage() {
   const isFinance = !isSuperAdmin && !isGroupCEO && !isTax && !isHR && user?.roles?.includes('Finance Manager');
   const isManager = !isSuperAdmin && user?.roles?.includes('Manager') && !isHR && !isGroupCEO && !isTax && !isFinance;
   const isEmployee = !isSuperAdmin && !isGroupCEO && !isTax && !isHR && !isManager && !isFinance;
+  // IT Admin alone or with Employee: IT workspace dashboard (no other role takes precedence here).
+  const isIT = isEmployee && !!user?.roles?.includes('IT Admin');
 
   useEffect(() => {
     let cancelled = false;
@@ -120,8 +123,8 @@ export function DashboardPage() {
           }
         }
 
-        // Employee fetches my dashboard
-        if (isEmployee && employeeId) {
+        // Employee fetches my dashboard (the IT dashboard loads its own data)
+        if (isEmployee && !isIT && employeeId) {
           const myData = await dashboardService.getMyDashboard();
           if (!cancelled) setMyDashboard(myData);
         }
@@ -135,7 +138,7 @@ export function DashboardPage() {
 
     fetchData();
     return () => { cancelled = true; };
-  }, [isHR, isManager, isSuperAdmin, isGroupCEO, isTax, isEmployee, isFinance, retry, employeeId, user?.id, leaveEnabled]);
+  }, [isHR, isManager, isSuperAdmin, isGroupCEO, isTax, isEmployee, isIT, isFinance, retry, employeeId, user?.id, leaveEnabled]);
 
   if (isLoading) {
     return <PageSpinner />;
@@ -190,6 +193,8 @@ export function DashboardPage() {
   }
 
   if (isFinance) return <FinanceDashboard />;
+
+  if (isIT) return <ItDashboard user={user} greeting={greeting} />;
 
   if (isEmployee) {
     return (

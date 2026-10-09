@@ -6,6 +6,7 @@ import { useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { getApprovalInbox, decideApproval, canDecideApproval, hasExecutiveApprovals, type ApprovalRequest } from '@/services/approval-inbox.service';
 import { useAuthStore } from '@/stores/auth.store';
+import { MANAGER_UP_ROLES } from '@/lib/actions';
 import { OperationalWorkspace, OperationalDialog } from '@/components/ui/OperationalWorkspace';
 import './requests.css';
 
@@ -93,6 +94,10 @@ export function RequestsPage() {
   useLocale();
   const { user } = useAuthStore();
   const executive = hasExecutiveApprovals(user?.roles);
+  // IT Admin without a Manager-or-higher role: the API limits the inbox to current direct reports.
+  const itScope = !executive && !!user?.roles?.includes('IT Admin') && !user.roles.some(role => role === 'Super Admin' || MANAGER_UP_ROLES.includes(role));
+  // That inbox is keyed to the linked employee record: without one there is nothing to request.
+  const itUnlinked = itScope && !user?.employee;
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = !executive && searchParams.get('tab') === 'activity' ? 'activity' : 'approvals';
   const [requests, setRequests] = useState<ApprovalRequest[]>([]);
@@ -111,12 +116,14 @@ export function RequestsPage() {
   const submitting = useRef(false);
   useEffect(() => {
     let current = true;
-    setLoading(true); setError(false); setRequests([]);
+    setError(false); setRequests([]);
+    if (itUnlinked) { setLoading(false); return; }
+    setLoading(true);
     getApprovalInbox(executive).then(data => { if (current) setRequests(data); })
       .catch(() => { if (current) setError(true); })
       .finally(() => { if (current) setLoading(false); });
     return () => { current = false; };
-  }, [revision, executive, user?.id]);
+  }, [revision, executive, itUnlinked, user?.id, user?.employee?.id]);
   const changeTab = (tab: 'approvals' | 'activity') => {
     setSearchParams(previous => { previous.set('tab', tab); return previous; }, { replace: true });
     setPage(1);
@@ -146,6 +153,14 @@ export function RequestsPage() {
     } finally { submitting.current = false; setBusy(false); }
   };
 
+  if (itUnlinked) return <OperationalWorkspace module="operations" title={t("My Approval")} className="requests-workspace"
+    description={t("Leave requests assigned to you as approver. Company-wide records are in Leave Requests.")}>
+    <section className="ow-register"><div className="ow-feedback" role="status" data-requests-unlinked>
+      <h2>{t('No approval inbox for this account')}</h2>
+      <p>{t('IT Admins approve leave only for their direct reports, which requires this account to be linked to an employee record. This account is not linked, so there is nothing to approve here.')}</p>
+    </div></section>
+  </OperationalWorkspace>;
+
   return <OperationalWorkspace module="operations" title={t("My Approval")} description={executive ? t("Pending leave and overtime requests within your approval scope.") : t("Leave requests assigned to you as approver. Company-wide records are in Leave Requests.")} className="requests-workspace"
     actions={<button className="ow-button" disabled={loading || busy} onClick={() => setRevision(v => v + 1)}>{t("Refresh")}</button>}
     filters={<>
@@ -153,7 +168,7 @@ export function RequestsPage() {
       {executive && <label className="ow-field">{t("Request type")}<select aria-label={t("Request type")} value={kind} onChange={e => { setKind(e.target.value); setPage(1); }}><option value="all">{t("All request types")}</option><option value="leave">{t("Leave")}</option><option value="overtime">{t("Overtime")}</option></select></label>}
       {activeTab === 'approvals' ? <>
         {!executive && <label className="ow-field">{t("Request status")}<select aria-label={t("Request status")} value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}><option value="all">{t("All statuses")}</option>{['pending', 'approved', 'rejected', 'cancelled'].map(s => <option key={s} value={s}>{enumLabel(s)}</option>)}</select></label>}
-        <details className="request-scope-help"><summary>{t("Approval scope")}</summary><p>{executive ? t("Pending requests follow your existing company and approval access. Approval actions remain subject to authorization; this queue does not include completed history.") : t("Requests follow the designated leave approver. If none is assigned, they follow the employee's manager. Your HR role does not add other employees to this inbox.")}</p></details>
+        <details className="request-scope-help"><summary>{t("Approval scope")}</summary><p>{executive ? t("Pending requests follow your existing company and approval access. Approval actions remain subject to authorization; this queue does not include completed history.") : itScope ? t("Only leave requests from your current direct reports appear here, and only when no other leave approver is designated for them.") : t("Requests follow the designated leave approver. If none is assigned, they follow the employee's manager. Your HR role does not add other employees to this inbox.")}</p></details>
       </> : <label className="ow-field">{t("Activity type")}<select aria-label={t("Activity type")} value={activityType} onChange={e => { setActivityType(e.target.value); setPage(1); }}><option value="all">{t("All activity")}</option>{Object.entries(activityLabels).map(([value, label]) => <option key={value} value={value}>{t(label)}</option>)}</select></label>}
       <button className="ow-button" onClick={() => { setSearch(''); setKind('all'); setStatus('pending'); setActivityType('all'); setPage(1); }}>{t("Reset filters")}</button>
     </>}

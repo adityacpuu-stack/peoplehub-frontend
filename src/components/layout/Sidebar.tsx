@@ -115,7 +115,7 @@ export function Sidebar() {
         </button>
         <button className="ph-sidebar-close" data-drawer-close aria-label={t("Tutup menu navigasi")} onClick={() => setOpen(false)}><X size={20} /></button>
       </div>
-      {navigation.isEmployee && !compact && <div className="ess-sidebar-workspace"><strong>{t("PFIGroups")}</strong><span>{t("Employee Self-Service")}</span></div>}
+      {navigation.isEmployee && !compact && <div className="ess-sidebar-workspace"><strong>{t("PFIGroups")}</strong><span>{t(user?.roles?.includes('IT Admin') ? 'IT workspace' : 'Employee Self-Service')}</span></div>}
       <nav className="ph-sidebar-nav" aria-label={t("Navigasi utama")}>
         {navigation.sections.map((section, index) => <div key={index} className="ph-sidebar-section">
           {section.label && <div className="ph-sidebar-label">{compact ? <span aria-hidden="true" /> : section.label}</div>}

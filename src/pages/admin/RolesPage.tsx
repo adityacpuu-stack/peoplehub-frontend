@@ -16,7 +16,7 @@ const modeOf = (role: Role | null | undefined): PermissionMode | 'unknown' =>
 // Match backend-protected identities, including legacy rows without a flag.
 // These UI restrictions supplement the server's authorization checks.
 const builtInRoleNames = new Set(['Super Admin', 'Group CEO', 'CEO', 'HR Manager', 'HR Staff',
-  'Finance Manager', 'Tax Manager', 'Tax Staff', 'Manager', 'Supervisor', 'Employee']);
+  'Finance Manager', 'Tax Manager', 'Tax Staff', 'Manager', 'Supervisor', 'Employee', 'IT Admin']);
 const isProtectedRole = (role: Role) => Boolean(role.is_system) || builtInRoleNames.has(role.name);
 
 function apiErrorMessage(error: unknown, fallback: string) {

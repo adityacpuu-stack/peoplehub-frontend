@@ -82,7 +82,7 @@ export function Header() {
       <div className="ph-navbar-location">
         <button aria-label={t("Buka menu navigasi")} aria-expanded={isOpen} aria-controls="app-sidebar" onClick={() => { closePopover(); setOpen(!isOpen); }} className="ph-navbar-icon ph-navbar-menu"><Menu size={20} /></button>
         <div className="ph-navbar-heading">
-        {navigation.isEmployee && <span className="ess-navbar-title">{t("Employee Self-Service")}</span>}
+        {navigation.isEmployee && <span className="ess-navbar-title">{t(user?.roles?.includes('IT Admin') ? 'IT workspace' : 'Employee Self-Service')}</span>}
         {navigation.isHR && <span className="ess-navbar-title">{t("People & Culture")}</span>}
         {navigation.isManager && <span className="ess-navbar-title">{t("Team workspace")}</span>}
         {navigation.isSuperAdmin && <span className="ess-navbar-title">{t("Administration")}</span>}

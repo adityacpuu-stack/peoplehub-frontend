@@ -1,5 +1,5 @@
 import { t } from '@/i18n';
-import { LayoutDashboard, Users, Clock, Calendar, DollarSign, UserCog, ClipboardList, Database, ArrowLeftRight, Network, Shield, Server, FileKey, History, Building, FileText, FolderOpen, FileSignature, Megaphone, FileStack, Calculator, Timer, CalendarCheck, CalendarDays, UsersRound, Crown, Target, TrendingUp, PieChart, Layers, BarChart3, Receipt, Percent, FileSpreadsheet, Wallet, Coins, BadgeDollarSign, UserCheck, MinusCircle, MapPin, Settings, Bell } from 'lucide-react';
+import { LayoutDashboard, Users, Clock, Calendar, DollarSign, UserCog, ClipboardList, Database, ArrowLeftRight, Network, Shield, Server, FileKey, History, Building, FileText, FolderOpen, FileSignature, Megaphone, FileStack, Calculator, Timer, CalendarCheck, CalendarDays, UsersRound, Crown, Target, TrendingUp, PieChart, Layers, BarChart3, Receipt, Percent, FileSpreadsheet, Wallet, Coins, BadgeDollarSign, UserCheck, MinusCircle, MapPin, Settings, Bell, Mail } from 'lucide-react';
 import type { User } from '@/types';
 import { getSidebarConfig, isMenuVisible } from '@/pages/admin/RoleDashboardConfigPage';
 import { canAction, canOpenPath } from '@/lib/actions';
@@ -691,6 +691,19 @@ export function getNavigation(user: User | null, counts = { ceo: 0, manager: 0 }
   });
 
   supplementalGroups.forEach(group => add(group.label, group.items));
+  // IT Admin (alone or with other roles, additive): the mailbox workspace, scoped leave
+  // routing settings and the assigned-approval inbox (direct reports only, enforced by the API).
+  if (!isSuperAdmin && userRoles.includes('IT Admin')) {
+    const itItems: MenuItem[] = [
+      { path: '/it/accounts', icon: Mail, label: 'Microsoft 365 accounts' },
+      { path: '/it/approval-settings', icon: Network, label: 'Approval settings' },
+    ];
+    // The direct-report inbox needs a linked employee record (the API answers 404 without one).
+    if (leaveEnabled && user?.employee) itItems.push({ path: '/requests', icon: ClipboardList, label: 'My Approval' });
+    const fresh = itItems.filter(item => !seenPaths.has(item.path));
+    fresh.forEach(item => seenPaths.add(item.path));
+    add('IT', fresh);
+  }
   // Preserve the same additive menu visibility as supplemental HR/Manager roles,
   // while keeping the shared announcement link in Resources for every role.
   const announcementsConfig = getSidebarConfig();
@@ -706,6 +719,13 @@ export function getNavigation(user: User | null, counts = { ceo: 0, manager: 0 }
       resourcesSection.entries.push(announcementsItem);
     } else {
       add('Resources', [announcementsItem]);
+    }
+  }
+  // The dedicated IT workspace omits Resources from sidebar and page search.
+  // Accounts with an additional operational role retain that role's navigation.
+  if (isEmployee && userRoles.includes('IT Admin')) {
+    for (let index = sections.length - 1; index >= 0; index--) {
+      if (sections[index].label === 'Resources') sections.splice(index, 1);
     }
   }
   // Keep Resources/Documents captions once after applying role/config rules.

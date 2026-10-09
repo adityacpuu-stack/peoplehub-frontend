@@ -112,7 +112,7 @@ export function CompanyAssignmentsPage() {
 
   return (
     <ReportPage  className="ph-admin-page">{/* Header */}<ReportHeader>
-<div className="report-heading"><h1 className="text-xl font-bold text-gray-900">{t("Company Assignments")}</h1><p className="text-sm text-gray-500">{t("Kelola akses karyawan P&C ke masing-masing company")}</p></div>
+<div className="report-heading"><h1 className="text-xl font-bold text-gray-900">{t("Company Assignments")}</h1><p className="text-sm text-gray-500">{t("Kelola akses perusahaan untuk staf P&C dan Admin IT")}</p></div>
 <div className="report-header-context"><div className="hidden sm:flex items-center gap-4 text-sm text-gray-500">
           <span><span className="font-semibold text-gray-900">{(companies.length).toLocaleString(intlLocale())}</span>{' '}{t("company")}</span>
           <span className="text-gray-200">|</span>
@@ -263,14 +263,14 @@ export function CompanyAssignmentsPage() {
           )}
         </div></ReportSection>{/* Assign Modal */}{showModal && (
         <Modal isOpen onClose={() => setShowModal(false)} title={t("Assign Karyawan")} description={t("ke {company}", { company: companies.find((c) => c.id === selectedCompanyId)?.name || "" })} size="md" busy={isAssigning} className="admin-workflow-dialog admin-refreshed-dialog">
-<section className="ph-section"><h3>{t("Pilih karyawan")}</h3><p>{t("Pilih satu karyawan yang tersedia untuk akses perusahaan ini.")}</p></section>
+<section className="ph-section"><h3>{t("Pilih karyawan")}</h3><p>{t("Pilih satu karyawan yang tersedia untuk akses perusahaan ini.")}</p><p>{t("Untuk Admin IT, penugasan hanya menentukan perusahaan di ruang kerja akun Microsoft 365; tidak memberikan akses HR.")}</p></section>
 
             {/* Employee list */}
             <div className="admin-dialog-content">
               {availableEmployees.length === 0 ? (
                 <div className="text-center py-8">
                   <Users className="w-8 h-8 text-gray-200 mx-auto mb-2" />
-                  <p className="text-sm text-gray-400">{t("Tidak ada karyawan P&C yang tersedia")}</p>
+                  <p className="text-sm text-gray-400">{t("Tidak ada karyawan P&C atau Admin IT yang tersedia")}</p>
                 </div>
               ) : (
                 <div className="admin-assignee-list">

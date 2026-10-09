@@ -14,10 +14,13 @@ import { teamTimeMessages } from '../pages/manager/team-time.catalog';
 import { rolesMessages } from '../pages/admin/roles.catalog';
 import { leaveExportMessages } from '../pages/leave/leave-export.catalog';
 import { permissions } from './permissions';
+import { itMessages } from '../pages/it/it.catalog';
 
 export const messages: Record<string, MessagePair> = {
   // First, so existing catalog entries for shared words keep precedence.
   ...permissions,
+  // IT workspace copy only fills gaps, like the leave export catalog below.
+  ...itMessages,
   // Leave export copy only fills gaps: an existing catalog entry for the same words is never replaced.
   ...leaveExportMessages,
   ...operations,
