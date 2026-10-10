@@ -346,6 +346,22 @@ for (const field of ['External tax amount', 'Monetary output', 'tax_already_appl
   entries.push([`${field} harus berupa angka terbatas`, `${field} must be a finite number`]);
 }
 
+// Target THP -> basic salary simulator (payroll-salary-simulator / simulation
+// service / schema): exact backend sentences, so EN users see English.
+entries.push(
+  ['Target THP harus rupiah utuh 0 sampai batas simulasi', 'Target THP must be whole rupiah from 0 up to the simulation limit'],
+  ['Status PTKP tidak didukung', 'PTKP status is not supported'],
+  ['Status gaji tidak didukung simulasi', 'This payroll status is not supported by the simulation'],
+  ['Tunjangan harus rupiah utuh 0 sampai batas simulasi', 'Allowances must be whole rupiah from 0 up to the simulation limit'],
+  ['Simulasi melebihi batas perhitungan; periksa nilai input', 'The simulation exceeded its calculation limit; check the input values'],
+  ['Simulasi tidak konvergen dalam batas; hasil tidak ditampilkan', 'The simulation did not converge within its limit; no result is shown'],
+  ['Verifikasi ulang simulasi gagal; hasil tidak ditampilkan', 'Re-verifying the simulation failed; no result is shown'],
+  ['Target THP melebihi batas simulasi gaji pokok', 'The target THP is above what the simulated basic salary range can reach'],
+  ['Gunakan rupiah utuh', 'Use whole rupiah'],
+  ['Tunjangan kontrak karyawan memerlukan employee_id', 'Employee contract allowances require an employee'],
+  ['Simulasi mandiri tidak terkait karyawan', 'A standalone simulation is not tied to an employee'],
+);
+
 // Only these literal resources are emitted by NotFoundError; never match arbitrary
 // "... not found" diagnostics or translate an interpolated resource/user value.
 const missingResources: MessagePair[] = [

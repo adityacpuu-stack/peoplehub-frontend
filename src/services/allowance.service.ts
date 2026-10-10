@@ -19,63 +19,73 @@ export const ALLOWANCE_TYPES = [
   'bonus',
   'other',
 ] as const;
+// Position carries tax semantics and is never a monthly incentive (server enforces too).
+export const MONTHLY_TYPES = ALLOWANCE_TYPES.filter(type => type !== 'position');
 
 export type AllowanceType = typeof ALLOWANCE_TYPES[number];
+/** contract = existing OL checkbox (is_contract); monthly = has payroll_period; review = legacy, not yet classified. */
+export type AllowanceLifecycle = 'contract' | 'monthly' | 'review';
+export type AllowanceStatus = 'active' | 'inactive' | 'draft' | 'pending' | 'approved' | 'rejected' | 'cancelled' | 'expired' | 'paid';
+type Money = number | string | null;
+
+export interface AllowancePayrollLink {
+  id: number;
+  payroll_id?: number;
+  payroll_number?: string | null;
+  period: string;
+  amount?: Money;
+  reserved_at?: string;
+  paid_at?: string | null;
+  released_at?: string | null;
+  release_reason?: string | null;
+}
 
 export interface Allowance {
   id: number;
-  employee_id?: number;
-  company_id?: number;
+  employee_id?: number | null;
+  company_id?: number | null;
   name: string;
   type: AllowanceType;
-  amount?: number;
-  percentage?: number;
-  calculation_base?: 'fixed' | 'basic_salary' | 'gross_salary';
-  formula?: string;
-  frequency: 'monthly' | 'weekly' | 'daily' | 'one_time';
-  effective_date?: string;
-  end_date?: string;
-  status: 'active' | 'inactive' | 'pending' | 'approved' | 'rejected' | 'expired';
-  description?: string;
-  notes?: string;
+  amount?: Money;
+  percentage?: Money;
+  calculation_base?: 'fixed' | 'basic_salary' | 'gross_salary' | null;
+  frequency?: string | null;
+  effective_date?: string | null;
+  end_date?: string | null;
+  status: AllowanceStatus;
+  description?: string | null;
+  notes?: string | null;
   is_taxable: boolean;
   is_bpjs_object: boolean;
-  is_recurring: boolean;
-  is_contract?: boolean;
-  approved_by?: number;
-  approved_at?: string;
-  rejection_reason?: string;
+  is_recurring?: boolean;
+  is_contract?: boolean | null;
+  approved_by?: number | null;
+  approved_at?: string | null;
+  rejection_reason?: string | null;
+  payroll_period?: string | null;
+  component_key?: string | null;
+  performance_start?: string | null;
+  performance_end?: string | null;
+  reference?: string | null;
+  replaces_allowance_id?: number | null;
+  submitted_at?: string | null;
+  classified_at?: string | null;
+  lifecycle?: AllowanceLifecycle;
+  /** State of the latest-period active payroll link (earlier paid periods stay in history). */
+  payment_state?: 'none' | 'reserved' | 'paid';
+  payment_period?: string | null;
+  locked?: boolean;
+  payrollLinks?: AllowancePayrollLink[];
   employee?: {
     id: number;
     employee_id: string;
     name: string;
-    basic_salary?: number;
-    department?: {
-      id: number;
-      name: string;
-    };
-    position?: {
-      id: number;
-      name: string;
-    };
-  };
-  company?: {
-    id: number;
-    name: string;
-  };
+    company_id?: number | null;
+    department?: { id: number; name: string } | null;
+    position?: { id: number; name: string } | null;
+  } | null;
   created_at: string;
   updated_at: string;
-}
-
-export interface AllowanceTemplate {
-  name: string;
-  type: AllowanceType;
-  calculation_base: string;
-  frequency: string;
-  is_taxable: boolean;
-  is_bpjs_object: boolean;
-  is_recurring: boolean;
-  description: string;
 }
 
 export interface AllowanceListQuery {
@@ -86,299 +96,143 @@ export interface AllowanceListQuery {
   company_id?: number;
   type?: string;
   status?: string;
-  is_taxable?: boolean;
-  is_recurring?: boolean;
-  frequency?: string;
-  effective_from?: string;
-  effective_to?: string;
-}
-
-export interface CreateAllowanceDTO {
-  employee_id?: number;
-  company_id?: number;
-  name: string;
-  type: string;
-  amount?: number;
-  percentage?: number;
-  calculation_base?: string;
-  formula?: string;
-  frequency?: string;
-  effective_date?: string;
-  end_date?: string;
-  status?: string;
-  description?: string;
-  notes?: string;
-  is_taxable?: boolean;
-  is_bpjs_object?: boolean;
-  is_recurring?: boolean;
-}
-
-export interface UpdateAllowanceDTO extends Partial<CreateAllowanceDTO> {
-  approved_by?: number;
-  approved_at?: string;
-  rejection_reason?: string;
-}
-
-export interface BulkCreateAllowanceDTO {
-  employee_ids: number[];
-  name: string;
-  type: string;
-  amount?: number;
-  percentage?: number;
-  calculation_base?: string;
-  frequency?: string;
-  effective_date?: string;
-  end_date?: string;
-  is_taxable?: boolean;
-  is_bpjs_object?: boolean;
-  is_recurring?: boolean;
-  description?: string;
+  lifecycle?: AllowanceLifecycle;
+  payroll_period?: string;
 }
 
 export interface PaginatedResponse<T> {
   data: T[];
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    totalPages: number;
-  };
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+  summary?: { status: AllowanceStatus; count: number; amount: Money }[];
 }
+
+export interface ContractInput {
+  employee_id: number;
+  name: string;
+  type: AllowanceType;
+  amount: number;
+  effective_period: string;
+  end_period?: string;
+  component_key?: string;
+  description?: string;
+  reference?: string;
+  is_taxable?: boolean;
+  is_bpjs_object?: boolean;
+}
+
+export interface ContractVersionInput {
+  effective_period: string;
+  amount: number;
+  reference?: string;
+  notes?: string;
+}
+
+export interface MonthlyInput {
+  employee_id: number;
+  payroll_period: string;
+  name: string;
+  type: AllowanceType;
+  /** null = blank (not entered); 0 = explicit final zero. */
+  amount: number | null;
+  component_key?: string;
+  performance_start?: string;
+  performance_end?: string;
+  reference?: string;
+  notes?: string;
+  is_taxable?: boolean;
+}
+
+/** Edits send null to clear an optional field. */
+export interface MonthlyUpdate {
+  name?: string;
+  type?: AllowanceType;
+  amount?: number | null;
+  performance_start?: string | null;
+  performance_end?: string | null;
+  reference?: string | null;
+  notes?: string | null;
+  is_taxable?: boolean;
+}
+export interface ContractUpdate {
+  name?: string;
+  type?: AllowanceType;
+  amount?: number;
+  effective_period?: string;
+  end_period?: string | null;
+  description?: string | null;
+  reference?: string | null;
+  is_taxable?: boolean;
+  is_bpjs_object?: boolean;
+}
+export interface BulkResult { updated?: number; created?: number; failed: number; errors: string[] }
 
 // ==========================================
 // SERVICE
+// Only business fields are sent; status, approvals and payroll links are
+// decided by dedicated lifecycle endpoints on the server.
 // ==========================================
 
 class AllowanceService {
-  /**
-   * Get list of allowances with pagination and filters
-   */
-  async list(query: AllowanceListQuery = {}): Promise<PaginatedResponse<Allowance>> {
-    const params = new URLSearchParams();
-    Object.entries(query).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') {
-        params.append(key, String(value));
-      }
-    });
-
-    const response = await api.get(`/allowances?${params.toString()}`);
+  async list(query: AllowanceListQuery = {}, signal?: AbortSignal): Promise<PaginatedResponse<Allowance>> {
+    const params = Object.fromEntries(Object.entries(query).filter(([, value]) => value !== undefined && value !== null && value !== ''));
+    const response = await api.get('/allowances', { params, signal });
     return response.data;
   }
 
-  /**
-   * Get allowance detail by ID
-   */
-  async getById(id: number): Promise<Allowance> {
-    const response = await api.get(`/allowances/${id}`);
-    return response.data;
+  async history(id: number): Promise<{ lifecycle: AllowanceLifecycle; rows: Allowance[] }> {
+    return (await api.get(`/allowances/${id}/history`)).data;
   }
 
-  /**
-   * Create new allowance
-   */
-  async create(data: CreateAllowanceDTO): Promise<Allowance> {
-    const response = await api.post('/allowances', data);
-    return response.data;
+  async createContract(data: ContractInput): Promise<Allowance> {
+    return (await api.post('/allowances/contract', data)).data;
   }
 
-  /**
-   * Bulk create allowances for multiple employees
-   */
-  async bulkCreate(data: BulkCreateAllowanceDTO): Promise<{
-    created: number;
-    errors: string[];
-  }> {
-    const response = await api.post('/allowances/bulk', data);
-    return response.data;
+  async updateContract(id: number, data: ContractUpdate): Promise<Allowance> {
+    return (await api.put(`/allowances/contract/${id}`, data)).data;
   }
 
-  /**
-   * Update allowance
-   */
-  async update(id: number, data: UpdateAllowanceDTO): Promise<Allowance> {
-    const response = await api.put(`/allowances/${id}`, data);
-    return response.data;
+  async createContractVersion(id: number, data: ContractVersionInput): Promise<Allowance> {
+    return (await api.post(`/allowances/contract/${id}/versions`, data)).data;
   }
 
-  /**
-   * Delete allowance
-   */
+  async end(id: number, lastPeriod: string, reason: string): Promise<Allowance> {
+    return (await api.post(`/allowances/${id}/end`, { last_period: lastPeriod, reason })).data;
+  }
+
+  async classifyAsContract(id: number, reason: string): Promise<Allowance> {
+    return (await api.post(`/allowances/${id}/classify`, { as: 'contract', reason })).data;
+  }
+
+  async createMonthly(data: MonthlyInput): Promise<Allowance> {
+    return (await api.post('/allowances/monthly', data)).data;
+  }
+
+  async updateMonthly(id: number, data: MonthlyUpdate): Promise<Allowance> {
+    return (await api.put(`/allowances/monthly/${id}`, data)).data;
+  }
+
+  async submitMonthly(ids: number[]): Promise<BulkResult> {
+    return (await api.post('/allowances/monthly/submit', { ids })).data;
+  }
+
+  async approve(id: number): Promise<Allowance> {
+    return (await api.post(`/allowances/${id}/approve`)).data;
+  }
+
+  async approveMany(ids: number[]): Promise<BulkResult> {
+    return (await api.patch('/allowances/bulk/status', { ids, status: 'approved' })).data;
+  }
+
+  async reject(id: number, reason: string): Promise<Allowance> {
+    return (await api.post(`/allowances/${id}/reject`, { reason })).data;
+  }
+
+  async cancel(id: number, reason: string): Promise<Allowance> {
+    return (await api.post(`/allowances/${id}/cancel`, { reason })).data;
+  }
+
   async delete(id: number): Promise<void> {
     await api.delete(`/allowances/${id}`);
-  }
-
-  /**
-   * Get allowance templates
-   */
-  async getTemplates(): Promise<AllowanceTemplate[]> {
-    const response = await api.get('/allowances/templates');
-    return response.data;
-  }
-
-  /**
-   * Calculate allowance amount for employee
-   */
-  async calculateForEmployee(employeeId: number, month: number, year: number): Promise<{
-    allowances: Allowance[];
-    total: number;
-    taxable_total: number;
-    non_taxable_total: number;
-  }> {
-    const response = await api.get(`/allowances/calculate/${employeeId}`, {
-      params: { month, year }
-    });
-    return response.data;
-  }
-
-  /**
-   * Get employee allowances summary
-   */
-  async getEmployeeSummary(employeeId: number): Promise<{
-    total_monthly: number;
-    allowances: Allowance[];
-  }> {
-    const response = await api.get(`/allowances/employee/${employeeId}/summary`);
-    return response.data;
-  }
-
-  /**
-   * Get default allowance templates (static)
-   */
-  getDefaultTemplates(): AllowanceTemplate[] {
-    return [
-      {
-        name: 'Tunjangan Transportasi',
-        type: 'transport',
-        calculation_base: 'fixed',
-        frequency: 'monthly',
-        is_taxable: true,
-        is_bpjs_object: false,
-        is_recurring: true,
-        description: 'Tunjangan transportasi bulanan',
-      },
-      {
-        name: 'Tunjangan Makan',
-        type: 'meal',
-        calculation_base: 'fixed',
-        frequency: 'monthly',
-        is_taxable: true,
-        is_bpjs_object: false,
-        is_recurring: true,
-        description: 'Tunjangan makan bulanan',
-      },
-      {
-        name: 'Tunjangan Perumahan',
-        type: 'housing',
-        calculation_base: 'fixed',
-        frequency: 'monthly',
-        is_taxable: true,
-        is_bpjs_object: true,
-        is_recurring: true,
-        description: 'Tunjangan perumahan bulanan',
-      },
-      {
-        name: 'Tunjangan Komunikasi',
-        type: 'communication',
-        calculation_base: 'fixed',
-        frequency: 'monthly',
-        is_taxable: true,
-        is_bpjs_object: false,
-        is_recurring: true,
-        description: 'Tunjangan pulsa/internet',
-      },
-      {
-        name: 'Tunjangan Jabatan',
-        type: 'position',
-        calculation_base: 'basic_salary',
-        frequency: 'monthly',
-        is_taxable: true,
-        is_bpjs_object: true,
-        is_recurring: true,
-        description: 'Tunjangan berdasarkan jabatan',
-      },
-      {
-        name: 'Tunjangan Kesehatan',
-        type: 'medical',
-        calculation_base: 'fixed',
-        frequency: 'monthly',
-        is_taxable: false,
-        is_bpjs_object: false,
-        is_recurring: true,
-        description: 'Tunjangan kesehatan tambahan',
-      },
-      {
-        name: 'Tunjangan Kehadiran',
-        type: 'attendance',
-        calculation_base: 'fixed',
-        frequency: 'monthly',
-        is_taxable: true,
-        is_bpjs_object: false,
-        is_recurring: true,
-        description: 'Insentif kehadiran penuh',
-      },
-      {
-        name: 'Tunjangan Shift',
-        type: 'shift',
-        calculation_base: 'fixed',
-        frequency: 'daily',
-        is_taxable: true,
-        is_bpjs_object: false,
-        is_recurring: true,
-        description: 'Tunjangan shift malam/weekend',
-      },
-      {
-        name: 'Tunjangan Remote',
-        type: 'remote',
-        calculation_base: 'fixed',
-        frequency: 'monthly',
-        is_taxable: true,
-        is_bpjs_object: false,
-        is_recurring: true,
-        description: 'Tunjangan kerja dari rumah (listrik, internet)',
-      },
-      {
-        name: 'THR (Tunjangan Hari Raya)',
-        type: 'thr',
-        calculation_base: 'basic_salary',
-        frequency: 'one_time',
-        is_taxable: true,
-        is_bpjs_object: false,
-        is_recurring: false,
-        description: 'Tunjangan Hari Raya keagamaan',
-      },
-      {
-        name: 'Bonus',
-        type: 'bonus',
-        calculation_base: 'basic_salary',
-        frequency: 'one_time',
-        is_taxable: true,
-        is_bpjs_object: false,
-        is_recurring: false,
-        description: 'Bonus kinerja / pencapaian target',
-      },
-    ];
-  }
-
-  /**
-   * Get type label
-   */
-  getTypeLabel(type: AllowanceType): string {
-    const labels: Record<AllowanceType, string> = {
-      transport: 'Transportasi',
-      meal: 'Makan',
-      housing: 'Perumahan',
-      communication: 'Komunikasi',
-      medical: 'Kesehatan',
-      position: 'Jabatan',
-      performance: 'Kinerja',
-      attendance: 'Kehadiran',
-      shift: 'Shift',
-      remote: 'Remote',
-      thr: 'THR',
-      bonus: 'Bonus',
-      other: 'Lainnya',
-    };
-    return labels[type] || type;
   }
 }
 

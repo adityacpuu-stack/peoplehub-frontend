@@ -14,7 +14,6 @@ const entries: MessagePair[] = [
   ['Cuti disetujui', 'Leave approved'],
   ['Menunggu', 'Pending'], ['Draf', 'Draft'],
   ['Perusahaan tidak ditemukan', 'Company not found'], ['Hubungi {name}', 'Call {name}'],
-  ['M', 'billion short'], ['jt', 'million short'],
   ['Terverifikasi', 'Verified'], ['Diajukan', 'Submitted'], ['Dibuat', 'Generated'],
   ['Diterbitkan', 'Issued'], ['Terkirim', 'Sent'], ['Lewat Jatuh Tempo', 'Overdue'],
   ['Dihitung', 'Calculated'], ['Diproses', 'Processing'], ['Divalidasi', 'Validated'],
@@ -390,10 +389,17 @@ const entries: MessagePair[] = [
   ['1-2 Tahun', '1-2 Years'], ['2-3 Tahun', '2-3 Years'], ['3-5 Tahun', '3-5 Years'],
   ['Formulir 1721-A1', 'Form 1721-A1'], ['Edit NPWP', 'Edit NPWP'], ['No. SKPKP:', 'SKPKP No.:'],
   ['No. SKPKP', 'SKPKP No.'], ['No. BPE', 'BPE No.'], ['hari', 'days'],
+  ['Biaya perusahaan payroll tersimpan', 'Saved payroll company cost'],
+  ['{count} payroll tanpa biaya perusahaan tersimpan tidak dijumlahkan', '{count} payroll(s) without a saved company cost are not included'],
 ];
 
 export const insights: Record<string, MessagePair> = {};
 for (const pair of entries) for (const source of pair) insights[source] ??= pair;
+
+// Compact currency units are keyed, not literal copy: ID "jt"/"M" (juta/miliar),
+// EN "M"/"B". Keyed explicitly because "M" means billion in ID but million in EN.
+insights['million short'] = ['jt', 'M'];
+insights['billion short'] = ['M', 'B'];
 
 const aliases: Record<string, string> = {
   '+2.5% dari bulan lalu': '+2.5% from last month',

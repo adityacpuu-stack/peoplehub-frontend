@@ -26,6 +26,13 @@ export function formatDateTime(date: string | Date): string {
   });
 }
 
+/** Current payroll month (YYYY-MM) in WIB; payroll periods follow WIB, not UTC or the browser zone. */
+export function currentWibPeriod(now: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit' }).formatToParts(now);
+  const part = (type: string) => parts.find(item => item.type === type)!.value;
+  return `${part('year')}-${part('month')}`;
+}
+
 export function formatCurrency(amount: number): string {
   return new Intl.NumberFormat(intlLocale(), {
     style: 'currency',

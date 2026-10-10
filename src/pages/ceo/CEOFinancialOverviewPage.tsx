@@ -19,6 +19,8 @@ import {
 import { PageSpinner } from '@/components/ui';
 import { dashboardService, type GroupDashboard } from '@/services/dashboard.service';
 import { payrollService, type Payroll } from '@/services/payroll.service';
+import { savedThp, sumSavedCompanyCost, sumSavedThp } from '@/components/payroll/saved-payroll';
+import { collectPages } from '@/services/master-data';
 import { useAuthStore } from '@/stores/auth.store';
 import { formatNumber } from '@/lib/utils';
 
@@ -64,17 +66,17 @@ export function CEOFinancialOverviewPage() {
         setError(null);
 
         const companyId = isGroupCEO ? undefined : userCompanyId;
-        const [group, payrollRes] = await Promise.all([
+        // Every page of the period: a single limit=1000 request would silently
+        // truncate larger periods (or be clamped by the API).
+        const [group, rows] = await Promise.all([
           dashboardService.getGroupOverview(companyId || undefined),
-          payrollService.getAll({
-            company_id: companyId || undefined,
-            period: selectedPeriod,
-            limit: 1000,
-          }),
+          collectPages((page, limit) => payrollService.getAll({
+            company_id: companyId || undefined, period: selectedPeriod, page, limit,
+          })),
         ]);
 
         setGroupData(group);
-        setPayrolls(payrollRes.data || []);
+        setPayrolls(rows);
       } catch (err: any) {
         console.error('Failed to fetch financial data:', err);
         setError('Failed to load data');
@@ -139,7 +141,8 @@ export function CEOFinancialOverviewPage() {
 
   // Calculate totals from payrolls
   const totalGross = payrolls.reduce((sum, p) => sum + (Number(p.gross_salary) || 0), 0);
-  const totalNet = payrolls.reduce((sum, p) => sum + (Number(p.take_home_pay ?? p.net_salary) || 0), 0);
+  // Saved take-home pay (take_home_pay, then thp); never pre-tax net_salary.
+  const { total: totalNet, missing: missingThp } = sumSavedThp(payrolls);
   const totalTax = payrolls.reduce((sum, p) => sum + (Number(p.pph21) || 0), 0);
   const totalBpjsEmployee = payrolls.reduce((sum, p) => sum + (Number(p.bpjs_employee_total) || 0), 0);
   const totalBpjsCompany = payrolls.reduce((sum, p) => sum + (Number(p.bpjs_company_total) || 0), 0);
@@ -161,7 +164,7 @@ export function CEOFinancialOverviewPage() {
       });
     }
     const dept = departmentMap.get(deptName)!;
-    dept.totalPayroll += Number(payroll.take_home_pay ?? payroll.net_salary) || 0;
+    dept.totalPayroll += savedThp(payroll) ?? 0;
     dept.totalTax += Number(payroll.pph21) || 0;
     dept.totalBpjs += (Number(payroll.bpjs_employee_total) || 0) + (Number(payroll.bpjs_company_total) || 0);
     dept.employeeCount++;
@@ -200,7 +203,12 @@ export function CEOFinancialOverviewPage() {
     { name: t('BPJS Company'), value: totalBpjsCompany, color: '#6366f1' },
   ].filter(item => item.value > 0);
 
-  const totalCost = totalNet + totalTax + totalBpjsEmployee + totalBpjsCompany;
+  // Company cost is the saved generation result per payroll, summed. Rebuilding
+  // it from net + tax + BPJS drifts from the stored cost (e.g. historical rows).
+  // Rows without a saved cost are reported, not filled in.
+  const { total: totalCost, missing: missingCost } = sumSavedCompanyCost(payrolls);
+  const costKnown = payrolls.length > 0 && missingCost < payrolls.length;
+  const costShare = (value: number) => missingCost === 0 && totalCost > 0 ? insightFixed(((value / totalCost) * 100), 1) : '-';
 
   return (
     <ReportPage>{/* Header */}<ReportHeader>
@@ -219,11 +227,11 @@ export function CEOFinancialOverviewPage() {
                 ))}
               </select>
             </div></div>
-</ReportHeader>{/* Financial KPIs */}<ReportSummary><div className="report-metric"><div className="report-metric-context"><span className="text-xs text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full font-medium">{t("Net")} </span></div><p className="report-metric-value">{formatCompactCurrency(totalNet)}</p><p className="report-metric-label">{t("Total Net Salary")}</p></div><div className="report-metric"><div className="report-metric-context"><span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-full font-medium">{t("Gross")} </span></div><p className="report-metric-value">{formatCompactCurrency(totalGross)}</p><p className="report-metric-label">{t("Total Gross Salary")}</p></div><div className="report-metric"><div className="report-metric-context"></div><p className="report-metric-value">{insightNumber(totalEmployees)}</p><p className="report-metric-label">{t("Employees")}</p></div><div className="report-metric"><div className="report-metric-context"></div><p className="report-metric-value">{formatCompactCurrency(avgSalary)}</p><p className="report-metric-label">{t("Average Salary")}</p></div></ReportSummary>{/* Cost Breakdown Cards */}<div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+</ReportHeader>{/* Financial KPIs */}<ReportSummary><div className="report-metric"><div className="report-metric-context"><span className="text-xs text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full font-medium">{t("Net")} </span></div><p className="report-metric-value" data-testid="financial-total-thp">{formatCompactCurrency(totalNet)}</p><p className="report-metric-label">{t("Total Net Salary")}</p>{missingThp > 0 && <p className="text-xs text-gray-500">{t('{count} payroll tanpa THP tersimpan tidak dijumlahkan', { count: missingThp })}</p>}</div><div className="report-metric"><div className="report-metric-context"><span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-full font-medium">{t("Gross")} </span></div><p className="report-metric-value">{formatCompactCurrency(totalGross)}</p><p className="report-metric-label">{t("Total Gross Salary")}</p></div><div className="report-metric"><div className="report-metric-context"></div><p className="report-metric-value">{insightNumber(totalEmployees)}</p><p className="report-metric-label">{t("Employees")}</p></div><div className="report-metric"><div className="report-metric-context"></div><p className="report-metric-value">{formatCompactCurrency(avgSalary)}</p><p className="report-metric-label">{t("Average Salary")}</p></div></ReportSummary>{/* Cost Breakdown Cards */}<div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <section  className="report-inline-note"><div className="flex items-center gap-2 mb-2">
             <Receipt className="h-4 w-4 text-red-500" />
             <span className="text-xs font-medium text-red-600">{t("PPh 21")}</span>
-          </div><p className="text-lg font-bold text-red-700">{formatCompactCurrency(totalTax)}</p><p className="text-xs text-red-500">{totalCost > 0 ? insightFixed(((totalTax / totalCost) * 100), 1) : 0}{' '}{t("% of total")}</p></section>
+          </div><p className="text-lg font-bold text-red-700">{formatCompactCurrency(totalTax)}</p><p className="text-xs text-red-500">{costShare(totalTax)}{' '}{t("% of total")}</p></section>
 
         <div className="rounded-md border border-amber-100 p-4 bg-[#f5f6f7] text-[#24302b]">
           <div className="flex items-center gap-2 mb-2">
@@ -231,18 +239,20 @@ export function CEOFinancialOverviewPage() {
             <span className="text-xs font-medium text-amber-600">{t("BPJS Employee")}</span>
           </div>
           <p className="text-lg font-bold text-amber-700">{formatCompactCurrency(totalBpjsEmployee)}</p>
-          <p className="text-xs text-amber-500">{totalCost > 0 ? insightFixed(((totalBpjsEmployee / totalCost) * 100), 1) : 0}{' '}{t("% of total")}</p>
+          <p className="text-xs text-amber-500">{costShare(totalBpjsEmployee)}{' '}{t("% of total")}</p>
         </div>
 
         <section  className="report-inline-note"><div className="flex items-center gap-2 mb-2">
             <Building2 className="h-4 w-4 text-indigo-500" />
             <span className="text-xs font-medium text-indigo-600">{t("BPJS Company")}</span>
-          </div><p className="text-lg font-bold text-indigo-700">{formatCompactCurrency(totalBpjsCompany)}</p><p className="text-xs text-indigo-500">{totalCost > 0 ? insightFixed(((totalBpjsCompany / totalCost) * 100), 1) : 0}{' '}{t("% of total")}</p></section>
+          </div><p className="text-lg font-bold text-indigo-700">{formatCompactCurrency(totalBpjsCompany)}</p><p className="text-xs text-indigo-500">{costShare(totalBpjsCompany)}{' '}{t("% of total")}</p></section>
 
-        <section  className="report-inline-note"><div className="flex items-center gap-2 mb-2">
+        <section  className="report-inline-note" data-testid="financial-total-cost"><div className="flex items-center gap-2 mb-2">
             <DollarSign className="h-4 w-4 text-emerald-500" />
             <span className="text-xs font-medium text-emerald-600">{t("Total Cost")}</span>
-          </div><p className="text-lg font-bold text-emerald-700">{formatCompactCurrency(totalCost)}</p><p className="text-xs text-emerald-500">{t("All components")}</p></section>
+          </div><p className="text-lg font-bold text-emerald-700">{costKnown ? formatCompactCurrency(totalCost) : '-'}</p><p className="text-xs text-emerald-500">{missingCost > 0
+            ? t('{count} payroll(s) without a saved company cost are not included', { count: missingCost })
+            : t('Saved payroll company cost')}</p></section>
       </div>{/* Payroll Status */}<ReportSection><h3 className="text-base md:text-lg font-bold text-gray-900 mb-4">{t("Payroll Status")}</h3><div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-md">
             <div className="w-10 h-10 bg-gray-200 rounded-lg flex items-center justify-center">

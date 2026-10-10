@@ -1,748 +1,580 @@
-import { payrollNumber } from '@/components/payroll/localization';
-import { payrollEnumLabel } from '@/components/payroll/localization';
+import { payrollCurrency, payrollEnumLabel, payrollNumber } from '@/components/payroll/localization';
 import { t, useLocale, intlLocale } from '@/i18n';
 import { useAuthStore } from '@/stores/auth.store';
-import { useDomainConfirmation } from '@/pages/leave/useDomainConfirmation';
 import '@/pages/leave/domain-workflows.css';
-import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import './allowances.css';
+import { useState, useEffect, useCallback, useRef, type FormEvent, type KeyboardEvent } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { isAxiosError } from 'axios';
-import { Coins, Plus, Edit2, Trash2, Lock, Car, Utensils, Home, Phone, Briefcase, GraduationCap, Heart, Shirt, Loader2, Clock, Wifi, Gift, Trophy } from 'lucide-react';
-import { allowanceService, ALLOWANCE_TYPES } from '../../services/allowance.service';
-import type { Allowance, AllowanceListQuery, AllowanceType as AllowanceTypeEnum } from '../../services/allowance.service';
+import { Plus, History, Lock } from 'lucide-react';
+import { allowanceService, ALLOWANCE_TYPES, MONTHLY_TYPES } from '../../services/allowance.service';
+import type { Allowance, AllowanceListQuery, AllowanceType, PaginatedResponse } from '../../services/allowance.service';
 import { companyService } from '../../services/company.service';
 import { employeeService } from '../../services/employee.service';
 import { CompensationWorkspace, CompensationStatus, CompensationEmpty, CompensationDialog, CompensationEmployeeSelect } from '@/components/compensation/CompensationWorkspace';
 import { collectPages } from '@/services/master-data';
 
-interface Company {
-  id: number;
-  name: string;
-}
+type Tab = 'contract' | 'monthly';
+type MonthlyView = 'period' | 'review';
+interface Option { id: number; name: string }
+interface EmployeeOption { id: number; name: string; employee_id: string }
 
-interface Employee {
-  id: number;
-  name: string;
-  employee_id: string;
-  basic_salary?: number;
-  company_id?: number;
-  department?: {
-    id: number;
-    name: string;
-  };
+const PAGE_SIZE = 20;
+const MANAGE_ROLES = ['Super Admin', 'HR Manager', 'HR Staff'];
+const APPROVE_ROLES = ['Super Admin', 'HR Manager', 'Finance Manager'];
+const PERIOD = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/** All companies use the 21st-to-20th cutoff: after the 20th the next payroll period is open. */
+function currentPayrollPeriod(): string {
+  const [year, month, day] = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit' })
+    .format(new Date()).split('-').map(Number);
+  const next = day > 20 ? new Date(Date.UTC(year, month, 1)) : new Date(Date.UTC(year, month - 1, 1));
+  return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, '0')}`;
 }
+const periodLabel = (period: string) => PERIOD.test(period)
+  ? new Intl.DateTimeFormat(intlLocale(), { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${period}-01T00:00:00Z`)) : period;
+const dateLabel = (value?: string | null) => value ? new Date(value).toLocaleDateString(intlLocale(), { timeZone: 'UTC' }) : '';
+/** Payroll period whose 21st-to-20th window starts on this date (21st -> next month). */
+const periodStartingAt = (value?: string | null) => {
+  if (!value) return '';
+  const [year, month, day] = value.slice(0, 10).split('-').map(Number);
+  const date = new Date(Date.UTC(year, day > 20 ? month : month - 1, 1));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+};
+const errorText = (error: unknown, fallback: string) => {
+  if (!isAxiosError(error)) return error instanceof Error && error.message ? error.message : t(fallback);
+  const data = error.response?.data;
+  const fields = data?.error?.errors as { message?: string }[] | undefined;
+  return fields?.[0]?.message || data?.error?.message || data?.message || t(fallback);
+};
+/** Blank stays null (not entered); "0" is an explicit final zero. A plain decimal (dot or comma) keeps its exact value. */
+const parseAmount = (value: string): number | null | undefined => {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (!/^\d+([.,]\d{1,2})?$/.test(trimmed)) return undefined;
+  return Number(trimmed.replace(',', '.'));
+};
+/** Bulk endpoints answer 200 with per-row failures; surface them as an error, never as success. */
+const ensureNoFailures = async (pending: Promise<{ failed: number; errors: string[] }>) => {
+  const outcome = await pending;
+  if (outcome.failed) throw new Error(outcome.errors.join('; ') || t('Aksi gagal diproses'));
+  return outcome;
+};
+const amountLabel = (row: Allowance) => row.amount == null || row.amount === ''
+  ? <span className="al-blank">{t('Belum diisi')}</span>
+  : Number(row.amount) === 0 ? <><strong>{payrollCurrency(0)}</strong><small>{t('Nol final')}</small></> : <strong>{payrollCurrency(row.amount)}</strong>;
+const isApproved = (row: Allowance) => row.status === 'approved' || row.status === 'active';
+const paymentLabel = (row: Allowance) => row.payment_state === 'paid' ? t('Dibayar') : row.payment_state === 'reserved' ? t('Masuk draft payroll') : '';
 
 export function AllowancesPage() {
   useLocale();
-  const { requestDecision, decisionDialog } = useDomainConfirmation('compensation-refresh-dialog');
   const user = useAuthStore(state => state.user);
-  // Match the existing allowance/payroll-adjustment write routes.
-  const canManage = user?.roles.some(role => ['Super Admin', 'HR Manager', 'HR Staff'].includes(role)) ?? false;
-  const dataRequest = useRef(0);
-  const employeeRequest = useRef(0);
-  const [loadError, setLoadError] = useState(false);
-  const [companiesError, setCompaniesError] = useState(false);
-  const [employeesError, setEmployeesError] = useState(false);
-  useEffect(() => () => { dataRequest.current++; employeeRequest.current++; }, []);
-  const [allowances, setAllowances] = useState<Allowance[]>([]);
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
-  const [loadingEmployees, setLoadingEmployees] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const canManage = user?.roles.some(role => MANAGE_ROLES.includes(role)) ?? false;
+  const canApprove = user?.roles.some(role => APPROVE_ROLES.includes(role)) ?? false;
+  const [params, setParams] = useSearchParams();
+  const tab: Tab = params.get('tab') === 'monthly' ? 'monthly' : 'contract';
+  const view: MonthlyView = params.get('view') === 'review' ? 'review' : 'period';
+  const period = PERIOD.test(params.get('period') ?? '') ? params.get('period')! : currentPayrollPeriod();
+  const updateParams = (changes: Record<string, string | null>) => setParams(previous => {
+    const next = new URLSearchParams(previous);
+    for (const [key, value] of Object.entries(changes)) {
+      if (value === null) next.delete(key); else next.set(key, value);
+    }
+    return next;
+  }, { replace: true });
+
   const [search, setSearch] = useState('');
-  const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [filterCompany, setFilterCompany] = useState<string>('all');
-  const [filterTaxable, setFilterTaxable] = useState<string>('all');
-  const [filterType, setFilterType] = useState<string>('all');
-  const [showModal, setShowModal] = useState(false);
-  const [editingAllowance, setEditingAllowance] = useState<Allowance | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [company, setCompany] = useState('all');
+  const [status, setStatus] = useState('all');
+  const [type, setType] = useState('all');
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalItems, setTotalItems] = useState(0);
-  const limit = 12;
+  const [result, setResult] = useState<PaginatedResponse<Allowance> | null>(null);
+  const [reviewCount, setReviewCount] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [revision, setRevision] = useState(0);
+  const [companies, setCompanies] = useState<Option[]>([]);
+  const [companiesFailed, setCompaniesFailed] = useState(false);
+  const [selected, setSelected] = useState<number[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [dialog, setDialog] = useState<DialogState | null>(null);
+  const request = useRef(0);
 
-  const [formData, setFormData] = useState({
-    name: '',
-    type: 'transport' as AllowanceTypeEnum,
-    description: '',
-    is_taxable: true,
-    is_bpjs_object: false,
-    is_recurring: true,
-    is_contract: false,
-    amount: 0,
-    percentage: 0,
-    calculation_base: 'fixed' as 'fixed' | 'basic_salary' | 'gross_salary',
-    frequency: 'monthly' as 'monthly' | 'weekly' | 'daily' | 'one_time',
-    company_id: '' as string | number,
-    employee_id: '' as string | number,
-    status: 'active' as string,
-    effective_date: '',
-    end_date: '',
-  });
+  // A failed company list is shown as a failure with retry, never as an empty choice.
+  const loadCompanies = useCallback(() => {
+    setCompaniesFailed(false);
+    collectPages((page, limit) => companyService.getAll({ page, limit }))
+      .then(rows => setCompanies(rows.map(row => ({ id: row.id, name: row.name }))))
+      .catch(() => setCompaniesFailed(true));
+  }, []);
+  useEffect(() => { loadCompanies(); }, [loadCompanies]);
 
-  // Fetch allowances from API
-  const fetchAllowances = useCallback(async () => {
-    const request = ++dataRequest.current;
-    setLoadError(false);
+  // Any scope change starts a fresh request; older responses are discarded.
+  useEffect(() => { setPage(1); setSelected([]); }, [tab, view, period, company, status, type, search]);
+  // Status values differ per lifecycle; never carry one tab's filter into another.
+  useEffect(() => { setStatus('all'); }, [tab, view]);
+
+  const lifecycle = tab === 'contract' ? 'contract' : view === 'review' ? 'review' : 'monthly';
+  useEffect(() => {
+    const id = ++request.current;
+    const controller = new AbortController();
     setLoading(true);
-    try {
-      const query: AllowanceListQuery = {
-        page,
-        limit,
-        search: search || undefined,
-      };
-      if (filterStatus !== 'all') query.status = filterStatus;
-      if (filterCompany !== 'all' && filterCompany !== 'global') {
-        query.company_id = Number(filterCompany);
-      }
-      if (filterTaxable !== 'all') {
-        query.is_taxable = filterTaxable === 'taxable';
-      }
-      if (filterType !== 'all') {
-        query.type = filterType;
-      }
+    setLoadError(false);
+    setResult(null);
+    const query: AllowanceListQuery = { page, limit: PAGE_SIZE, lifecycle, search: search.trim() || undefined,
+      company_id: company === 'all' ? undefined : Number(company), status: status === 'all' ? undefined : status,
+      type: type === 'all' ? undefined : type, payroll_period: lifecycle === 'monthly' ? period : undefined };
+    allowanceService.list(query, controller.signal).then(response => {
+      if (id === request.current) setResult(response);
+    }).catch(() => {
+      if (id === request.current && !controller.signal.aborted) setLoadError(true);
+    }).finally(() => {
+      if (id === request.current) setLoading(false);
+    });
+    if (tab === 'monthly') {
+      allowanceService.list({ lifecycle: 'review', limit: 1, company_id: company === 'all' ? undefined : Number(company) }, controller.signal)
+        .then(response => { if (id === request.current) setReviewCount(response.pagination.total); })
+        .catch(() => { if (id === request.current) setReviewCount(null); });
+    }
+    return () => controller.abort();
+  }, [lifecycle, tab, page, search, company, status, type, period, revision]);
 
-      const response = await allowanceService.list(query);
-      if (request !== dataRequest.current) return;
-      setAllowances(response.data);
-      setTotalPages(response.pagination.totalPages);
-      setTotalItems(response.pagination.total);
+  const rows = result?.data ?? [];
+  const reload = () => { setSelected([]); setRevision(value => value + 1); };
+  const run = async (action: () => Promise<unknown>, success: string) => {
+    setBusy(true);
+    try {
+      await action();
+      toast.success(t(success));
+      setDialog(null);
+      reload();
     } catch (error) {
-      if (request !== dataRequest.current) return;
-      setLoadError(true);
-      setAllowances([]);
-      console.error('Failed to fetch allowances:', error);
+      toast.error(errorText(error, 'Aksi gagal diproses'), { id: 'api-error', toasterId: dialog ? 'compensation-dialog' : undefined });
     } finally {
-      if (request === dataRequest.current) setLoading(false);
+      setBusy(false);
     }
-  }, [page, search, filterStatus, filterCompany, filterTaxable, filterType]);
-
-  // Fetch companies
-  const fetchCompanies = useCallback(async () => {
+  };
+  const runBulk = async (action: () => Promise<{ failed: number; errors: string[] }>, success: string) => {
+    setBusy(true);
     try {
-      setCompaniesError(false);
-      const rows = await collectPages((page, limit) => companyService.getAll({ page, limit }));
-      setCompanies(rows);
+      const outcome = await action();
+      if (outcome.failed) toast.error(t('{value0} baris gagal: {value1}', { value0: payrollNumber(outcome.failed), value1: outcome.errors.slice(0, 2).join('; ') }));
+      else toast.success(t(success));
+      reload();
     } catch (error) {
-      console.error('Failed to fetch companies:', error);
-      setCompaniesError(true);
-    }
-  }, []);
-
-  // Fetch employees (filtered by company if selected)
-  const fetchEmployees = useCallback(async (companyId?: number) => {
-    const request = ++employeeRequest.current;
-    setEmployeesError(false);
-    setEmployees([]);
-    setLoadingEmployees(true);
-    try {
-      const params: { page: number; limit: number; company_id?: number; employment_status?: string } = {
-        page: 1,
-        limit: 200,
-        employment_status: 'all',
-      };
-      if (companyId) {
-        params.company_id = companyId;
-      }
-      const rows = await collectPages((page, limit) => employeeService.getAll({ ...params, page, limit }));
-      if (request !== employeeRequest.current) return;
-      // Map to our local Employee interface (only active + resigned)
-      setEmployees(rows
-        .filter(emp => emp.employment_status === 'active' || emp.employment_status === 'resigned')
-        .map(emp => ({
-          id: emp.id,
-          name: emp.name,
-          employee_id: emp.employee_id || '',
-          basic_salary: emp.basic_salary,
-          company_id: emp.company_id,
-          department: emp.department || undefined,
-        })));
-    } catch (error) {
-      if (request !== employeeRequest.current) return;
-      setEmployeesError(true);
-      console.error('Failed to fetch employees:', error);
-      setEmployees([]);
+      toast.error(errorText(error, 'Aksi gagal diproses'));
     } finally {
-      if (request === employeeRequest.current) setLoadingEmployees(false);
-    }
-  }, []);
-
-  // Calculate allowance amount for percentage-based
-  const calculateAllowanceAmount = useCallback(() => {
-    if (!selectedEmployee?.basic_salary) return 0;
-    if (formData.calculation_base === 'fixed') {
-      return formData.amount || 0;
-    }
-    const percentage = formData.percentage || 0;
-    // For now, assume gross_salary = basic_salary (simplified)
-    const base = selectedEmployee.basic_salary;
-    return Math.round(base * percentage / 100);
-  }, [selectedEmployee, formData.calculation_base, formData.amount, formData.percentage]);
-
-  useEffect(() => {
-    fetchCompanies();
-  }, [fetchCompanies]);
-
-  // Fetch employees when modal opens or company changes
-  useEffect(() => {
-    if (showModal) {
-      if (formData.company_id) {
-        fetchEmployees(Number(formData.company_id));
-      } else {
-        fetchEmployees(); // Fetch all employees if no company selected
-      }
-    }
-  }, [showModal, formData.company_id, fetchEmployees]);
-
-  useEffect(() => {
-    fetchAllowances();
-  }, [fetchAllowances]);
-
-  // Reset page when filters change
-  useEffect(() => {
-    setPage(1);
-  }, [search, filterStatus, filterCompany, filterTaxable, filterType]);
-
-  // Stats (computed from current data)
-  const stats = useMemo(() => {
-    const activeAllowances = allowances.filter(a => a.status === 'active');
-    const totalAmount = activeAllowances.reduce((acc, a) => acc + Number(a.amount || 0), 0);
-    const taxableAmount = activeAllowances.filter(a => a.is_taxable).reduce((acc, a) => acc + Number(a.amount || 0), 0);
-    return {
-      totalItems,
-      activeCount: activeAllowances.length,
-      totalAmount: isNaN(totalAmount) ? 0 : totalAmount,
-      taxableAmount: isNaN(taxableAmount) ? 0 : taxableAmount,
-    };
-  }, [allowances, totalItems]);
-
-  const getIcon = (type: string) => {
-    switch (type) {
-      case 'transport':
-        return <Car className="w-5 h-5" />;
-      case 'meal':
-        return <Utensils className="w-5 h-5" />;
-      case 'housing':
-        return <Home className="w-5 h-5" />;
-      case 'communication':
-        return <Phone className="w-5 h-5" />;
-      case 'position':
-        return <Briefcase className="w-5 h-5" />;
-      case 'medical':
-        return <Heart className="w-5 h-5" />;
-      case 'performance':
-        return <GraduationCap className="w-5 h-5" />;
-      case 'attendance':
-        return <Clock className="w-5 h-5" />;
-      case 'shift':
-        return <Shirt className="w-5 h-5" />;
-      case 'remote':
-        return <Wifi className="w-5 h-5" />;
-      case 'thr':
-        return <Gift className="w-5 h-5" />;
-      case 'bonus':
-        return <Trophy className="w-5 h-5" />;
-      default:
-        return <Coins className="w-5 h-5" />;
+      setBusy(false);
     }
   };
 
-  const handleOpenModal = (allowance?: Allowance) => {
-    if (allowance) {
-      setEditingAllowance(allowance);
-      setFormData({
-        name: allowance.name,
-        type: allowance.type,
-        description: allowance.description || '',
-        is_taxable: allowance.is_taxable,
-        is_bpjs_object: allowance.is_bpjs_object,
-        is_recurring: allowance.is_recurring,
-        is_contract: allowance.is_contract || false,
-        amount: allowance.amount || 0,
-        percentage: allowance.percentage || 0,
-        calculation_base: allowance.calculation_base || 'fixed',
-        frequency: allowance.frequency,
-        company_id: allowance.company_id || '',
-        employee_id: allowance.employee_id || '',
-        status: allowance.status,
-        effective_date: allowance.effective_date?.split('T')[0] || '',
-        end_date: allowance.end_date?.split('T')[0] || '',
-      });
-      // Set selected employee from allowance data
-      if (allowance.employee) {
-        setSelectedEmployee({
-          id: allowance.employee.id,
-          name: allowance.employee.name,
-          employee_id: allowance.employee.employee_id,
-          basic_salary: allowance.employee.basic_salary,
-          department: allowance.employee.department,
-        });
-      } else {
-        setSelectedEmployee(null);
-      }
-    } else {
-      setEditingAllowance(null);
-      setFormData({
-        name: '',
-        type: 'transport',
-        description: '',
-        is_taxable: true,
-        is_bpjs_object: false,
-        is_recurring: true,
-        is_contract: false,
-        amount: 0,
-        percentage: 0,
-        calculation_base: 'fixed',
-        frequency: 'monthly',
-        company_id: '',
-        employee_id: '',
-        status: 'active',
-        effective_date: '',
-        end_date: '',
-      });
-      setSelectedEmployee(null);
-    }
-    setShowModal(true);
+  const onTabKey = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const next: Tab = event.key === 'Home' ? 'contract' : event.key === 'End' ? 'monthly' : tab === 'contract' ? 'monthly' : 'contract';
+    updateParams({ tab: next, view: null });
+    document.getElementById(`allowance-tab-${next}`)?.focus();
   };
+  const summary = result?.summary ?? [];
+  const countOf = (state: string) => summary.find(row => row.status === state)?.count ?? 0;
+  const approvedAmount = Number(summary.find(row => row.status === 'approved')?.amount ?? 0);
+  const total = result?.pagination.total ?? 0;
+  const selectable = rows.filter(row => row.status === 'draft' || row.status === 'pending');
+  const toggle = (id: number) => setSelected(previous => previous.includes(id) ? previous.filter(value => value !== id) : [...previous, id]);
 
-  const handleCloseModal = () => {
-    setShowModal(false);
-    setEditingAllowance(null);
-    setSelectedEmployee(null);
-  };
+  const metrics = tab === 'contract'
+    ? [
+      { label: t('Tunjangan OL'), value: payrollNumber(total), note: t('Sesuai filter yang dipilih') },
+      { label: t('Berlaku di halaman ini'), value: payrollNumber(rows.filter(isApproved).length), note: t('Disetujui dan berulang setiap periode') },
+      { label: t('Menunggu persetujuan'), value: payrollNumber(rows.filter(row => row.status === 'pending').length), note: t('Pada halaman ini') },
+    ]
+    : view === 'review'
+      ? [{ label: t('Perlu ditinjau'), value: payrollNumber(total), note: t('Tunjangan lama tanpa klasifikasi') }]
+      : [
+        { label: t('Draft'), value: payrollNumber(countOf('draft')), note: t('Belum diajukan') },
+        { label: t('Menunggu persetujuan'), value: payrollNumber(countOf('pending')), note: t('Diajukan HR') },
+        { label: t('Disetujui'), value: total ? payrollCurrency(approvedAmount) : '—', note: total ? t('Nominal disetujui, belum tentu sudah dibayar') : t('Belum ada pengajuan periode ini') },
+      ];
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const statusOptions = tab === 'contract'
+    ? ['pending', 'approved', 'rejected', 'cancelled']
+    : view === 'review' ? ['active', 'approved', 'pending', 'inactive'] : ['draft', 'pending', 'approved', 'rejected', 'cancelled'];
 
-    if (!formData.name || !formData.type) {
-      toast.error(t("Please fill in required fields"), { id: 'api-error', toasterId: 'compensation-dialog' });
-      return;
-    }
-
-    // Require employee for percentage-based calculations
-    if (formData.calculation_base !== 'fixed' && !formData.employee_id) {
-      toast.error(t("Employee is required for percentage-based allowances"), { id: 'api-error', toasterId: 'compensation-dialog' });
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      const payload = {
-        name: formData.name,
-        type: formData.type,
-        description: formData.description || undefined,
-        is_taxable: formData.is_taxable,
-        is_bpjs_object: formData.is_bpjs_object,
-        is_recurring: formData.is_recurring,
-        is_contract: formData.is_contract,
-        amount: formData.calculation_base === 'fixed' ? formData.amount : undefined,
-        percentage: formData.calculation_base !== 'fixed' ? formData.percentage : undefined,
-        calculation_base: formData.calculation_base,
-        frequency: formData.frequency,
-        company_id: formData.company_id ? Number(formData.company_id) : undefined,
-        employee_id: formData.employee_id ? Number(formData.employee_id) : undefined,
-        status: formData.status,
-        effective_date: formData.effective_date || undefined,
-        end_date: formData.end_date || undefined,
-      };
-
-      if (editingAllowance) {
-        await allowanceService.update(editingAllowance.id, payload);
-        toast.success(t("Allowance updated successfully"));
-      } else {
-        await allowanceService.create(payload);
-        toast.success(t("Allowance created successfully"));
-      }
-
-      handleCloseModal();
-      fetchAllowances();
-    } catch (error) {
-      console.error('Failed to save allowance:', error);
-      toast.error((isAxiosError(error) ? error.response?.data?.message : undefined) || t('Failed to save allowance'), { id: 'api-error', toasterId: 'compensation-dialog' });
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleDelete = async (id: number) => {
-    if (!(await requestDecision({ title: t('Delete allowance'), message: t('Are you sure you want to delete this allowance?'), confirmLabel: t('Delete') }))) return;
-
-    try {
-      await allowanceService.delete(id);
-      toast.success(t("Allowance deleted successfully"));
-      fetchAllowances();
-    } catch (error) {
-      console.error('Failed to delete allowance:', error);
-      toast.error((isAxiosError(error) ? error.response?.data?.message : undefined) || t('Failed to delete allowance'), { id: 'api-error' });
-    }
-  };
-
-  // Toggle status - can be used for quick status change from card
-  const _handleToggleStatus = async (allowance: Allowance) => {
-    try {
-      const newStatus = allowance.status === 'active' ? 'inactive' : 'active';
-      await allowanceService.update(allowance.id, { status: newStatus });
-      toast.success(t("Status updated"));
-      fetchAllowances();
-    } catch (error) {
-      console.error('Failed to update status:', error);
-      toast.error(t("Failed to update status"));
-    }
-  };
-  void _handleToggleStatus; // Silence unused warning
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat(intlLocale(), {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0,
-    }).format(amount);
-  };
-
-  const typeOptions = ALLOWANCE_TYPES.map(type => ({
-    value: type,
-    label: payrollEnumLabel(type),
-    icon: getIcon(type),
-  }));
-
-  return (
-    <>
-      <CompensationWorkspace title={t("Allowances")} description={t("Kelola tunjangan karyawan, penerima, dan periode berlakunya.")}
-        actions={canManage && <button className="cp-button cp-primary" onClick={() => handleOpenModal()}><Plus size={17} />{t("Add Allowance")}</button>}
-        filters={<>
-          <label className="cp-field">{t("company")}<select aria-label={t("Filter company")} value={filterCompany} onChange={event => { setFilterCompany(event.target.value); setPage(1); }}><option value="all">{t("Semua company")}</option>{companies.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}</select></label>
-            {companiesError && <p className="cp-filter-error" role="alert">{t("Daftar company gagal dimuat.")} <button onClick={fetchCompanies}>{t("Coba lagi")}</button></p>}
-          <label className="cp-field">{t("tipe")}<select aria-label={t("Filter tipe")} value={filterType} onChange={event => { setFilterType(event.target.value); setPage(1); }}><option value="all">{t("Semua tipe")}</option>{ALLOWANCE_TYPES.map(type => <option key={type} value={type}>{payrollEnumLabel(type)}</option>)}</select></label>
-          <label className="cp-field">{t("status")}<select aria-label={t("Filter status")} value={filterStatus} onChange={event => { setFilterStatus(event.target.value); setPage(1); }}><option value="all">{t("Semua status")}</option><option value="active">{t("Active")}</option><option value="inactive">{t("Inactive")}</option><option value="pending">{t("Pending")}</option><option value="approved">{t("Approved")}</option><option value="rejected">{t("Rejected")}</option></select></label>
-          <label className="cp-field">{t("pajak")}<select aria-label={t("Filter pajak")} value={filterTaxable} onChange={event => { setFilterTaxable(event.target.value); setPage(1); }}><option value="all">{t("Semua status pajak")}</option><option value="taxable">{t("Taxable")}</option><option value="non-taxable">{t("Non-taxable")}</option></select></label>
-          <button className="cp-reset" onClick={() => { setSearch(''); setFilterCompany('all'); setFilterType('all'); setFilterStatus('all'); setFilterTaxable('all'); setPage(1); }}>{t("Reset filter")}</button>
-          <p className="cp-filter-note"><Lock size={16} />{t("Tunjangan Contract / OL dikunci dan tidak dapat diubah dari daftar ini.")}</p>
-        </>}
-        metrics={[
-          { label: t('Tunjangan ditemukan'), value: payrollNumber(totalItems), note: t('Sesuai filter yang dipilih') },
-          { label: t('Aktif'), value: payrollNumber(stats.activeCount), note: t('Pada halaman ini') },
-          { label: t('Nominal aktif'), value: formatCurrency(stats.totalAmount), note: t('Nominal tersimpan pada halaman ini') },
-        ]}
-        search={search} onSearch={value => { setSearch(value); setPage(1); }} searchLabel={t("Cari nama tunjangan…")}
-        loading={loading} error={loadError} onRetry={fetchAllowances}
-        page={page} totalPages={totalPages} onPage={setPage} count={t("{value0} dari {value1} tunjangan", { value0: payrollNumber(allowances.length), value1: payrollNumber(totalItems) })}>
-        {!allowances.length ? <CompensationEmpty /> : <table className="cp-table"><thead><tr><th>{t("Tunjangan")}</th><th>{t("Penerima")}</th><th>{t("Nominal / Periode")}</th><th>{t("Status")}</th><th><span className="sr-only">{t("Aksi")}</span></th></tr></thead>
-          <tbody>{allowances.map(allowance => <tr key={allowance.id}>
-            <td><div className="cp-record-title"><span className="cp-record-icon">{getIcon(allowance.type)}</span><div><strong>{allowance.name}</strong><small>{payrollEnumLabel(allowance.type)}</small></div></div>
-              {allowance.description && <p className="cp-description">{allowance.description}</p>}
-              <div className="cp-tags"><span>{allowance.is_taxable ? t("Taxable") : t("Non-taxable")}</span>{allowance.is_bpjs_object && <span>{t("BPJS object")}</span>}{allowance.is_contract && <span>{t("Contract / OL")}</span>}</div></td>
-            <td data-label={t("Penerima")}><strong>{allowance.employee?.name || allowance.company?.name || t('Semua company')}</strong><small>{allowance.employee?.employee_id || allowance.company?.name || t('Tunjangan global')}</small>{allowance.employee?.department && <small>{allowance.employee.department.name}</small>}</td>
-            <td data-label={t("Nominal / Periode")} className="cp-money"><strong>{allowance.calculation_base === 'basic_salary' || allowance.calculation_base === 'gross_salary' ? (allowance.percentage == null ? '?' : `${Number(allowance.percentage).toLocaleString(intlLocale(), { maximumFractionDigits: 20 })}%`) : allowance.amount == null ? '?' : formatCurrency(Number(allowance.amount))}</strong>
-              <small>{allowance.calculation_base === 'basic_salary' ? t("Dari gaji pokok") : allowance.calculation_base === 'gross_salary' ? t("Dari gross salary") : t("Nominal tetap")} · {payrollEnumLabel(allowance.frequency)}</small>
-              {allowance.effective_date && <small>{new Date(allowance.effective_date).toLocaleDateString(intlLocale())}{allowance.end_date ? ` – ${new Date(allowance.end_date).toLocaleDateString(intlLocale())}` : ''}</small>}</td>
-            <td data-label={t("Status")}><CompensationStatus status={allowance.status} /></td>
-            <td className="cp-row-actions">{allowance.is_contract ? <span title={t("Terkunci: bagian dari Contract / OL")} aria-label={t("Tunjangan kontrak terkunci")}><Lock size={16} /></span> : canManage ? <><button className="cp-icon-button" aria-label={t("Edit {value0}", { value0: allowance.name })} onClick={() => handleOpenModal(allowance)}><Edit2 size={16} /></button><button className="cp-icon-button cp-danger" aria-label={t("Hapus {value0}", { value0: allowance.name })} onClick={() => handleDelete(allowance.id)}><Trash2 size={16} /></button></> : null}</td>
-          </tr>)}</tbody></table>}
-      </CompensationWorkspace>
-      {showModal && canManage && <CompensationDialog title={editingAllowance ? t("Edit Allowance") : t("Add Allowance")} subtitle={t("Tentukan penerima dan komponen tunjangannya.")} busy={submitting} onClose={handleCloseModal}>
-        {employeesError && <p className="cp-form-error" role="alert">{t("Daftar karyawan gagal dimuat.")} <button type="button" onClick={() => fetchEmployees(formData.company_id ? Number(formData.company_id) : undefined)}>{t("Coba lagi")}</button></p>}
-        <form onSubmit={handleSubmit} className="ph-workflow dw-form">
-                <div><div className="dw-form-content"><section className="ph-section dw-section"><h3>{t("Recipient")}</h3><div className="dw-fields">{!editingAllowance && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">{t("Quick Template")}</label>
-                      <select aria-label={t("Quick Template")}
-                        onChange={(e) => {
-                          const template = allowanceService.getDefaultTemplates().find(t => t.name === e.target.value);
-                          if (template) {
-                            setFormData(prev => ({
-                              ...prev,
-                              name: template.name,
-                              type: template.type as AllowanceTypeEnum,
-                              description: template.description,
-                              calculation_base: template.calculation_base as 'fixed' | 'basic_salary' | 'gross_salary',
-                              frequency: template.frequency as 'monthly' | 'weekly' | 'daily' | 'one_time',
-                              is_taxable: template.is_taxable,
-                              is_bpjs_object: template.is_bpjs_object,
-                              is_recurring: template.is_recurring,
-                            }));
-                          }
-                        }}
-                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-emerald-50"
-                        defaultValue=""
-                      >
-                        <option value="" disabled>{t("Select a template to auto-fill...")}</option>
-                        {allowanceService.getDefaultTemplates().map(template => (
-                          <option key={template.name} value={template.name}>
-                            {t(template.name)}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-<div className="dw-fields">
-
-                    <div className="ph-form-grid dw-form-grid">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">{t("Company")}</label>
-                        <select aria-label={t("Company")}
-                          value={formData.company_id}
-                          onChange={(e) => {
-                            setFormData(prev => ({ ...prev, company_id: e.target.value, employee_id: '' }));
-                            setSelectedEmployee(null);
-                          }}
-                          className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-white"
-                        >
-                          <option value="">{t("All Companies (Global)")}</option>
-                          {companies.map(company => (
-                            <option key={company.id} value={company.id}>{company.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">{t("Employee")} {formData.calculation_base !== 'fixed' && <span className="text-red-500">*</span>}
-                        </label>
-                        <CompensationEmployeeSelect
-                          options={employees.map(emp => ({
-                            value: emp.id,
-                            label: emp.name,
-                            sublabel: emp.employee_id,
-                          }))}
-                          value={formData.employee_id ? Number(formData.employee_id) : ''}
-                          onChange={(val) => {
-                            const employeeId = String(val);
-                            setFormData(prev => ({ ...prev, employee_id: employeeId }));
-                            const emp = employees.find(emp => emp.id === Number(employeeId));
-                            setSelectedEmployee(emp || null);
-                          }}
-                          placeholder={t("Search employee...")}
-                          searchPlaceholder={t("Type name or ID...")}
-                          disabled={loadingEmployees}
-                          loading={loadingEmployees}
-                          emptyMessage={t("No employees found")}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Employee Info Display */}
-                    {selectedEmployee && (
-                      <div className="dw-context">
-                        <div className="flex items-center gap-3">
-
-                          <div className="flex-1">
-                            <p className="font-medium text-gray-900">{selectedEmployee.name}</p>
-                            <p className="text-xs text-gray-500">
-                              {selectedEmployee.employee_id}
-                              {selectedEmployee.department && ` • ${selectedEmployee.department.name}`}
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-xs text-gray-500">{t("Basic Salary")}</p>
-                            <p className="font-semibold text-emerald-600">
-                              {selectedEmployee.basic_salary ? formatCurrency(selectedEmployee.basic_salary) : '-'}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div></div></section><section className="ph-section dw-section"><h3>{t("Allowance")}</h3><div className="dw-fields"><div className="ph-form-grid dw-form-grid">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">{t("Name")} <span className="text-red-500">*</span>
-                      </label>
-                      <input aria-label={t("Name *")}
-                        type="text"
-                        value={formData.name}
-                        onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                        placeholder={t("e.g., Tunjangan Transportasi")}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">{t("Type")} <span className="text-red-500">*</span>
-                      </label>
-                      <select aria-label={t("Type *")}
-                        value={formData.type}
-                        onChange={(e) => setFormData(prev => ({ ...prev, type: e.target.value as AllowanceTypeEnum }))}
-                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                        required
-                      >
-                        {typeOptions.map(option => (
-                          <option key={option.value} value={option.value}>{option.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-<div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">{t("Description")}</label>
-                    <textarea aria-label={t("Description")}
-                      value={formData.description}
-                      onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                      className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                      rows={2}
-                      placeholder={t("Brief description...")}
-                    />
-                  </div>
-<div className="ph-form-grid dw-form-grid">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">{t("Calculation Base")}</label>
-                      <select aria-label={t("Calculation Base")}
-                        value={formData.calculation_base}
-                        onChange={(e) => setFormData(prev => ({ ...prev, calculation_base: e.target.value as 'fixed' | 'basic_salary' | 'gross_salary' }))}
-                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                      >
-                        <option value="fixed">{t("Fixed Amount")}</option>
-                        <option value="basic_salary">{t("% of Basic Salary")}</option>
-                        <option value="gross_salary">{t("% of Gross Salary")}</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        {formData.calculation_base === 'fixed' ? t("Amount (Rp)") : t("Percentage (%)")}
-                      </label>
-                      {formData.calculation_base === 'fixed' ? (
-                        <input aria-label={t("Amount (Rp)")}
-                          type="number"
-                          value={formData.amount}
-                          onChange={(e) => setFormData(prev => ({ ...prev, amount: Number(e.target.value) }))}
-                          className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                          placeholder="0"
-                        />
-                      ) : (
-                        <input aria-label={t("Percentage (%)")}
-                          type="number"
-                          step="0.01"
-                          value={formData.percentage}
-                          onChange={(e) => setFormData(prev => ({ ...prev, percentage: Number(e.target.value) }))}
-                          className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                          placeholder="0"
-                        />
-                      )}
-                    </div>
-                  </div></div></section><section className="ph-section dw-section"><h3>{t("Schedule")}</h3><div className="dw-fields"><div className="ph-form-grid dw-form-grid">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">{t("Frequency")}</label>
-                      <select aria-label={t("Frequency")}
-                        value={formData.frequency}
-                        onChange={(e) => setFormData(prev => ({ ...prev, frequency: e.target.value as 'monthly' | 'weekly' | 'daily' | 'one_time' }))}
-                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                      >
-                        <option value="monthly">{t("Monthly")}</option>
-                        <option value="weekly">{t("Weekly")}</option>
-                        <option value="daily">{t("Daily")}</option>
-                        <option value="one_time">{t("One Time")}</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">{t("Status")}</label>
-                      <select aria-label={t("Status")}
-                        value={formData.status}
-                        onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value }))}
-                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                      >
-                        <option value="active">{t("Active")}</option>
-                        <option value="inactive">{t("Inactive")}</option>
-                        <option value="pending">{t("Pending")}</option>
-                      </select>
-                    </div>
-                  </div>
-<div className="ph-form-grid dw-form-grid">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">{t("Effective Date")}</label>
-                      <input aria-label={t("Effective Date")}
-                        type="date"
-                        value={formData.effective_date}
-                        onChange={(e) => setFormData(prev => ({ ...prev, effective_date: e.target.value }))}
-                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">{t("End Date (Optional)")}</label>
-                      <input aria-label={t("End Date (Optional)")}
-                        type="date"
-                        value={formData.end_date}
-                        onChange={(e) => setFormData(prev => ({ ...prev, end_date: e.target.value }))}
-                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                      />
-                    </div>
-                  </div></div></section><section className="ph-section dw-section"><h3>{t("Payroll treatment")}</h3><div className="dw-fields"><div className="dw-checks">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={formData.is_taxable}
-                        onChange={(e) => setFormData(prev => ({ ...prev, is_taxable: e.target.checked }))}
-                        className="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
-                      />
-                      <span className="text-sm text-gray-700">{t("Taxable (PPh 21)")}</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={formData.is_bpjs_object}
-                        onChange={(e) => setFormData(prev => ({ ...prev, is_bpjs_object: e.target.checked }))}
-                        className="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
-                      />
-                      <span className="text-sm text-gray-700">{t("BPJS Object")}</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={formData.is_recurring}
-                        onChange={(e) => setFormData(prev => ({ ...prev, is_recurring: e.target.checked }))}
-                        className="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
-                      />
-                      <span className="text-sm text-gray-700">{t("Recurring")}</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={formData.is_contract}
-                        onChange={(e) => setFormData(prev => ({ ...prev, is_contract: e.target.checked }))}
-                        className="w-4 h-4 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
-                      />
-                      <span className="text-sm text-gray-700 font-medium">{t("Contract / OL")}</span>
-                    </label>
-                  </div></div></section>{formData.calculation_base === 'fixed' && formData.amount > 0 && (
-                    <div className="dw-inline">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-emerald-700">{t("Total Allowance Amount")}</span>
-                        <span className="dw-money">
-                          {formatCurrency(formData.amount)}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-{formData.calculation_base !== 'fixed' && formData.percentage > 0 && selectedEmployee?.basic_salary && (
-                    <div className="dw-inline">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <span className="text-sm text-emerald-700">{t("Calculated Amount")}</span>
-                          <p className="text-xs text-emerald-600 mt-0.5">
-                            {payrollNumber(Number(formData.percentage))}{t("% of")} {formatCurrency(selectedEmployee.basic_salary)}
-                          </p>
-                        </div>
-                        <span className="dw-money">
-                          {formatCurrency(calculateAllowanceAmount())}
-                        </span>
-                      </div>
-                    </div>
-                  )}</div></div>
-
-                <div className="ph-form-actions dw-actions">
-                  <button
-                    type="button"
-                    onClick={handleCloseModal}
-                    disabled={submitting}
-                    className="ph-button"
-                  >{t("Cancel")} </button>
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="ph-button ph-button-primary"
-                  >
-                    {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                    {editingAllowance ? t("Update") : t("Create")}
-                  </button>
+  return <>
+    <CompensationWorkspace
+      title={t('Allowances')}
+      description={t('Tunjangan kontrak / OL berlaku berulang sampai diubah; insentif bulanan dicatat per periode payroll dan tidak terbawa ke bulan berikutnya.')}
+      actions={canManage && (tab === 'contract'
+        ? <button className="cp-button cp-primary" onClick={() => setDialog({ kind: 'contract' })}><Plus size={17} />{t('Tambah tunjangan OL')}</button>
+        : view === 'period' && <button className="cp-button cp-primary" onClick={() => setDialog({ kind: 'monthly' })}><Plus size={17} />{t('Tambah insentif')}</button>)}
+      tabs={<div className="al-tabs" role="tablist" aria-label={t('Jenis tunjangan')}>
+        {(['contract', 'monthly'] as Tab[]).map(value => <button key={value} id={`allowance-tab-${value}`} role="tab" type="button"
+          aria-selected={tab === value} aria-controls="allowance-panel" tabIndex={tab === value ? 0 : -1} onKeyDown={onTabKey}
+          onClick={() => updateParams({ tab: value, view: null })}>
+          {value === 'contract' ? t('Tunjangan Kontrak / OL') : t('Insentif Bulanan')}
+        </button>)}
+      </div>}
+      filters={<>
+        {tab === 'monthly' && <div className="al-view" role="group" aria-label={t('Tampilan insentif')}>
+          <button type="button" aria-pressed={view === 'period'} onClick={() => updateParams({ view: null })}>{t('Periode payroll')}</button>
+          <button type="button" aria-pressed={view === 'review'} onClick={() => updateParams({ view: 'review' })}>
+            {t('Perlu ditinjau')}{reviewCount ? <span className="al-badge">{payrollNumber(reviewCount)}</span> : null}
+          </button>
+        </div>}
+        {tab === 'monthly' && view === 'period' && <label className="cp-field">{t('Periode payroll')}
+          <input type="month" aria-label={t('Periode payroll')} value={period} onChange={event => PERIOD.test(event.target.value) && updateParams({ period: event.target.value })} />
+        </label>}
+        <label className="cp-field">{t('company')}<select aria-label={t('Filter company')} value={company} onChange={event => setCompany(event.target.value)}>
+          <option value="all">{t('Semua company')}</option>{companies.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
+        {companiesFailed && <p className="cp-filter-error" role="alert">{t('Daftar company gagal dimuat.')} <button type="button" onClick={loadCompanies}>{t('Muat ulang company')}</button></p>}
+        <label className="cp-field">{t('status')}<select aria-label={t('Filter status')} value={statusOptions.includes(status) ? status : 'all'} onChange={event => setStatus(event.target.value)}>
+          <option value="all">{t('Semua status')}</option>{statusOptions.map(value => <option key={value} value={value}>{payrollEnumLabel(value)}</option>)}</select></label>
+        <label className="cp-field">{t('tipe')}<select aria-label={t('Filter tipe')} value={type} onChange={event => setType(event.target.value)}>
+          <option value="all">{t('Semua tipe')}</option>{ALLOWANCE_TYPES.map(value => <option key={value} value={value}>{payrollEnumLabel(value)}</option>)}</select></label>
+        <button className="cp-reset" onClick={() => { setSearch(''); setCompany('all'); setStatus('all'); setType('all'); }}>{t('Reset filter')}</button>
+      </>}
+      metrics={metrics}
+      search={search} onSearch={setSearch} searchLabel={t('Cari karyawan atau tunjangan…')}
+      loading={loading} error={loadError} onRetry={reload}
+      page={page} totalPages={result?.pagination.totalPages ?? 1} onPage={setPage}
+      count={t('{value0} dari {value1} baris', { value0: payrollNumber(rows.length), value1: payrollNumber(total) })}>
+      <div id="allowance-panel" role="tabpanel" aria-labelledby={`allowance-tab-${tab}`} className="al-panel">
+        {tab === 'monthly' && view === 'period' && <p className="al-note">{t('Periode {value0}: periode baru selalu dimulai kosong. Nominal dan persetujuan bulan sebelumnya tidak dibawa; riwayat tetap tersedia lewat pilihan periode dan tombol riwayat.', { value0: periodLabel(period) })}</p>}
+        {tab === 'monthly' && view === 'review' && <p className="al-note">{t('Tunjangan lama di bawah ini belum diklasifikasikan. Pembayarannya tetap seperti sebelumnya sampai HR menandainya sebagai OL atau mengakhirinya. Tidak ada klasifikasi otomatis.')}</p>}
+        {tab === 'contract' && <p className="al-note"><Lock size={15} aria-hidden="true" />{t('Tunjangan yang sudah disetujui atau dipakai payroll tidak diedit; buat versi baru yang berlaku mulai periode payroll yang belum dibuat.')}</p>}
+        {tab === 'contract' && <p className="al-note" data-profile-guidance>{t('Nilai tunjangan yang hanya tercatat di profil karyawan tidak dibayar payroll dan tidak disalin otomatis. Tinjau lalu masukkan sebagai tunjangan OL bila memang bagian dari kontrak.')}</p>}
+        {tab === 'monthly' && view === 'period' && (canManage || canApprove) && selectable.length > 0 && <div className="al-bulk" role="group" aria-label={t('Aksi terpilih')}>
+          <span>{t('{value0} dipilih', { value0: payrollNumber(selected.length) })}</span>
+          {canManage && <button className="cp-button" disabled={busy || !selected.length} onClick={() => runBulk(() => allowanceService.submitMonthly(selected), 'Insentif diajukan')}>{t('Ajukan terpilih')}</button>}
+          {canApprove && <button className="cp-button cp-primary" disabled={busy || !selected.length} onClick={() => runBulk(() => allowanceService.approveMany(selected), 'Insentif disetujui')}>{t('Setujui terpilih')}</button>}
+        </div>}
+        {!rows.length
+          ? tab === 'monthly' && view === 'period'
+            ? <div className="cp-feedback"><h3>{t('Belum ada insentif untuk {value0}', { value0: periodLabel(period) })}</h3><p>{t('Belum ada pengajuan pada periode ini, jadi belum ada nominal yang dibayar. Tambahkan insentif bila ada.')}</p></div>
+            : tab === 'monthly' ? <div className="cp-feedback"><h3>{t('Tidak ada tunjangan yang perlu ditinjau')}</h3></div> : <CompensationEmpty />
+          : <table className="cp-table al-table">
+            <thead><tr>
+              {tab === 'monthly' && view === 'period' && <th className="al-check al-col-check"><span className="sr-only">{t('Pilih')}</span></th>}
+              <th className="al-col-employee">{t('Karyawan')}</th><th className="al-col-item">{tab === 'monthly' && view === 'period' ? t('Insentif') : t('Tunjangan')}</th>
+              <th className="al-col-period">{tab === 'monthly' && view === 'period' ? t('Periode kinerja') : t('Berlaku')}</th>
+              <th className="al-col-amount">{t('Nominal')}</th><th className="al-col-status">{t('Status')}</th>
+              <th className="al-col-actions"><span className="sr-only">{t('Aksi')}</span></th>
+            </tr></thead>
+            <tbody>{rows.map(row => <tr key={row.id} data-allowance-row={row.id}>
+              {tab === 'monthly' && view === 'period' && <td className="al-check">{(row.status === 'draft' || row.status === 'pending') &&
+                <input type="checkbox" aria-label={t('Pilih {value0}', { value0: row.employee?.name ?? row.name })} checked={selected.includes(row.id)} onChange={() => toggle(row.id)} />}</td>}
+              <td data-label={t('Karyawan')}><strong>{row.employee?.name ?? '—'}</strong><small>{row.employee?.employee_id ?? ''}</small></td>
+              <td data-label={t('Tunjangan')}><strong>{row.name}</strong><small>{payrollEnumLabel(row.type)}{row.component_key ? ` · ${row.component_key}` : ''}</small>
+                {row.reference && <small>{t('Ref')}: {row.reference}</small>}</td>
+              <td data-label={t('Berlaku')}>{tab === 'monthly' && view === 'period'
+                ? <small>{row.performance_start || row.performance_end ? `${dateLabel(row.performance_start)} – ${dateLabel(row.performance_end)}` : t('Tidak diisi')}</small>
+                : <small>{row.effective_date ? dateLabel(row.effective_date) : t('Sejak awal')} – {row.end_date ? dateLabel(row.end_date) : t('seterusnya')}</small>}</td>
+              <td data-label={t('Nominal')} className="cp-money">{amountLabel(row)}</td>
+              <td data-label={t('Status')}><CompensationStatus status={row.status} />{paymentLabel(row) && <small className="al-payment">{paymentLabel(row)}</small>}
+                {row.status === 'rejected' || row.status === 'cancelled' ? row.rejection_reason && <small>{row.rejection_reason}</small> : null}</td>
+              {/* The cell stays a table cell; only its inner wrapper is flex. */}
+              <td className="cp-row-actions al-actions-cell">
+                <div className="al-actions">
+                  <RowActions row={row} tab={tab} view={view} canManage={canManage} canApprove={canApprove} busy={busy}
+                    onDialog={setDialog} onRun={run} />
                 </div>
-              </form>
-      </CompensationDialog>}
-    {decisionDialog}
-</>
-  );
+              </td>
+            </tr>)}</tbody>
+          </table>}
+      </div>
+    </CompensationWorkspace>
+    {dialog && <AllowanceDialog state={dialog} period={period} companies={companies} companiesFailed={companiesFailed} onReloadCompanies={loadCompanies}
+      busy={busy} onClose={() => !busy && setDialog(null)} onRun={run} />}
+  </>;
+}
+
+type DialogState =
+  | { kind: 'contract'; row?: Allowance }
+  | { kind: 'version'; row: Allowance }
+  | { kind: 'monthly'; row?: Allowance }
+  | { kind: 'reason'; row: Allowance; action: 'reject' | 'cancel' | 'classify' | 'end' }
+  | { kind: 'history'; row: Allowance };
+
+function RowActions({ row, tab, view, canManage, canApprove, busy, onDialog, onRun }: {
+  row: Allowance; tab: Tab; view: MonthlyView; canManage: boolean; canApprove: boolean; busy: boolean;
+  onDialog: (state: DialogState) => void; onRun: (action: () => Promise<unknown>, success: string) => void;
+}) {
+  useLocale();
+  const used = row.payment_state === 'reserved' || row.payment_state === 'paid';
+  const name = row.employee?.name ?? row.name;
+  const buttons: { label: string; onClick: () => void; primary?: boolean; danger?: boolean }[] = [];
+  if (tab === 'contract') {
+    if (canManage && (row.status === 'pending' || row.status === 'rejected') && !used) {
+      buttons.push({ label: t('Edit'), onClick: () => onDialog({ kind: 'contract', row }) });
+      buttons.push({ label: t('Batalkan entri'), danger: true, onClick: () => onDialog({ kind: 'reason', row, action: 'cancel' }) });
+    }
+    if (canApprove && row.status === 'pending') {
+      buttons.push({ label: t('Setujui'), primary: true, onClick: () => onRun(() => allowanceService.approve(row.id), 'Tunjangan disetujui') });
+      buttons.push({ label: t('Tolak'), danger: true, onClick: () => onDialog({ kind: 'reason', row, action: 'reject' }) });
+    }
+    if (canManage && isApproved(row)) buttons.push({ label: t('Versi baru'), onClick: () => onDialog({ kind: 'version', row }) });
+    if (canApprove && isApproved(row)) buttons.push({ label: t('Akhiri tunjangan'), onClick: () => onDialog({ kind: 'reason', row, action: 'end' }) });
+  } else if (view === 'review') {
+    if (canManage && row.status !== 'paid' && row.status !== 'cancelled') buttons.push({ label: t('Tandai sebagai OL'), onClick: () => onDialog({ kind: 'reason', row, action: 'classify' }) });
+    if (canApprove && isApproved(row)) buttons.push({ label: t('Akhiri tunjangan'), onClick: () => onDialog({ kind: 'reason', row, action: 'end' }) });
+  } else {
+    if (canManage && (row.status === 'draft' || row.status === 'rejected') && !used) buttons.push({ label: t('Edit'), onClick: () => onDialog({ kind: 'monthly', row }) });
+    if (canManage && row.status === 'draft' && row.amount != null && row.amount !== '') {
+      buttons.push({ label: t('Ajukan'), primary: true, onClick: () => onRun(() => ensureNoFailures(allowanceService.submitMonthly([row.id])), 'Insentif diajukan') });
+    }
+    if (canApprove && row.status === 'pending') {
+      buttons.push({ label: t('Setujui'), primary: true, onClick: () => onRun(() => allowanceService.approve(row.id), 'Insentif disetujui') });
+      buttons.push({ label: t('Tolak'), danger: true, onClick: () => onDialog({ kind: 'reason', row, action: 'reject' }) });
+    }
+    const cancellable = !used && (['draft', 'pending', 'rejected'].includes(row.status) ? canManage : row.status === 'approved' && canApprove);
+    if (cancellable) buttons.push({ label: t('Batalkan entri'), danger: true, onClick: () => onDialog({ kind: 'reason', row, action: 'cancel' }) });
+  }
+  return <>
+    <button className="cp-icon-button" aria-label={t('Riwayat {value0}', { value0: name })} title={t('Riwayat')} onClick={() => onDialog({ kind: 'history', row })}><History size={16} /></button>
+    {buttons.map(button => <button key={button.label} className={`cp-button al-small${button.primary ? ' cp-primary' : ''}${button.danger ? ' al-danger' : ''}`}
+      disabled={busy} aria-label={`${button.label} · ${name}`} onClick={button.onClick}>{button.label}</button>)}
+  </>;
+}
+
+function AllowanceDialog({ state, period, companies, companiesFailed, onReloadCompanies, busy, onClose, onRun }: {
+  state: DialogState; period: string; companies: Option[]; companiesFailed: boolean; onReloadCompanies: () => void; busy: boolean; onClose: () => void;
+  onRun: (action: () => Promise<unknown>, success: string) => void;
+}) {
+  useLocale();
+  if (state.kind === 'history') return <HistoryDialog row={state.row} onClose={onClose} />;
+  if (state.kind === 'reason') return <ReasonDialog state={state} period={period} busy={busy} onClose={onClose} onRun={onRun} />;
+  if (state.kind === 'version') return <VersionDialog row={state.row} busy={busy} onClose={onClose} onRun={onRun} />;
+  return <EntryDialog state={state} period={period} companies={companies} companiesFailed={companiesFailed} onReloadCompanies={onReloadCompanies}
+    busy={busy} onClose={onClose} onRun={onRun} />;
+}
+
+function EntryDialog({ state, period, companies, companiesFailed, onReloadCompanies, busy, onClose, onRun }: {
+  state: { kind: 'contract' | 'monthly'; row?: Allowance }; period: string; companies: Option[]; companiesFailed: boolean;
+  onReloadCompanies: () => void; busy: boolean; onClose: () => void; onRun: (action: () => Promise<unknown>, success: string) => void;
+}) {
+  useLocale();
+  const monthly = state.kind === 'monthly';
+  const row = state.row;
+  const typeOptions: readonly AllowanceType[] = monthly ? MONTHLY_TYPES : ALLOWANCE_TYPES;
+  const [companyId, setCompanyId] = useState('');
+  const [employees, setEmployees] = useState<EmployeeOption[]>([]);
+  const [loadingEmployees, setLoadingEmployees] = useState(false);
+  const [employeesFailed, setEmployeesFailed] = useState(false);
+  // Saved boundaries; an edit only sends a period the user actually changed.
+  const initialEffective = periodStartingAt(row?.effective_date) || period;
+  const initialEnd = row?.end_date ? row.end_date.slice(0, 7) : '';
+  const [form, setForm] = useState({
+    employee_id: row?.employee_id ? String(row.employee_id) : '',
+    name: row?.name ?? '',
+    type: (row?.type ?? (monthly ? 'bonus' : 'transport')) as AllowanceType,
+    amount: row?.amount == null || row.amount === '' ? '' : String(Number(row.amount)),
+    component_key: '',
+    effective_period: initialEffective,
+    end_period: initialEnd,
+    performance_start: row?.performance_start?.slice(0, 10) ?? '',
+    performance_end: row?.performance_end?.slice(0, 10) ?? '',
+    reference: row?.reference ?? '',
+    note: monthly ? row?.notes ?? '' : row?.description ?? '',
+  });
+  const [error, setError] = useState('');
+  const employeeRequest = useRef(0);
+  const set = (changes: Partial<typeof form>) => setForm(previous => ({ ...previous, ...changes }));
+
+  const loadEmployees = useCallback(() => {
+    if (row) return;
+    const id = ++employeeRequest.current;
+    setLoadingEmployees(true);
+    setEmployeesFailed(false);
+    collectPages((page, limit) => employeeService.getAll({ page, limit, employment_status: 'all', ...(companyId ? { company_id: Number(companyId) } : {}) }))
+      .then(list => { if (id === employeeRequest.current) setEmployees(list.filter(e => e.employment_status === 'active' || e.employment_status === 'resigned')
+        .map(e => ({ id: e.id, name: e.name, employee_id: e.employee_id ?? '' }))); })
+      // A failed roster is a failure with retry, never an apparently empty roster.
+      .catch(() => { if (id === employeeRequest.current) { setEmployees([]); setEmployeesFailed(true); } })
+      .finally(() => { if (id === employeeRequest.current) setLoadingEmployees(false); });
+  }, [companyId, row]);
+  useEffect(() => { loadEmployees(); }, [loadEmployees]);
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    const amount = parseAmount(form.amount);
+    if (!form.name.trim() || (!row && !form.employee_id)) return setError(t('Lengkapi karyawan dan nama.'));
+    if (amount === undefined) return setError(t('Nominal harus angka nol atau lebih.'));
+    if (!monthly && amount === null) return setError(t('Tunjangan OL memerlukan nominal.'));
+    setError('');
+    // New rows omit blank optionals; an edit sends null so a cleared field is really cleared.
+    const optional = (value: string) => value.trim() || undefined;
+    const cleared = (value: string) => value.trim() || null;
+    // Tax/BPJS flags are not offered: payroll does not apply them per allowance yet (server defaults are kept).
+    if (monthly) {
+      const fields = { name: form.name.trim(), type: form.type, amount };
+      onRun(() => row
+        ? allowanceService.updateMonthly(row.id, { ...fields, reference: cleared(form.reference), notes: cleared(form.note),
+          performance_start: cleared(form.performance_start), performance_end: cleared(form.performance_end) })
+        : allowanceService.createMonthly({ ...fields, employee_id: Number(form.employee_id), payroll_period: period, component_key: optional(form.component_key),
+          reference: optional(form.reference), notes: optional(form.note), performance_start: optional(form.performance_start), performance_end: optional(form.performance_end) }),
+      row ? 'Insentif diperbarui' : 'Insentif disimpan sebagai draft');
+    } else {
+      if (!PERIOD.test(form.effective_period)) return setError(t('Pilih periode mulai.'));
+      if (form.end_period && form.end_period < form.effective_period) return setError(t('Periode akhir harus sama atau setelah periode mulai.'));
+      const fields = { name: form.name.trim(), type: form.type, amount: amount! };
+      onRun(() => row
+        ? allowanceService.updateContract(row.id, { ...fields,
+          // Only a deliberately changed boundary is sent; clearing the end period sends null.
+          ...(form.effective_period !== initialEffective ? { effective_period: form.effective_period } : {}),
+          ...(form.end_period !== initialEnd ? { end_period: form.end_period || null } : {}),
+          description: cleared(form.note), reference: cleared(form.reference) })
+        : allowanceService.createContract({ ...fields, effective_period: form.effective_period, employee_id: Number(form.employee_id),
+          component_key: optional(form.component_key), end_period: optional(form.end_period), description: optional(form.note), reference: optional(form.reference) }),
+      row ? 'Tunjangan OL diperbarui' : 'Tunjangan OL diajukan untuk disetujui');
+    }
+  };
+
+  return <CompensationDialog title={monthly ? (row ? t('Edit insentif') : t('Tambah insentif bulanan')) : (row ? t('Edit tunjangan OL') : t('Tambah tunjangan OL'))}
+    subtitle={monthly ? t('Periode payroll {value0}. Disimpan sebagai draft, lalu diajukan dan disetujui.', { value0: periodLabel(period) })
+      : t('Berlaku berulang mulai periode payroll yang dipilih setelah disetujui.')} busy={busy} onClose={onClose}>
+    <form onSubmit={submit} className="ph-workflow dw-form" noValidate>
+      <div className="dw-form-content">
+        {error && <p className="cp-form-error" role="alert">{error}</p>}
+        <section className="ph-section dw-section"><h3>{t('Penerima')}</h3><div className="dw-fields">
+          {row ? <p className="dw-context"><strong>{row.employee?.name}</strong> · {row.employee?.employee_id}</p> : <>
+            {companiesFailed && <p className="cp-form-error" role="alert">{t('Daftar company gagal dimuat.')} <button type="button" onClick={onReloadCompanies}>{t('Muat ulang company')}</button></p>}
+            {employeesFailed && <p className="cp-form-error" role="alert">{t('Daftar karyawan gagal dimuat.')} <button type="button" onClick={loadEmployees}>{t('Muat ulang karyawan')}</button></p>}
+            <div className="ph-form-grid dw-form-grid">
+              <label>{t('Company')}<select aria-label={t('Company')} value={companyId} onChange={event => { setCompanyId(event.target.value); set({ employee_id: '' }); }}>
+                <option value="">{t('Semua company')}</option>{companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+              <div><span className="al-label">{t('Karyawan')}</span><CompensationEmployeeSelect options={employees.map(e => ({ value: e.id, label: e.name, sublabel: e.employee_id }))}
+                value={form.employee_id ? Number(form.employee_id) : ''} onChange={value => set({ employee_id: String(value) })} loading={loadingEmployees}
+                disabled={employeesFailed} placeholder={t('Pilih karyawan')} searchPlaceholder={t('Cari karyawan')}
+                emptyMessage={employeesFailed ? t('Daftar karyawan gagal dimuat.') : t('No employees found')} /></div>
+            </div>
+          </>}
+        </div></section>
+        <section className="ph-section dw-section"><h3>{monthly ? t('Insentif') : t('Tunjangan')}</h3><div className="dw-fields"><div className="ph-form-grid dw-form-grid">
+          <label>{t('Nama')}<input aria-label={t('Nama')} value={form.name} maxLength={255} onChange={event => set({ name: event.target.value })} required /></label>
+          <label>{t('Tipe komponen')}<select aria-label={t('Tipe komponen')} value={form.type} onChange={event => set({ type: event.target.value as AllowanceType })}>
+            {typeOptions.map(value => <option key={value} value={value}>{payrollEnumLabel(value)}</option>)}</select></label>
+          <label>{t('Nominal (Rp)')}<input aria-label={t('Nominal (Rp)')} inputMode="decimal" value={form.amount} onChange={event => set({ amount: event.target.value })}
+            placeholder={monthly ? t('Kosong = belum diisi') : '0'} /></label>
+          {!row && <label>{t('Kode skema (opsional)')}<input aria-label={t('Kode skema (opsional)')} value={form.component_key} maxLength={80}
+            onChange={event => set({ component_key: event.target.value.toLowerCase() })} placeholder={t('Otomatis dari nama')} /></label>}
+          {monthly ? <>
+            <label>{t('Awal periode kinerja')}<input type="date" aria-label={t('Awal periode kinerja')} value={form.performance_start} onChange={event => set({ performance_start: event.target.value })} /></label>
+            <label>{t('Akhir periode kinerja')}<input type="date" aria-label={t('Akhir periode kinerja')} value={form.performance_end} onChange={event => set({ performance_end: event.target.value })} /></label>
+          </> : <>
+            <label>{t('Mulai periode payroll')}<input type="month" aria-label={t('Mulai periode payroll')} value={form.effective_period} onChange={event => set({ effective_period: event.target.value })} required /></label>
+            <label>{t('Sampai periode payroll (opsional)')}<input type="month" aria-label={t('Sampai periode payroll (opsional)')} value={form.end_period} onChange={event => set({ end_period: event.target.value })} /></label>
+          </>}
+          <label>{t('Referensi')}<input aria-label={t('Referensi')} value={form.reference} maxLength={250} onChange={event => set({ reference: event.target.value })} /></label>
+          <label>{monthly ? t('Catatan') : t('Keterangan')}<input aria-label={monthly ? t('Catatan') : t('Keterangan')} value={form.note} maxLength={2000} onChange={event => set({ note: event.target.value })} /></label>
+        </div>
+        {monthly && <p className="al-hint">{t('Kosongkan nominal jika belum diketahui; isi 0 hanya bila nilainya memang nol final. Nominal tidak diprorata ulang oleh payroll.')}</p>}
+        <p className="al-hint">{t('Perlakuan pajak dan BPJS mengikuti aturan payroll yang berlaku; tidak diatur per tunjangan di sini.')}</p>
+        </div></section>
+      </div>
+      <div className="ph-form-actions dw-actions">
+        <button type="button" className="ph-button" disabled={busy} onClick={onClose}>{t('Cancel')}</button>
+        <button type="submit" className="ph-button ph-button-primary" disabled={busy}>{busy ? t('Menyimpan…') : t('Simpan')}</button>
+      </div>
+    </form>
+  </CompensationDialog>;
+}
+
+function VersionDialog({ row, busy, onClose, onRun }: { row: Allowance; busy: boolean; onClose: () => void; onRun: (action: () => Promise<unknown>, success: string) => void }) {
+  useLocale();
+  const [effective, setEffective] = useState('');
+  const [amount, setAmount] = useState(row.amount == null ? '' : String(Number(row.amount)));
+  const [reference, setReference] = useState('');
+  const [error, setError] = useState('');
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    const value = parseAmount(amount);
+    if (!PERIOD.test(effective)) return setError(t('Pilih periode mulai.'));
+    if (value == null) return setError(t('Tunjangan OL memerlukan nominal.'));
+    onRun(() => allowanceService.createContractVersion(row.id, { effective_period: effective, amount: value, reference: reference.trim() || undefined }),
+      'Versi baru diajukan untuk disetujui');
+  };
+  return <CompensationDialog title={t('Versi baru tunjangan OL')} subtitle={`${row.employee?.name ?? ''} · ${row.name}`} busy={busy} onClose={onClose}>
+    <form onSubmit={submit} className="ph-workflow dw-form" noValidate><div className="dw-form-content">
+      {error && <p className="cp-form-error" role="alert">{error}</p>}
+      <p className="al-hint">{t('Versi berlaku mulai periode payroll yang belum dibuat. Versi lama berakhir sehari sebelumnya setelah disetujui; periode yang sudah dibayar tidak diubah.')}</p>
+      <div className="ph-form-grid dw-form-grid">
+        <label>{t('Mulai periode payroll')}<input type="month" aria-label={t('Mulai periode payroll')} value={effective} onChange={event => setEffective(event.target.value)} required /></label>
+        <label>{t('Nominal baru (Rp)')}<input aria-label={t('Nominal baru (Rp)')} inputMode="decimal" value={amount} onChange={event => setAmount(event.target.value)} /></label>
+        <label>{t('Referensi')}<input aria-label={t('Referensi')} value={reference} maxLength={250} onChange={event => setReference(event.target.value)} /></label>
+      </div>
+    </div>
+    <div className="ph-form-actions dw-actions">
+      <button type="button" className="ph-button" disabled={busy} onClick={onClose}>{t('Cancel')}</button>
+      <button type="submit" className="ph-button ph-button-primary" disabled={busy}>{t('Ajukan versi')}</button>
+    </div></form>
+  </CompensationDialog>;
+}
+
+const REASON_COPY = {
+  reject: { title: 'Tolak pengajuan', button: 'Tolak', success: 'Pengajuan ditolak' },
+  cancel: { title: 'Batalkan entri', button: 'Batalkan entri', success: 'Dibatalkan; riwayat tetap disimpan' },
+  classify: { title: 'Tandai sebagai OL', button: 'Tandai sebagai OL', success: 'Ditandai sebagai tunjangan OL' },
+  end: { title: 'Akhiri tunjangan', button: 'Akhiri tunjangan', success: 'Tanggal akhir disimpan' },
+} as const;
+
+function ReasonDialog({ state, period, busy, onClose, onRun }: {
+  state: { row: Allowance; action: 'reject' | 'cancel' | 'classify' | 'end' }; period: string; busy: boolean;
+  onClose: () => void; onRun: (action: () => Promise<unknown>, success: string) => void;
+}) {
+  useLocale();
+  const { row, action } = state;
+  const copy = REASON_COPY[action];
+  const [reason, setReason] = useState('');
+  const [lastPeriod, setLastPeriod] = useState(period);
+  const [error, setError] = useState('');
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (!reason.trim()) return setError(t('Alasan wajib diisi.'));
+    if (action === 'end' && !PERIOD.test(lastPeriod)) return setError(t('Pilih periode terakhir.'));
+    const call = action === 'reject' ? () => allowanceService.reject(row.id, reason.trim())
+      : action === 'cancel' ? () => allowanceService.cancel(row.id, reason.trim())
+        : action === 'classify' ? () => allowanceService.classifyAsContract(row.id, reason.trim())
+          : () => allowanceService.end(row.id, lastPeriod, reason.trim());
+    onRun(call, copy.success);
+  };
+  return <CompensationDialog title={t(copy.title)} subtitle={`${row.employee?.name ?? ''} · ${row.name}`} busy={busy} onClose={onClose}>
+    <form onSubmit={submit} className="ph-workflow dw-form" noValidate><div className="dw-form-content">
+      {error && <p className="cp-form-error" role="alert">{error}</p>}
+      {action === 'classify' && <p className="al-hint">{t('Nominal, status dan tanggal tidak berubah. Setelah ditandai, perubahan nominal dilakukan lewat versi baru.')}</p>}
+      {action === 'end' && <label>{t('Dibayar sampai periode payroll')}<input type="month" aria-label={t('Dibayar sampai periode payroll')} value={lastPeriod} onChange={event => setLastPeriod(event.target.value)} /></label>}
+      <label>{t('Alasan')}<textarea aria-label={t('Alasan')} rows={3} maxLength={1000} value={reason} onChange={event => setReason(event.target.value)} /></label>
+    </div>
+    <div className="ph-form-actions dw-actions">
+      <button type="button" className="ph-button" disabled={busy} onClick={onClose}>{t('Cancel')}</button>
+      <button type="submit" className="ph-button ph-button-primary" disabled={busy}>{t(copy.button)}</button>
+    </div></form>
+  </CompensationDialog>;
+}
+
+function HistoryDialog({ row, onClose }: { row: Allowance; onClose: () => void }) {
+  useLocale();
+  const [rows, setRows] = useState<Allowance[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let current = true;
+    allowanceService.history(row.id).then(result => { if (current) setRows(result.rows); }).catch(() => { if (current) setFailed(true); });
+    return () => { current = false; };
+  }, [row.id]);
+  return <CompensationDialog title={t('Riwayat')} subtitle={`${row.employee?.name ?? ''} · ${row.name}`} onClose={onClose}>
+    <div className="dw-detail al-history">
+      {failed ? <p role="alert">{t('Riwayat belum dapat dimuat.')}</p> : !rows ? <p role="status">{t('Memuat data…')}</p> : <table className="cp-table">
+        <thead><tr><th>{t('Periode')}</th><th>{t('Nominal')}</th><th>{t('Status')}</th><th>{t('Pemakaian payroll')}</th></tr></thead>
+        <tbody>{rows.map(item => <tr key={item.id}>
+          <td data-label={t('Periode')}>{item.payroll_period ? periodLabel(item.payroll_period)
+            : `${item.effective_date ? dateLabel(item.effective_date) : t('Sejak awal')} – ${item.end_date ? dateLabel(item.end_date) : t('seterusnya')}`}</td>
+          <td data-label={t('Nominal')}>{amountLabel(item)}</td>
+          <td data-label={t('Status')}><CompensationStatus status={item.status} /></td>
+          <td data-label={t('Pemakaian payroll')}>{item.payrollLinks?.length ? item.payrollLinks.map(link => <small key={link.id}>
+            {link.period} · {link.payroll_number ?? ''} · {link.released_at ? t('Dilepas') : link.paid_at ? t('Dibayar') : t('Masuk draft payroll')}</small>)
+            : <small>{t('Belum dipakai')}</small>}</td>
+        </tr>)}</tbody>
+      </table>}
+    </div>
+  </CompensationDialog>;
 }

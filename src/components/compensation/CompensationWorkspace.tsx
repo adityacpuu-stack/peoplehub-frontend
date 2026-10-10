@@ -7,8 +7,8 @@ import { AccountDialog } from '@/components/ui/AccountDialog';
 import './compensation.css';
 import './compensation-refresh.css';
 
-export function CompensationWorkspace({ title, description, actions, filters, metrics, search, onSearch, searchLabel = 'Cari nama atau ID karyawan…', loading, error, onRetry, page, totalPages, onPage, count, children }: {
-  title: string; description: string; actions: ReactNode; filters: ReactNode;
+export function CompensationWorkspace({ title, description, actions, tabs, filters, metrics, search, onSearch, searchLabel = 'Cari nama atau ID karyawan…', loading, error, onRetry, page, totalPages, onPage, count, children }: {
+  title: string; description: string; actions: ReactNode; tabs?: ReactNode; filters: ReactNode;
   metrics: { label: string; value: ReactNode; note?: string }[];
   search: string; onSearch: (value: string) => void; searchLabel?: string;
   loading: boolean; error: boolean; onRetry: () => void;
@@ -17,6 +17,7 @@ export function CompensationWorkspace({ title, description, actions, filters, me
   useLocale();
   return <div className="cp-page compensation-refresh">
     <header className="cp-header"><div><h1>{title}</h1><p>{description}</p></div><div className="cp-actions">{actions}</div></header>
+    {tabs}
     <div className="cp-workspace">
       <div className="cp-filters" role="group" aria-label={t("Filter compensation")}>{filters}</div>
       <section className="cp-content" aria-label={t("Daftar {value0}", { value0: title })}>

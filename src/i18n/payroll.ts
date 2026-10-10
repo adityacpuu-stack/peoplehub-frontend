@@ -719,6 +719,279 @@ Tunjangan Kehadiran|Attendance Allowance
 Tunjangan Shift|Shift Allowance
 Tunjangan Remote|Remote Work Allowance
 THR (Tunjangan Hari Raya)|THR (Religious Holiday Allowance)
+Belum diisi|Not entered
+Nol final|Final zero
+Masuk draft payroll|In draft payroll
+Aksi gagal diproses|The action could not be processed
+{value0} baris gagal: {value1}|{value0} rows failed: {value1}
+Tunjangan OL|OL allowances
+Berlaku di halaman ini|In effect on this page
+Disetujui dan berulang setiap periode|Approved and recurring every period
+Perlu ditinjau|Needs review
+Tunjangan lama tanpa klasifikasi|Legacy allowances without classification
+Belum diajukan|Not submitted yet
+Diajukan HR|Submitted by HR
+Nominal disetujui, belum tentu sudah dibayar|Approved amount, not necessarily paid yet
+Belum ada pengajuan periode ini|No submissions for this period yet
+Tunjangan kontrak / OL berlaku berulang sampai diubah; insentif bulanan dicatat per periode payroll dan tidak terbawa ke bulan berikutnya.|Contract / OL allowances recur until changed; monthly incentives are recorded per payroll period and never carry over to the next month.
+Tambah tunjangan OL|Add OL allowance
+Tambah insentif|Add incentive
+Jenis tunjangan|Allowance kind
+Tunjangan Kontrak / OL|Contract / OL Allowances
+Insentif Bulanan|Monthly Incentives
+Tampilan insentif|Incentive view
+Cari karyawan atau tunjangan…|Search employee or allowance…
+{value0} dari {value1} baris|{value0} of {value1} rows
+Periode {value0}: periode baru selalu dimulai kosong. Nominal dan persetujuan bulan sebelumnya tidak dibawa; riwayat tetap tersedia lewat pilihan periode dan tombol riwayat.|Period {value0}: a new period always starts empty. Previous amounts and approvals are not carried over; history stays available through the period selector and the history button.
+Tunjangan lama di bawah ini belum diklasifikasikan. Pembayarannya tetap seperti sebelumnya sampai HR menandainya sebagai OL atau mengakhirinya. Tidak ada klasifikasi otomatis.|The legacy allowances below are not classified yet. They keep being paid as before until HR marks them as OL or ends them. Nothing is classified automatically.
+Tunjangan yang sudah disetujui atau dipakai payroll tidak diedit; buat versi baru yang berlaku mulai periode payroll yang belum dibuat.|Approved or payroll-used allowances are not edited; create a new version effective from a payroll period not yet generated.
+Aksi terpilih|Selected actions
+{value0} dipilih|{value0} selected
+Ajukan terpilih|Submit selected
+Insentif diajukan|Incentives submitted
+Setujui terpilih|Approve selected
+Insentif disetujui|Incentives approved
+Belum ada insentif untuk {value0}|No incentives for {value0} yet
+Belum ada pengajuan pada periode ini, jadi belum ada nominal yang dibayar. Tambahkan insentif bila ada.|Nothing has been submitted for this period, so no amount is paid. Add incentives if there are any.
+Tidak ada tunjangan yang perlu ditinjau|No allowances need review
+Periode kinerja|Performance period
+Berlaku|Effective
+Nominal|Amount
+Pilih {value0}|Select {value0}
+Ref|Ref
+Tidak diisi|Not provided
+Sejak awal|From the start
+seterusnya|onward
+Batalkan entri|Cancel entry
+Tunjangan disetujui|Allowance approved
+Versi baru|New version
+Akhiri tunjangan|End allowance
+Tandai sebagai OL|Mark as OL
+Riwayat {value0}|History of {value0}
+Riwayat|History
+Lengkapi karyawan dan nama.|Select an employee and enter a name.
+Nominal harus angka nol atau lebih.|Amount must be a number of zero or more.
+Tunjangan OL memerlukan nominal.|An OL allowance needs an amount.
+Insentif diperbarui|Incentive updated
+Insentif disimpan sebagai draft|Incentive saved as a draft
+Tunjangan OL diperbarui|OL allowance updated
+Tunjangan OL diajukan untuk disetujui|OL allowance submitted for approval
+Edit insentif|Edit incentive
+Tambah insentif bulanan|Add monthly incentive
+Edit tunjangan OL|Edit OL allowance
+Periode payroll {value0}. Disimpan sebagai draft, lalu diajukan dan disetujui.|Payroll period {value0}. Saved as a draft, then submitted and approved.
+Berlaku berulang mulai periode payroll yang dipilih setelah disetujui.|Recurs from the selected payroll period once approved.
+Tipe komponen|Component type
+Kosong = belum diisi|Blank = not entered
+Kode skema (opsional)|Scheme code (optional)
+Otomatis dari nama|Generated from the name
+Awal periode kinerja|Performance period start
+Akhir periode kinerja|Performance period end
+Mulai periode payroll|From payroll period
+Sampai periode payroll (opsional)|Until payroll period (optional)
+Referensi|Reference
+Kosongkan nominal jika belum diketahui; isi 0 hanya bila nilainya memang nol final. Nominal tidak diprorata ulang oleh payroll.|Leave the amount blank if it is not known yet; enter 0 only for a final zero. Payroll does not prorate this amount again.
+Pilih periode mulai.|Select the start period.
+Versi baru diajukan untuk disetujui|New version submitted for approval
+Versi baru tunjangan OL|New OL allowance version
+Versi berlaku mulai periode payroll yang belum dibuat. Versi lama berakhir sehari sebelumnya setelah disetujui; periode yang sudah dibayar tidak diubah.|The version starts at a payroll period not yet generated. Once approved, the previous version ends the day before; paid periods are not changed.
+Nominal baru (Rp)|New amount (Rp)
+Ajukan versi|Submit version
+Tolak pengajuan|Reject submission
+Pengajuan ditolak|Submission rejected
+Dibatalkan; riwayat tetap disimpan|Cancelled; history is kept
+Ditandai sebagai tunjangan OL|Marked as an OL allowance
+Tanggal akhir disimpan|End date saved
+Alasan wajib diisi.|A reason is required.
+Pilih periode terakhir.|Select the last period.
+Nominal, status dan tanggal tidak berubah. Setelah ditandai, perubahan nominal dilakukan lewat versi baru.|Amount, status and dates do not change. After marking, amount changes go through a new version.
+Dibayar sampai periode payroll|Paid through payroll period
+Riwayat belum dapat dimuat.|History could not be loaded.
+Pemakaian payroll|Payroll usage
+Dilepas|Released
+Belum dipakai|Not used yet
+Muat ulang karyawan|Reload employees
+Nilai tunjangan yang hanya tercatat di profil karyawan tidak dibayar payroll dan tidak disalin otomatis. Tinjau lalu masukkan sebagai tunjangan OL bila memang bagian dari kontrak.|Allowance values recorded only on the employee profile are not paid by payroll and are not copied automatically. Review them and enter them as OL allowances if they are part of the contract.
+Perlakuan pajak dan BPJS mengikuti aturan payroll yang berlaku; tidak diatur per tunjangan di sini.|Tax and BPJS treatment follow the current payroll rules; they are not set per allowance here.
+Periode akhir harus sama atau setelah periode mulai.|The end period must be the same as or after the start period.
+Penanggung PPh21 dan BPJS karyawan tidak tercatat pada payroll ini.|Who bore PPh21 and employee BPJS was not recorded on this payroll.
+{count} payroll tanpa THP tersimpan tidak dijumlahkan|{count} payroll(s) without a saved take-home pay are not included
+Tunjangan Jabatan (gabungan tersimpan)|Position Allowance (saved combined)
+Dasar pengenaan pajak (DPP)|Taxable base (DPP)
+Bukan pendapatan tunai; termasuk objek BPJS.|Not cash earnings; includes the BPJS taxable object.
+Total Pendapatan Tunai|Total Cash Earnings
+Rapel|Back Pay
+Selisih komponen tersimpan|Difference from saved components
+Potongan sistem (absen, telat, pinjaman, lainnya)|System deductions (absence, late, loan, other)
+Simulasi gaji|Salary simulation
+Cari gaji pokok sebulan penuh untuk target gaji bersih, memakai mesin payroll saat ini.|Find the full-month basic salary that gives a target take-home pay, using the current payroll engine.
+Target gaji bersih (THP) per bulan|Target take-home pay (THP) per month
+Status payroll|Payroll status
+Baru (Gross)|New (Gross)
+Existing (Gross-up)|Existing (Gross-up)
+Perusahaan menanggung PPh21 dan BPJS karyawan; gaji bersih sama dengan gaji pokok ditambah tunjangan.|Company bears PPh21 and employee BPJS; take-home pay equals basic plus allowances.
+Karyawan membayar PPh21 dan BPJS karyawan dari gaji bruto.|Employee pays PPh21 and employee BPJS from gross pay.
+Status PTKP|PTKP status
+Pilih PTKP|Select PTKP
+Pilih status PTKP yang didukung.|Select a supported PTKP status.
+Tunjangan tetap bulanan|Fixed monthly allowances
+Tunjangan berulang yang disetujui untuk karyawan ini|Approved recurring allowances of this employee
+Isi nominal untuk disimulasikan|Enter amounts to simulate
+Tunjangan jabatan|Position allowance
+Tunjangan transport|Transport allowance
+Tunjangan makan|Meal allowance
+Tunjangan berulang lainnya|Other recurring allowances
+Wajib diisi. Isi 0 bila tidak ada.|Required. Enter 0 if none.
+Isi rupiah utuh (angka saja).|Enter whole rupiah (digits only).
+Nominal melebihi batas simulasi.|Amount is above the simulation limit.
+Simulasi gagal. Periksa input lalu coba lagi.|Simulation failed. Check the inputs and try again.
+Hanya sebulan penuh: lembur, insentif bulanan, prorata, pinjaman dan potongan kehadiran tidak termasuk dan dapat berbeda pada payroll sebenarnya.|Full month only: overtime, monthly incentives, proration, loans and attendance deductions are not included and vary on actual payroll.
+Menghitung…|Calculating…
+Hitung|Calculate
+Isi target lalu hitung. Hasil tampil di sini.|Enter a target and calculate. The result appears here.
+Gaji pokok (sebulan penuh)|Basic salary (full month)
+Gaji bersih (THP)|Take-home pay
+Tepat: target tercapai.|Exact: the target is reached.
+Di bawah minimum: dengan tunjangan ini gaji bersih terendah yang dapat dicapai adalah {amount}, pada gaji pokok {basic}.|Below the minimum: with these allowances the lowest achievable take-home pay is {amount}, at a basic salary of {basic}.
+Periode payroll|Payroll period
+Otomatisasi payroll perusahaan atau persiapan payroll karyawan berlaku pada {period}. Payroll sebenarnya memakai kebijakan itu, yang tidak dimodelkan simulasi ini, sehingga hasil sebenarnya dapat berbeda.|Company payroll automation or an employee payroll preparation applies in {period}. Actual payroll will use that policy, which this simulation does not model, so the actual result can differ.
+Aturan payroll atau sumber tunjangan tersimpan untuk {period} tidak dapat dibaca; hasil sebenarnya dapat berbeda. Periksa terlebih dahulu.|Stored payroll rules or allowance sources for {period} could not be read; the actual result can differ. Check them first.
+Dihitung untuk {period} dengan tarif payroll saat ini serta status payroll, PTKP dan tunjangan yang dipilih.|Calculated for {period} with the current payroll rates and the selected payroll status, PTKP and allowances.
+Hasil terdekat, tidak tepat.|Nearest result, not exact.
+Selisih|Difference
+Gaji pokok|Basic salary
+Tunjangan tetap|Fixed allowances
+Uang tunai bulanan sebelum potongan|Monthly cash before deductions
+ditanggung perusahaan|paid by company
+BPJS karyawan (JHT, JP, JKS)|Employee BPJS (JHT, JP, JKS)
+Dasar pengenaan pajak (DPP), bukan uang tunai|Taxable base (DPP), not cash
+BPJS perusahaan|Company BPJS
+Biaya perusahaan|Company cost
+Tunjangan berulang yang disetujui dipakai: {amount}.|Approved recurring allowances used: {amount}.
+Tunjangan sekali bayar tidak termasuk.|One-time allowances are excluded.
+Terapkan mengisi Gaji Pokok, Status payroll dan Status PTKP pada formulir ini. Karyawan belum tersimpan sampai formulir disimpan. Tunjangan tidak diubah; daftarkan tunjangan di menu Tunjangan.|Apply fills Basic Salary, Payroll status and PTKP status in this form. The employee is not saved until you save the form. Allowances are not changed; register allowances in Allowances.
+Terapkan hanya tersedia bila mata uang gaji IDR.|Apply is available only when the salary currency is IDR.
+Hanya simulasi. Tidak ada yang diterapkan atau disimpan dari Payroll.|Simulation only. Nothing is applied or saved from Payroll.
+Target tidak dapat dicapai tepat, sehingga hasil tidak dapat diterapkan.|The target cannot be reached exactly, so the result cannot be applied.
+Aturan payroll perusahaan atau persiapan payroll karyawan berlaku pada periode ini; payroll sebenarnya memakai aturan itu, bukan perhitungan ini.|Company payroll rules or an employee payroll preparation apply in this period; actual payroll would use them, not this calculation.
+Aturan payroll atau sumber tunjangan tersimpan tidak dapat dibaca; periksa sebelum menerapkan.|Stored payroll rules or allowance sources could not be read; check them before applying.
+Tunjangan simulasi bukan tunjangan disetujui yang akan dibayar payroll. Daftarkan dahulu di menu Tunjangan, atau simulasikan dengan tunjangan yang disetujui.|The simulated allowances are not the approved allowances payroll would pay. Register them in Allowances first, or simulate with the approved allowances.
+Versi tunjangan masih menunggu persetujuan.|An allowance version is still waiting for approval.
+Terapkan ke formulir|Apply to form
+Hitung dari target THP|Calculate from target THP
+Cari gaji pokok untuk target gaji bersih. Tidak ada yang disimpan.|Find the basic salary for a target take-home pay. Nothing is saved.
+Pilih perusahaan terlebih dahulu (langkah Info Pribadi).|Select the company first (Personal Info step).
+Gaji pokok diisi dari simulasi. Simpan formulir untuk menyimpannya.|Basic salary filled from the simulation. Save the form to keep it.
+{period} adalah masa pajak terakhir: payroll menyelesaikan pajak setahun dengan Pasal 17 dari payroll tersimpan sejak awal tahun, sehingga estimasi bulanan ini bukan pajak atau take-home pay final.|{period} is a final tax period: payroll settles the whole year with Pasal 17 from saved year-to-date payroll, so this monthly estimate is not the final tax or take-home pay.
+Estimasi bulanan dengan tarif TER, bukan penyelesaian tahunan. Pada Desember atau bulan berhenti bekerja, pajak sebenarnya dapat berbeda.|Monthly estimate with TER rates, not an annual settlement. In December or the month employment ends, the actual tax can differ.
+PPh 21 masa pajak terakhir|PPh 21 final tax period
+PPh 21 masa pajak terakhir (tahunan)|PPh 21 final tax period (annual)
+Pajak periode ini memakai settlement eksternal yang direview, bukan lembar kerja Pasal 17 PeopleHub.|This period's tax uses a reviewed external settlement, not the PeopleHub Pasal 17 worksheet.
+Pasal 17 atas penghasilan setahun dikurangi PPh 21 yang sudah dipotong (PMK 168/2023). Hasil tersimpan; tidak dihitung ulang saat dibuka.|Pasal 17 on the year's income less PPh 21 already withheld (PMK 168/2023). Saved result; not recalculated when opened.
+Tahun pajak|Tax year
+Alasan masa pajak terakhir|Final period reason
+Bulan berhenti bekerja|Month employment ended
+dikonfirmasi HR|confirmed by HR
+Settlement eksternal|External settlement
+Lembar kerja Pasal 17|Pasal 17 worksheet
+Kebijakan|Policy
+Tanpa persiapan HR: perlakuan sesuai status gaji (existing gross-up, new gross dipotong).|No HR preparation: salary-status treatment (existing gross-up, new gross withheld).
+PTKP awal tahun|Start-of-year PTKP
+Input HR (dokumen awal tahun)|HR input (start-of-year document)
+Riwayat tersimpan konsisten|Consistent saved history
+Residensi|Residency
+Subjek pajak sebagian tahun: {months} bulan (disetahunkan)|Partial-year tax subject: {months} months (annualized)
+Setahun penuh (tidak disetahunkan)|Full year (not annualized)
+Bulan kerja di tahun ini|Months employed this year
+Lembar kerja tahunan|Annual worksheet
+Penghasilan bruto setahun (DPP)|Annual gross income (DPP)
+Termasuk tunjangan pajak periode ini|Including this period's tax allowance
+Biaya jabatan|Occupational deduction
+Iuran JHT/JP karyawan|Employee JHT/JP contributions
+Pengurang lain|Other deductions
+Penghasilan neto|Net income
+Neto disetahunkan|Annualized net income
+PKP (dibulatkan ke ribuan)|PKP (floored to thousands)
+PPh Pasal 17 setahun penuh|Full-year Pasal 17 tax
+PPh 21 terutang setahun|Annual PPh 21 liability
+PPh 21 sudah dipotong|PPh 21 already withheld
+Penyelesaian periode ini|This period's settlement
+PPh 21 periode ini (refund kelebihan potong)|This period's PPh 21 (over-withholding refund)
+PPh 21 periode ini|This period's PPh 21
+Pengaruh pajak ke karyawan|Tax effect on employee
+Beban pajak perusahaan|Company tax cost
+Pengurang lain:|Other deductions:
+Riwayat tahun ini yang dipakai|This year's history used
+Penanggung iuran|Contributions borne by
+Dipotong dari karyawan|Withheld from employee
+Ditanggung perusahaan (tidak dikurangkan)|Company-funded (not deducted)
+Koreksi HR|HR correction
+koreksi HR|HR-corrected
+Saldo awal HR|HR opening balance
+Tidak dihitung:|Not counted:
+pemberi kerja terpisah|separate employer
+refund kelebihan potong|over-withholding refund
+Referensi dokumen pajak wajib diisi.|Tax document reference is required.
+Isi bulan subjek pajak 1 sampai 11, atau kosongkan untuk setahun penuh.|Enter tax-subject months from 1 to 11, or leave empty for a full year.
+Pengurang lain harus lebih dari 0.|Other deductions must be greater than 0.
+Isi nominal dan keterangan pengurang lain bersama-sama.|Enter the other deduction amount and description together.
+Isi DPP saldo awal minimal 0.|Enter an opening DPP of at least 0.
+Isi iuran JHT/JP saldo awal minimal 0.|Enter opening JHT/JP contributions of at least 0.
+Isi PPh 21 yang sudah dipotong, termasuk 0 atau negatif.|Enter PPh 21 already withheld, including 0 or a negative amount.
+Lanjutan: PPh 21 masa pajak terakhir (tahunan)|Advanced: PPh 21 final tax period (annual)
+Desember dan bulan berhenti bekerja dihitung otomatis dengan Pasal 17 dari payroll final tersimpan tahun ini. Isi bagian ini hanya bila server meminta keputusan atau data yang tidak tersimpan; semua nilai memerlukan referensi dokumen.|December and the month employment ends are calculated automatically with Pasal 17 from this year's saved final payroll. Fill this in only when the server asks for a decision or data that is not saved; every value needs a document reference.
+Isi keputusan/data PPh 21 tahunan|Enter annual PPh 21 decisions or data
+Referensi dokumen pajak|Tax document reference
+Misalnya bukti potong, SPT, atau memo HR yang direview.|For example a withholding slip, tax return or reviewed HR memo.
+Masa pajak terakhir|Final tax period
+Tentukan otomatis|Determine automatically
+Periode ini|This period
+Periode berikutnya|Next period
+Status PTKP awal tahun|Start-of-year PTKP status
+Dari riwayat tersimpan|From saved history
+Bulan subjek pajak (sebagian tahun)|Tax-subject months (partial year)
+Hanya untuk subjek pajak dalam negeri yang mulai/berakhir di tengah tahun. Kosong: setahun penuh, tidak disetahunkan.|Only for a resident tax subject who started or ended during the year. Empty: full year, not annualized.
+Pengurang lain setahun|Other annual deductions
+Hanya pengurang yang sah dan terdokumentasi, misalnya zakat melalui pemberi kerja.|Only eligible, documented deductions, for example zakat through the employer.
+Keterangan pengurang lain|Other deduction description
+Payroll perusahaan lain tahun ini adalah pemberi kerja terpisah (tidak dihitung)|Payroll from another company this year is a separate employer (not counted)
+Sertakan payroll final di luar tanggal masuk/berhenti tercatat|Include final payroll outside the recorded join/resign dates
+Saldo awal untuk bulan yang tidak tersimpan di PeopleHub|Opening balance for months not saved in PeopleHub
+DPP saldo awal|Opening DPP
+Iuran JHT/JP saldo awal|Opening JHT/JP contributions
+PPh 21 sudah dipotong (saldo awal)|PPh 21 already withheld (opening)
+Boleh 0 atau negatif sesuai bukti potong.|May be 0 or negative according to the withholding slip.
+Koreksi riwayat yang tidak tersimpan|Corrections for unsaved history
+Berhenti pada tahun pajak sebelumnya (settlement eksternal)|Left employment in the previous tax year (external settlement)
+belum final, diganti saldo awal|unfinalized, replaced by opening balance
+dari tanggal masuk/berhenti|from join/resign dates
+input HR|HR input
+Periode payroll tercakup|Payroll periods covered
+Termasuk bonus terpisah periode ini|Including this period's separate bonus
+Iuran JHT/JP dibayar karyawan|Employee-paid JHT/JP contributions
+Bagian bonus terpisah|Separate bonus share
+Kelebihan potong dikembalikan kepada karyawan melalui payroll ini (PMK 168/2023). Perlakuan PPh ditanggung pemerintah (DTP) tidak didukung.|The over-withholding is refunded to the employee through this payroll (PMK 168/2023). Government-borne (DTP) tax treatment is not supported.
+Isi bulan kerja 1 sampai 12, atau kosongkan agar dihitung dari tanggal masuk/berhenti.|Enter employment months from 1 to 12, or leave empty to count them from the join/resign dates.
+Pilih minimal satu bulan saldo awal.|Select at least one opening-balance month.
+Pilih bulan koreksi.|Select the correction month.
+Bulan koreksi tidak boleh ganda.|Each correction month may appear only once.
+Isi minimal satu nilai koreksi, atau hapus baris ini.|Enter at least one correction value, or remove this row.
+DPP minimal 0.|DPP must be at least 0.
+Iuran JHT/JP minimal 0.|JHT/JP contributions must be at least 0.
+Bulan kerja di tahun pajak|Employment months in the tax year
+Kosong: dihitung dari tanggal masuk/berhenti. Isi hanya bila tanggal tersebut tidak tercatat atau tidak sesuai dokumen.|Empty: counted from the join/resign dates. Fill in only when those dates are missing or differ from the documents.
+Bulan saldo awal|Opening-balance months
+Pilih bulan yang tidak memiliki payroll final di PeopleHub. Bulan yang sudah final tidak boleh dipilih (tidak dihitung dua kali).|Select months without a final payroll in PeopleHub. Months that are already final cannot be selected (no double counting).
+Hanya iuran yang dibayar karyawan.|Employee-paid contributions only.
+Payroll belum final (draft) pada bulan terpilih tidak dibayarkan; gunakan saldo awal ini (draft tetap tersimpan, tidak dihitung)|Unfinalized (draft) payroll in the selected months was not paid; use this opening balance instead (the draft stays saved and is not counted)
+Hanya untuk nilai tersimpan yang kosong atau penanggungnya tidak tercatat. Kosongkan nilai yang tidak dikoreksi; nilai tersimpan tidak ditimpa.|Only for saved values that are empty or whose payer is not recorded. Leave values you are not correcting empty; saved values are not overwritten.
+Koreksi {number}|Correction {number}
+Bulan koreksi|Correction month
+DPP tersimpan (koreksi)|Saved DPP (correction)
+Iuran JHT/JP (koreksi)|JHT/JP contributions (correction)
+PPh 21 dipotong (koreksi)|PPh 21 withheld (correction)
+Hapus koreksi|Remove correction
+Tambah koreksi bulan|Add month correction
 `.trim().split('\n').map(line => line.split('|') as unknown as MessagePair);
 
 export const payroll: Record<string, MessagePair> = {};

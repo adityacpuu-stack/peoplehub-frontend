@@ -5,7 +5,7 @@ import { t, useLocale } from '@/i18n';
 import '@/pages/payroll/payroll-workflows.css';
 import '@/pages/payroll/payroll-refresh.css';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useFieldArray, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { isAxiosError } from 'axios';
@@ -23,6 +23,7 @@ import {
 } from '@/services/payroll.service';
 import type { Decimalish } from '@/types';
 import { PayrollAutomation } from './PayrollAutomation';
+import { PayrollAnnualTaxDetail } from './AnnualTaxDetail';
 
 const defaultOption = { value: '', label: 'Ikuti pengaturan payroll' };
 const money = payrollCalculationCurrency;
@@ -69,6 +70,7 @@ export function PayrollPolicyDetail({ snapshot, appliedTax, workDays }: {
         <Amount label={t("Pajak diterapkan")} value={appliedTax} />
         <Amount label={t("Pajak hasil kalkulasi")} value={snapshot.calculated_pph21} />
       </dl>
+      {snapshot.annual_tax && <PayrollAnnualTaxDetail annual={snapshot.annual_tax} />}
       <h4 className="pw-section-title">{t("Pembayaran tersimpan")}</h4>
       <dl className="ph-kv pw-policy-facts">
         <Amount label={t("Pembayaran reguler")} value={snapshot.payments?.regular} />
@@ -109,6 +111,24 @@ export function PayrollSavedBPJS({ record }: { record: Payroll }) {
 }
 
 const optionalAmount = z.string().refine(value => value.trim() === '' || Number.isFinite(Number(value)), 'Masukkan angka yang valid.');
+const ptkpStatuses = ['TK/0', 'TK/1', 'TK/2', 'TK/3', 'K/0', 'K/1', 'K/2', 'K/3'] as const;
+const periodPattern = /^(19|20)\d{2}-(0[1-9]|1[0-2])$/;
+type AnnualCorrection = NonNullable<NonNullable<PayrollPreparationInput['annual_tax']>['corrections']>[number];
+// One structured row per saved period; a blank amount leaves that saved field alone.
+const correctionRow = z.object({ period: z.string(), gross: optionalAmount, deductible: optionalAmount, tax: optionalAmount });
+type CorrectionRow = z.infer<typeof correctionRow>;
+const emptyCorrection: CorrectionRow = { period: '', gross: '', deductible: '', tax: '' };
+const correctionRows = (rows: AnnualCorrection[] | undefined): CorrectionRow[] => (rows ?? []).map(row => ({ period: row.period,
+  gross: String(row.gross ?? ''), deductible: String(row.deductible_contributions ?? ''), tax: String(row.tax_withheld ?? '') }));
+const correctionInput = (rows: CorrectionRow[]): AnnualCorrection[] => rows.map(row => ({ period: row.period,
+  ...(row.gross.trim() && { gross: Number(row.gross) }),
+  ...(row.deductible.trim() && { deductible_contributions: Number(row.deductible) }),
+  ...(row.tax.trim() && { tax_withheld: Number(row.tax) }) }));
+/** Months of the tax year before the payroll period, for the opening-balance checklist. */
+const monthsBefore = (period: string) => {
+  const [year, month] = period.split('-').map(Number);
+  return Number.isInteger(month) ? Array.from({ length: Math.max(0, month - 1) }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`) : [];
+};
 const formSchema = z.object({
   reason: z.string().trim().min(1, 'Alasan persiapan wajib diisi.'),
   work_days_per_week: z.enum(['', '5', '6']),
@@ -137,6 +157,23 @@ const formSchema = z.object({
   bonus_tax_enabled: z.boolean(),
   bonus_tax_amount: optionalAmount,
   bonus_tax_reference: z.string(),
+  annual_enabled: z.boolean(),
+  annual_reference: z.string(),
+  annual_final_period: z.enum(['', 'this_period', 'next_period']),
+  annual_ptkp: z.enum(['', 'TK/0', 'TK/1', 'TK/2', 'TK/3', 'K/0', 'K/1', 'K/2', 'K/3']),
+  annual_residency_months: optionalAmount,
+  annual_other_amount: optionalAmount,
+  annual_other_description: z.string(),
+  annual_employment_months: optionalAmount,
+  annual_other_company: z.boolean(),
+  annual_include_before_join: z.boolean(),
+  annual_opening_enabled: z.boolean(),
+  annual_opening_periods: z.array(z.string()),
+  annual_opening_gross: optionalAmount,
+  annual_opening_deductible: optionalAmount,
+  annual_opening_tax: optionalAmount,
+  annual_opening_replaces_unfinalized: z.boolean(),
+  annual_corrections: z.array(correctionRow),
 }).superRefine((value, ctx) => {
   const issue = (path: keyof typeof value, message: string) => ctx.addIssue({ code: 'custom', path: [path], message });
   if (value.bpjs_base.trim() && Number(value.bpjs_base) <= 0) issue('bpjs_base', 'Dasar BPJS harus lebih dari 0.');
@@ -164,6 +201,37 @@ const formSchema = z.object({
       if (!value.bonus_tax_amount.trim()) issue('bonus_tax_amount', 'Isi total pajak eksternal.');
       if (!value.bonus_tax_reference.trim()) issue('bonus_tax_reference', 'Referensi total pajak wajib diisi.');
     }
+  }
+  if (value.annual_enabled) {
+    if (!value.annual_reference.trim()) issue('annual_reference', 'Referensi dokumen pajak wajib diisi.');
+    const months = value.annual_residency_months.trim();
+    if (months && (!Number.isInteger(Number(months)) || Number(months) < 1 || Number(months) > 11)) {
+      issue('annual_residency_months', 'Isi bulan subjek pajak 1 sampai 11, atau kosongkan untuk setahun penuh.');
+    }
+    if (value.annual_other_amount.trim() && Number(value.annual_other_amount) <= 0) issue('annual_other_amount', 'Pengurang lain harus lebih dari 0.');
+    if (!!value.annual_other_amount.trim() !== !!value.annual_other_description.trim()) {
+      issue('annual_other_description', 'Isi nominal dan keterangan pengurang lain bersama-sama.');
+    }
+    const employmentMonths = value.annual_employment_months.trim();
+    if (employmentMonths && (!Number.isInteger(Number(employmentMonths)) || Number(employmentMonths) < 1 || Number(employmentMonths) > 12)) {
+      issue('annual_employment_months', 'Isi bulan kerja 1 sampai 12, atau kosongkan agar dihitung dari tanggal masuk/berhenti.');
+    }
+    if (value.annual_opening_enabled) {
+      if (!value.annual_opening_periods.length) issue('annual_opening_periods', 'Pilih minimal satu bulan saldo awal.');
+      if (!value.annual_opening_gross.trim() || Number(value.annual_opening_gross) < 0) issue('annual_opening_gross', 'Isi DPP saldo awal minimal 0.');
+      if (!value.annual_opening_deductible.trim() || Number(value.annual_opening_deductible) < 0) issue('annual_opening_deductible', 'Isi iuran JHT/JP saldo awal minimal 0.');
+      if (!value.annual_opening_tax.trim()) issue('annual_opening_tax', 'Isi PPh 21 yang sudah dipotong, termasuk 0 atau negatif.');
+    }
+    const seen = new Set<string>();
+    value.annual_corrections.forEach((row, index) => {
+      const at = (field: keyof CorrectionRow, message: string) => ctx.addIssue({ code: 'custom', path: ['annual_corrections', index, field], message });
+      if (!periodPattern.test(row.period)) at('period', 'Pilih bulan koreksi.');
+      else if (seen.has(row.period)) at('period', 'Bulan koreksi tidak boleh ganda.');
+      seen.add(row.period);
+      if (!row.gross.trim() && !row.deductible.trim() && !row.tax.trim()) at('gross', 'Isi minimal satu nilai koreksi, atau hapus baris ini.');
+      if (row.gross.trim() && Number(row.gross) < 0) at('gross', 'DPP minimal 0.');
+      if (row.deductible.trim() && Number(row.deductible) < 0) at('deductible', 'Iuran JHT/JP minimal 0.');
+    });
   }
 });
 type FormValues = z.infer<typeof formSchema>;
@@ -197,6 +265,41 @@ function formValues(input: PayrollPreparationInput | null): FormValues {
     bonus_tax_enabled: input?.bonus?.external_total_tax != null,
     bonus_tax_amount: String(input?.bonus?.external_total_tax?.amount ?? ''),
     bonus_tax_reference: input?.bonus?.external_total_tax?.reference ?? '',
+    annual_enabled: input?.annual_tax != null,
+    annual_reference: input?.annual_tax?.reference ?? '',
+    annual_final_period: input?.annual_tax?.final_period ?? '',
+    annual_ptkp: input?.annual_tax?.ptkp_status_start_of_year ?? '',
+    annual_residency_months: String(input?.annual_tax?.residency?.months ?? ''),
+    annual_other_amount: String(input?.annual_tax?.other_deductions?.amount ?? ''),
+    annual_other_description: input?.annual_tax?.other_deductions?.description ?? '',
+    annual_employment_months: String(input?.annual_tax?.employment_months ?? ''),
+    annual_other_company: input?.annual_tax?.other_company_income === 'separate_employer',
+    annual_include_before_join: input?.annual_tax?.include_rows_before_join === true,
+    annual_opening_enabled: input?.annual_tax?.opening != null,
+    annual_opening_periods: input?.annual_tax?.opening?.periods ?? [],
+    annual_opening_gross: String(input?.annual_tax?.opening?.gross ?? ''),
+    annual_opening_deductible: String(input?.annual_tax?.opening?.deductible_contributions ?? ''),
+    annual_opening_tax: String(input?.annual_tax?.opening?.tax_withheld ?? ''),
+    annual_opening_replaces_unfinalized: input?.annual_tax?.opening?.replaces_unfinalized === true,
+    annual_corrections: correctionRows(input?.annual_tax?.corrections),
+  };
+}
+
+function annualTaxInput(value: FormValues): PayrollPreparationInput['annual_tax'] {
+  return {
+    reference: value.annual_reference.trim(),
+    ...(value.annual_final_period && { final_period: value.annual_final_period }),
+    ...(value.annual_ptkp && { ptkp_status_start_of_year: value.annual_ptkp }),
+    ...(value.annual_residency_months.trim() && { residency: { mode: 'partial_year_subjective' as const, months: Number(value.annual_residency_months) } }),
+    ...(value.annual_other_amount.trim() && { other_deductions: { amount: Number(value.annual_other_amount), description: value.annual_other_description.trim() } }),
+    ...(value.annual_employment_months.trim() && { employment_months: Number(value.annual_employment_months) }),
+    ...(value.annual_other_company && { other_company_income: 'separate_employer' as const }),
+    ...(value.annual_include_before_join && { include_rows_before_join: true as const }),
+    ...(value.annual_opening_enabled && { opening: { periods: [...value.annual_opening_periods].sort(),
+      gross: Number(value.annual_opening_gross), deductible_contributions: Number(value.annual_opening_deductible),
+      tax_withheld: Number(value.annual_opening_tax),
+      ...(value.annual_opening_replaces_unfinalized && { replaces_unfinalized: true }) } }),
+    ...(value.annual_corrections.length > 0 && { corrections: correctionInput(value.annual_corrections) }),
   };
 }
 
@@ -228,6 +331,7 @@ function preparationInput(value: FormValues): PayrollPreparationInput {
       amount: Number(value.bonus_amount),
       ...(value.bonus_tax_enabled && { external_total_tax: { amount: Number(value.bonus_tax_amount), reference: value.bonus_tax_reference.trim() } }),
     } }),
+    ...(value.annual_enabled && { annual_tax: annualTaxInput(value) }),
   };
 }
 
@@ -267,14 +371,18 @@ function PreparationEditor({ row, companyId, period, onSaved, onSavingChange, on
   const [conflict, setConflict] = useState(false);
   const request = useRef(0);
   const busy = useRef(false);
-  const { register, handleSubmit, reset, watch, formState: { errors, isDirty } } = useForm<FormValues>({
+  const { register, handleSubmit, reset, watch, control, formState: { errors, isDirty } } = useForm<FormValues>({
     resolver: zodResolver(formSchema), defaultValues: formValues(row.input),
   });
+  const corrections = useFieldArray({ control, name: 'annual_corrections' });
   const mode = watch('tax_allowance_mode');
   const external = watch('external_tax_enabled');
   const externalBpjs = watch('external_bpjs_enabled');
   const bonus = watch('bonus_enabled');
   const bonusTax = watch('bonus_tax_enabled');
+  const annual = watch('annual_enabled');
+  const annualOpening = watch('annual_opening_enabled');
+  const fieldError = (name: keyof FormValues) => errors[name]?.message ? t(errors[name]?.message ?? '') : undefined;
   const moneyStep = watch('rounding') === 'final_cash' ? 'any' : '0.01';
 
   useEffect(() => () => { request.current++; }, []);
@@ -357,6 +465,64 @@ function PreparationEditor({ row, companyId, period, onSaved, onSavingChange, on
               <Input label={t("Referensi pajak eksternal")} {...register('external_tax_reference')} error={errors.external_tax_reference?.message ? t(errors.external_tax_reference?.message) : undefined} helperText={t("Nomor dokumen atau referensi keputusan HR/pajak.")} />
             </div>}
           </fieldset>
+          <details className="ph-section pw-form-section" open={row.input?.annual_tax != null || undefined} data-testid="annual-tax-inputs">
+            <summary className="cursor-pointer font-semibold">{t("Lanjutan: PPh 21 masa pajak terakhir (tahunan)")}</summary>
+            <div className="space-y-4 mt-4">
+              <p className="text-sm text-gray-600">{t("Desember dan bulan berhenti bekerja dihitung otomatis dengan Pasal 17 dari payroll final tersimpan tahun ini. Isi bagian ini hanya bila server meminta keputusan atau data yang tidak tersimpan; semua nilai memerlukan referensi dokumen.")}</p>
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" {...register('annual_enabled')} />{t("Isi keputusan/data PPh 21 tahunan")}</label>
+              {annual && <>
+                <Input label={t("Referensi dokumen pajak")} {...register('annual_reference')} error={fieldError('annual_reference')} helperText={t("Misalnya bukti potong, SPT, atau memo HR yang direview.")} />
+                <div className="ph-form-grid">
+                  <Select label={t("Masa pajak terakhir")} {...register('annual_final_period')} options={[{ value: '', label: t('Tentukan otomatis') },
+                    { value: 'this_period', label: t('Periode ini') }, { value: 'next_period', label: t('Periode berikutnya') }]} />
+                  <Select label={t("Status PTKP awal tahun")} {...register('annual_ptkp')} options={[{ value: '', label: t('Dari riwayat tersimpan') },
+                    ...ptkpStatuses.map(status => ({ value: status, label: status }))]} />
+                  <Input label={t("Bulan subjek pajak (sebagian tahun)")} type="number" min="1" max="11" step="1" {...register('annual_residency_months')} error={fieldError('annual_residency_months')} helperText={t("Hanya untuk subjek pajak dalam negeri yang mulai/berakhir di tengah tahun. Kosong: setahun penuh, tidak disetahunkan.")} />
+                  <Input label={t("Bulan kerja di tahun pajak")} type="number" min="1" max="12" step="1" {...register('annual_employment_months')} error={fieldError('annual_employment_months')} helperText={t("Kosong: dihitung dari tanggal masuk/berhenti. Isi hanya bila tanggal tersebut tidak tercatat atau tidak sesuai dokumen.")} />
+                  <Input label={t("Pengurang lain setahun")} type="number" min="0" step={moneyStep} {...register('annual_other_amount')} error={fieldError('annual_other_amount')} helperText={t("Hanya pengurang yang sah dan terdokumentasi, misalnya zakat melalui pemberi kerja.")} />
+                  <Input label={t("Keterangan pengurang lain")} {...register('annual_other_description')} error={fieldError('annual_other_description')} />
+                </div>
+                <label className="flex items-center gap-2 text-sm"><input type="checkbox" {...register('annual_other_company')} />{t("Payroll perusahaan lain tahun ini adalah pemberi kerja terpisah (tidak dihitung)")}</label>
+                <label className="flex items-center gap-2 text-sm"><input type="checkbox" {...register('annual_include_before_join')} />{t("Sertakan payroll final di luar tanggal masuk/berhenti tercatat")}</label>
+                <label className="flex items-center gap-2 text-sm"><input type="checkbox" {...register('annual_opening_enabled')} />{t("Saldo awal untuk bulan yang tidak tersimpan di PeopleHub")}</label>
+                {annualOpening && <div className="space-y-4">
+                  <fieldset>
+                    <legend className="text-sm font-medium">{t("Bulan saldo awal")}</legend>
+                    <p className="text-xs text-gray-500">{t("Pilih bulan yang tidak memiliki payroll final di PeopleHub. Bulan yang sudah final tidak boleh dipilih (tidak dihitung dua kali).")}</p>
+                    <div className="flex flex-wrap gap-x-4 gap-y-2 mt-2">
+                      {monthsBefore(period).map(month => <label key={month} className="flex items-center gap-2 text-sm">
+                        <input type="checkbox" value={month} {...register('annual_opening_periods')} />{month}</label>)}
+                    </div>
+                    {fieldError('annual_opening_periods') && <p role="alert" className="text-sm text-red-600">{fieldError('annual_opening_periods')}</p>}
+                  </fieldset>
+                  <div className="ph-form-grid">
+                    <Input label={t("DPP saldo awal")} type="number" min="0" step={moneyStep} {...register('annual_opening_gross')} error={fieldError('annual_opening_gross')} />
+                    <Input label={t("Iuran JHT/JP saldo awal")} type="number" min="0" step={moneyStep} {...register('annual_opening_deductible')} error={fieldError('annual_opening_deductible')} helperText={t("Hanya iuran yang dibayar karyawan.")} />
+                    <Input label={t("PPh 21 sudah dipotong (saldo awal)")} type="number" step={moneyStep} {...register('annual_opening_tax')} error={fieldError('annual_opening_tax')} helperText={t("Boleh 0 atau negatif sesuai bukti potong.")} />
+                  </div>
+                  <label className="flex items-center gap-2 text-sm"><input type="checkbox" {...register('annual_opening_replaces_unfinalized')} />{t("Payroll belum final (draft) pada bulan terpilih tidak dibayarkan; gunakan saldo awal ini (draft tetap tersimpan, tidak dihitung)")}</label>
+                </div>}
+                <fieldset className="space-y-2" data-testid="annual-corrections">
+                  <legend className="text-sm font-medium">{t("Koreksi riwayat yang tidak tersimpan")}</legend>
+                  <p className="text-xs text-gray-500">{t("Hanya untuk nilai tersimpan yang kosong atau penanggungnya tidak tercatat. Kosongkan nilai yang tidak dikoreksi; nilai tersimpan tidak ditimpa.")}</p>
+                  {corrections.fields.map((field, index) => {
+                    const rowError = (name: keyof CorrectionRow) => {
+                      const message = errors.annual_corrections?.[index]?.[name]?.message;
+                      return message ? t(message) : undefined;
+                    };
+                    return <div key={field.id} className="pw-correction-row" role="group" aria-label={t("Koreksi {number}", { number: index + 1 })}>
+                      <Input label={t("Bulan koreksi")} type="month" {...register(`annual_corrections.${index}.period` as const)} error={rowError('period')} />
+                      <Input label={t("DPP tersimpan (koreksi)")} type="number" min="0" step={moneyStep} {...register(`annual_corrections.${index}.gross` as const)} error={rowError('gross')} />
+                      <Input label={t("Iuran JHT/JP (koreksi)")} type="number" min="0" step={moneyStep} {...register(`annual_corrections.${index}.deductible` as const)} error={rowError('deductible')} />
+                      <Input label={t("PPh 21 dipotong (koreksi)")} type="number" step={moneyStep} {...register(`annual_corrections.${index}.tax` as const)} error={rowError('tax')} />
+                      <Button type="button" variant="ghost" onClick={() => { corrections.remove(index); invalidate(); }}>{t("Hapus koreksi")}</Button>
+                    </div>;
+                  })}
+                  <Button type="button" variant="outline" onClick={() => { corrections.append({ ...emptyCorrection }); invalidate(); }}>{t("Tambah koreksi bulan")}</Button>
+                </fieldset>
+              </>}
+            </div>
+          </details>
           <fieldset className="ph-section pw-form-section">
             <legend className="pw-legend">{t("BPJS dan pembulatan")}</legend>
             <div className="ph-form-grid">

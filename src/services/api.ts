@@ -84,7 +84,10 @@ const ACCOUNT_STATE_CODES = new Set([
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError<unknown>) => {
-    if (!error.response && error.code !== 'ERR_CANCELED' && typeof window !== 'undefined') {
+    // A deliberately aborted request (AbortController, superseded filter or tab)
+    // is not a failure: no toast, no network-error event. Callers still see the rejection.
+    if (axios.isCancel(error) || error.code === 'ERR_CANCELED') return Promise.reject(error);
+    if (!error.response && typeof window !== 'undefined') {
       window.dispatchEvent(new Event('peoplehub:network-error'));
     }
     // responseType:'blob' (payroll + employee Excel export) makes axios deliver

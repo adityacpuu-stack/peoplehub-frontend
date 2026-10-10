@@ -18,6 +18,8 @@ import { workLocationService, type WorkLocationOption } from '@/services/work-lo
 import type { CreateEmployeeRequest, UpdateEmployeeRequest, PaginatedResponse, Department, Employee } from '@/types';
 import { useAuthStore } from '@/stores/auth.store';
 import { canAction, canEditCompensation } from '@/lib/actions';
+import { SalarySimulator, type SalarySimulatorApply } from '@/components/payroll/SalarySimulator';
+import { currentWibPeriod } from '@/lib/utils';
 import {
   readEmployeeCreateDraft, removeEmployeeCreateDraft, writeEmployeeCreateDraft, type EmployeeDraftValues,
 } from '@/lib/employee-create-draft';
@@ -316,6 +318,7 @@ export function EmployeeFormPage() {
   const [generatedEmployeeId, setGeneratedEmployeeId] = useState<string>('');
   const [isLoadingEmployeeId, setIsLoadingEmployeeId] = useState(false);
   const [showResignModal, setShowResignModal] = useState(false);
+  const [showSalarySimulator, setShowSalarySimulator] = useState(false);
 
   // Resign modal — RHF + Zod (migrated from useState in Wave 6)
   const {
@@ -731,6 +734,19 @@ export function EmployeeFormPage() {
   // Get current form values for review step (read-only display)
   const values = watch();
 
+  // Simulator Apply: fills the basic salary (never the DPP) and the payroll
+  // routing fields it was calculated with, marks them dirty and validates. It
+  // never saves: the employee is created/updated only by the normal Save.
+  const applySalarySimulation = (applied: SalarySimulatorApply) => {
+    const options = { shouldDirty: true, shouldValidate: true } as const;
+    setValue('basic_salary', String(applied.basic_salary), options);
+    setValue('salary_status', applied.salary_status, options);
+    setValue('pay_type', 'gross', options);
+    setValue('ptkp_status', applied.ptkp_status as EmployeeFormInput['ptkp_status'], options);
+    void trigger(['basic_salary', 'salary_status', 'pay_type', 'ptkp_status']);
+    toast.success(t('Basic salary filled from the simulation. Save the form to keep it.'));
+  };
+
   return (
     <div className="ph-workflow ops-workflow ph-form-page ops-employee-form operations-refresh-form">
       {/* Form heading */}
@@ -811,7 +827,9 @@ export function EmployeeFormPage() {
           />
         </div>
         <div className={currentStep === 3 ? '' : 'hidden'}>
-          <Step3Payroll register={register} errors={errors} compensationEditable={compensationEditable} />
+          <Step3Payroll register={register} errors={errors} compensationEditable={compensationEditable}
+            onOpenSimulator={compensationEditable ? () => setShowSalarySimulator(true) : undefined}
+            simulatorDisabledHint={companyId ? undefined : 'Select the company first (Personal Info step).'} />
         </div>
         <div className={currentStep === 4 ? '' : 'hidden'}>
           <Step4Contact
@@ -993,6 +1011,16 @@ export function EmployeeFormPage() {
               </div>
             </form></Modal>
       )}
+
+      {/* Target THP -> basic salary simulator. Rendered outside the <form>
+          (portal) and every button is type="button"; Apply only fills fields. */}
+      {compensationEditable && <SalarySimulator open={showSalarySimulator} onClose={() => setShowSalarySimulator(false)}
+        mode="employee_form" companyId={companyId != null ? Number(companyId) : null} period={currentWibPeriod()}
+        companyName={companies.find(c => c.id === Number(companyId))?.name}
+        employeeId={isEdit && id ? Number(id) : undefined}
+        initialSalaryStatus={values.salary_status} initialPtkpStatus={values.ptkp_status}
+        currencyIsIdr={!values.salary_currency || values.salary_currency === 'IDR'}
+        onApply={applySalarySimulation} />}
     </div>
   );
 }
@@ -1408,7 +1436,12 @@ function Step2Employment({
   );
 }
 
-function Step3Payroll({ register, errors, compensationEditable }: StepProps & { compensationEditable: boolean }) {
+function Step3Payroll({ register, errors, compensationEditable, onOpenSimulator, simulatorDisabledHint }: StepProps & {
+  compensationEditable: boolean;
+  /** Opens the shared Target THP -> basic salary simulator (salary-edit access only). */
+  onOpenSimulator?: () => void;
+  simulatorDisabledHint?: string;
+}) {
   useLocale();
   return (
     <div className="ph-section ops-form-step">
@@ -1436,6 +1469,11 @@ function Step3Payroll({ register, errors, compensationEditable }: StepProps & { 
               placeholder="10000000"
               icon={<Wallet className="h-4 w-4 text-green-600" />}
             />
+            {onOpenSimulator && <div className="employee-salary-sim-entry">
+              <button type="button" className="ph-button" onClick={onOpenSimulator} disabled={!!simulatorDisabledHint}
+                data-testid="employee-salary-sim-open">{t('Calculate from target THP')}</button>
+              <small>{simulatorDisabledHint ? t(simulatorDisabledHint) : t('Find the basic salary for a target take-home pay. Nothing is saved.')}</small>
+            </div>}
             <SelectField
               label={t("Currency")}
               name="salary_currency"

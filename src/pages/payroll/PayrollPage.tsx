@@ -1,5 +1,7 @@
 import { payrollNumber } from '@/components/payroll/localization';
 import { payrollCalculationCurrency, payrollCurrency, payrollEnumLabel } from '@/components/payroll/localization';
+import { savedCompanyCost, savedThp } from '@/components/payroll/saved-payroll';
+import { SalarySimulator } from '@/components/payroll/SalarySimulator';
 import { t, useLocale, intlLocale } from '@/i18n';
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
@@ -37,6 +39,7 @@ export function PayrollPage() {
   const [selectedRecord, setSelectedRecord] = useState<Payroll | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showPreparation, setShowPreparation] = useState(false);
+  const [showSalarySimulator, setShowSalarySimulator] = useState(false);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -168,10 +171,26 @@ export function PayrollPage() {
   const selectedCalculation = selectedRecord?.metadata?.calculation?.version === 2 ? selectedRecord.metadata.calculation : null;
   const formatCurrency = (amount: number) => selectedCalculation || records.some(record => record.metadata?.calculation?.version === 2)
     ? payrollCalculationCurrency(amount) : payrollCurrency(amount);
+  // Funding, Position split, THP and cost come from the backend's saved read
+  // presentation; the page never re-derives them. Unknown stays unknown.
+  const presentation = selectedRecord?.presentation ?? null;
+  const pph21Funding = presentation?.funding.pph21 ?? null;
+  const bpjsFunding = presentation?.funding.bpjs_employee ?? null;
+  const legacyCompanyBears = pph21Funding === 'company_paid';
   const detailGrossUp = selectedCalculation
     ? selectedCalculation.policy?.tax_allowance_mode === 'gross_up'
-    : !!selectedRecord?.pph21_paid_by_company;
+    : legacyCompanyBears;
   const formatDetailCurrency = selectedCalculation ? payrollCalculationCurrency : payrollCurrency;
+  const positionSplit = presentation && presentation.position.business !== null && presentation.position.tax_allowance !== null
+    ? { business: presentation.position.business, tax: presentation.position.tax_allowance } : null;
+  // Saved company cost; a row that never stored one shows '-', not Rp 0.
+  const detailCompanyCost = selectedRecord ? savedCompanyCost(selectedRecord) : null;
+  // Saved take-home pay (take_home_pay, then thp); never net_salary.
+  const detailThp = selectedRecord ? savedThp(selectedRecord) : null;
+  const detailDeductionTotal = presentation?.deductions.total ?? null;
+  // Saved system deductions (absence/late/loan/other), shown on their own.
+  const detailSystemDeductions = presentation ? presentation.deductions.system
+    : selectedRecord?.total_deductions == null ? null : Number(selectedRecord.total_deductions);
 
   const formatPeriod = (period: string) => {
     const [year, month] = period.split('-');
@@ -516,6 +535,8 @@ export function PayrollPage() {
             <button className="pw-text-button" onClick={() => setShowExportMenu(false)}>{t("Tutup menu")}</button>
           </div>}
         </div>}
+        {canGenerate && <button type="button" className="ow-button" disabled={!selectedCompanyId || companyError}
+          onClick={() => setShowSalarySimulator(true)} data-testid="payroll-salary-sim-open">{t("Salary simulation")}</button>}
         {canGenerate && <button className="ow-button ow-primary" disabled={busy || !selectedCompanyId || companyError} onClick={() => setShowPreparation(true)}>{t("Generate Payroll")}</button>}
       </>}>
       <section className="ow-register pw-register" aria-label={t("Register payroll")}>
@@ -641,9 +662,10 @@ export function PayrollPage() {
                       )}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <p className="font-bold text-gray-900 text-sm">{record.metadata?.calculation?.version === 2
-                        ? payrollCalculationCurrency(record.take_home_pay ?? record.net_salary)
-                        : formatCurrency(record.take_home_pay ?? record.net_salary)}</p>
+                      <p className="font-bold text-gray-900 text-sm">{savedThp(record) === null ? '-'
+                        : record.metadata?.calculation?.version === 2
+                          ? payrollCalculationCurrency(savedThp(record))
+                          : formatCurrency(savedThp(record)!)}</p>
                     </td>
                     <td className="px-6 py-4 text-center">
                       {getStatusBadge(record.status)}
@@ -673,7 +695,9 @@ export function PayrollPage() {
         <dl className="pw-ledger-summary" aria-label={t("Ringkasan periode")}>
         <div><dt>{t("Karyawan")}</dt><dd>{busy || loadError || companyError ? '—' : summary.total_employees}</dd></div>
         <div><dt>{t("Total gross")}</dt><dd>{busy || loadError || companyError ? '—' : formatCurrency(summary.total_gross)}</dd></div>
-        <div><dt>{t("Total take home pay")}</dt><dd>{busy || loadError || companyError ? '—' : formatCurrency(summary.total_net)}</dd></div>
+        <div><dt>{t("Total take home pay")}</dt><dd data-testid="payroll-summary-thp">{busy || loadError || companyError ? '—' : formatCurrency(summary.total_net)}
+          {!busy && !loadError && !companyError && summary.total_net_missing > 0
+            && <small> · {t('{count} payroll tanpa THP tersimpan tidak dijumlahkan', { count: summary.total_net_missing })}</small>}</dd></div>
         <div><dt>{t("Sudah dibayar")}</dt><dd>{busy || loadError || companyError ? '—' : summary.paid_count}{!busy && !loadError && !companyError && <small> / {payrollNumber(Number(summary.total_employees))}{' '}{t("payroll")}</small>}</dd></div>
       </dl>
       </div>
@@ -681,6 +705,9 @@ export function PayrollPage() {
           <button className="ow-button" disabled={page === 1 || busy} onClick={() => setPage(value => value - 1)}>{t("Sebelumnya")}</button><span>{payrollNumber(Number(page))} / {payrollNumber(Number(pageCount))}</span><button className="ow-button" disabled={page >= pageCount || busy} onClick={() => setPage(value => value + 1)}>{t("Berikutnya")}</button>
         </div></div>
       </section>
+      {/* Standalone simulation: read-only, no Apply, never touches payroll runs. */}
+      {canGenerate && <SalarySimulator open={showSalarySimulator} onClose={() => setShowSalarySimulator(false)}
+        mode="standalone" companyId={selectedCompanyId} companyName={selectedCompany?.name} period={selectedPeriod} />}
       {showPreparation && canGenerate && <PayrollPreparation companies={companies} initialCompanyId={selectedCompanyId} initialPeriod={selectedPeriod}
         onClose={() => setShowPreparation(false)} onGenerated={async (companyId, period) => {
           setSelectedIds([]); setSelectedCompanyId(companyId); setSelectedPeriod(period);
@@ -694,7 +721,10 @@ export function PayrollPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="pw-summary-value">
                       <p className="text-slate-600 text-sm">{t("Total Potongan")}</p>
-                      <p className="text-2xl font-bold mt-1">{formatDetailCurrency(selectedRecord.total_deductions)}</p>
+                      {/* Backend presentation total (withheld PPh21 + employee BPJS + system);
+                          raw total_deductions is system deductions only. Unknown: '-'. */}
+                      <p className="text-2xl font-bold mt-1" data-testid="payroll-detail-total-deductions">
+                        {detailDeductionTotal === null ? '-' : formatDetailCurrency(detailDeductionTotal)}</p>
                     </div>
                     <div className="pw-summary-value">
                       <p className="text-slate-600 text-sm">
@@ -710,7 +740,7 @@ export function PayrollPage() {
                     </div>
                     <div className="pw-summary-value">
                       <p className="text-slate-600 text-sm">{t("Take Home Pay")}</p>
-                      <p className="text-3xl font-bold mt-1">{formatDetailCurrency(selectedRecord.thp ?? selectedRecord.take_home_pay ?? selectedRecord.net_salary)}</p>
+                      <p className="text-3xl font-bold mt-1">{detailThp === null ? '-' : formatDetailCurrency(detailThp)}</p>
                     </div>
                   </div>
                 </div>
@@ -807,10 +837,10 @@ export function PayrollPage() {
                       </tr>
                       <tr className="text-center font-bold">
                         <td colSpan={4} className="px-2 py-2 border-r border-gray-200 pw-amount text-base">
-                          {formatDetailCurrency(selectedRecord.thp ?? selectedRecord.take_home_pay ?? selectedRecord.net_salary)}
+                          {detailThp === null ? '-' : formatDetailCurrency(detailThp)}
                         </td>
-                        <td colSpan={3} className="px-2 py-2 border-r border-gray-200 pw-amount text-base">
-                          {formatCurrency(selectedRecord.total_cost_company ?? selectedRecord.total_cost_to_company ?? 0)}
+                        <td colSpan={3} className="px-2 py-2 border-r border-gray-200 pw-amount text-base" data-testid="payroll-detail-company-cost">
+                          {detailCompanyCost === null ? '-' : formatCurrency(detailCompanyCost)}
                         </td>
                         <td colSpan={3} className="px-2 py-2 text-gray-700">
                           {selectedRecord.ptkp_status || '-'}
@@ -844,8 +874,24 @@ export function PayrollPage() {
                             <span className="font-medium pw-amount">+{formatDetailCurrency(selectedRecord.meal_allowance)}</span>
                           </div>
                         )}
-                        {(selectedRecord.position_allowance || 0) > 0 && (
-                          <div className="flex items-center justify-between text-sm">
+                        {/* Saved Position = business Position + tax allowance. Split only
+                            when the v2 snapshot recorded the tax allowance; otherwise the
+                            combined saved amount is shown without inventing a split. */}
+                        {positionSplit ? (<>
+                          {positionSplit.business !== 0 && (
+                            <div className="flex items-center justify-between text-sm" data-testid="payroll-position-business">
+                              <span className="text-gray-600">{t("Tunjangan Jabatan")}</span>
+                              <span className="font-medium pw-amount">+{formatDetailCurrency(positionSplit.business)}</span>
+                            </div>
+                          )}
+                          {positionSplit.tax !== 0 && (
+                            <div className="flex items-center justify-between text-sm" data-testid="payroll-position-tax">
+                              <span className="text-gray-600">{t("Tunjangan pajak")}</span>
+                              <span className="font-medium pw-amount">+{formatDetailCurrency(positionSplit.tax)}</span>
+                            </div>
+                          )}
+                        </>) : (Number(selectedRecord.position_allowance) || 0) > 0 && (
+                          <div className="flex items-center justify-between text-sm" data-testid="payroll-position-combined">
                             <span className="text-gray-600">{t("Tunjangan Jabatan")}</span>
                             <span className="font-medium pw-amount">+{formatDetailCurrency(selectedRecord.position_allowance)}</span>
                           </div>
@@ -936,7 +982,9 @@ export function PayrollPage() {
                     {selectedCalculation ? <PayrollSavedBPJS record={selectedRecord} /> : (
                     <div className="pw-breakdown-section">
                       <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">{t("BPJS (Karyawan)")} </h3>
-                      {selectedRecord.pph21_paid_by_company ? (
+                      {bpjsFunding === null ? (
+                        <p className="text-sm text-gray-500" data-testid="payroll-funding-unrecorded">{t("Penanggung PPh21 dan BPJS karyawan tidak tercatat pada payroll ini.")}</p>
+                      ) : bpjsFunding === 'company' ? (
                         /* Gross-up: company bears all employee BPJS via tunjangan;
                            raw bpjs_*_employee fields still hold computed amounts but
                            are NOT deducted from THP. Show "Ditanggung Perusahaan"
@@ -1009,7 +1057,7 @@ export function PayrollPage() {
                         )}
                         {/* Gross Up Iteration — shown for any payroll where company bears
                             PPh21 (Wave 6.5: PFI uses gross-up regardless of pay_type label) */}
-                        {selectedRecord.pph21_paid_by_company && selectedRecord.gross_up_initial && (
+                        {legacyCompanyBears && selectedRecord.gross_up_initial && (
                           <>
                             <div className="border-t pw-rule pt-2 mt-2">
                               <p className="text-xs font-semibold pw-amount mb-2">{t("Gross Up Calculation:")}</p>
@@ -1033,21 +1081,24 @@ export function PayrollPage() {
                           </>
                         )}
                         {/* For pure GROSS (employee pays tax) — TER rate only, no iteration panel */}
-                        {!selectedRecord.pph21_paid_by_company && selectedRecord.ter_rate && (
+                        {!legacyCompanyBears && selectedRecord.ter_rate && (
                           <div className="flex items-center justify-between text-sm">
                             <span className="text-gray-600">{t("TER Rate")}</span>
                             <span className="font-medium">{Number(((Number(selectedRecord.ter_rate) || 0) * 100).toFixed(2)).toLocaleString(intlLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%</span>
                           </div>
                         )}
                         <div className="border-t pw-rule pt-2 mt-2 flex items-center justify-between">
-                          <span className="font-semibold text-gray-900">{selectedRecord.pph21_paid_by_company ? t("PPh21 (Ditanggung Perusahaan)") : t("PPh21")}</span>
-                          {selectedRecord.pph21_paid_by_company ? (
+                          <span className="font-semibold text-gray-900">{legacyCompanyBears ? t("PPh21 (Ditanggung Perusahaan)") : t("PPh21")}</span>
+                          {legacyCompanyBears ? (
                             <span className="font-bold pw-amount">{t("Rp 0")}</span>
+                          ) : pph21Funding === 'withheld' && presentation?.deductions.pph21 != null ? (
+                            <span className="font-bold text-red-600">-{formatCurrency(presentation.deductions.pph21)}</span>
                           ) : (
-                            <span className="font-bold text-red-600">-{formatCurrency(selectedRecord.pph21)}</span>
+                            /* Bearer not recorded: the saved PPh21 is not shown as a deduction. */
+                            <span className="font-bold text-gray-500" data-testid="payroll-pph21-unrecorded">-</span>
                           )}
                         </div>
-                        {selectedRecord.pph21_paid_by_company && (
+                        {legacyCompanyBears && (
                           <p className="text-xs pw-amount mt-1">{t("* Tunjangan Jabatan")} {formatCurrency(selectedRecord.pph21)}{' '}{t("= nilai PPh21 yang dibayar perusahaan (skema gross-up)")}</p>
                         )}
                       </div>
@@ -1055,10 +1106,12 @@ export function PayrollPage() {
 
                     )}
 
-                    {/* Other Deductions */}
-                    {!selectedCalculation && (selectedRecord.total_deductions ?? 0) > (selectedRecord.bpjs_employee_total ?? 0) + (selectedRecord.pph21 ?? 0) && (
-                      <div className="pw-breakdown-section">
-                        <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">{t("Potongan Lain")} </h3>
+                    {/* System deductions: shown whenever the saved system total is
+                        positive (total_deductions holds only these; no comparison with
+                        PPh21/BPJS, which are listed in their own cards). */}
+                    {!selectedCalculation && detailSystemDeductions !== null && detailSystemDeductions > 0 && (
+                      <div className="pw-breakdown-section" data-testid="payroll-system-deductions">
+                        <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">{t("Potongan sistem (absen, telat, pinjaman, lainnya)")} </h3>
                         <div className="space-y-2">
                           {(selectedRecord.absence_deduction || 0) > 0 && (
                             <div className="flex items-center justify-between text-sm">
@@ -1084,6 +1137,10 @@ export function PayrollPage() {
                               <span className="font-medium text-red-600">-{formatCurrency(selectedRecord.other_deductions!)}</span>
                             </div>
                           )}
+                          <div className="border-t pw-rule pt-2 mt-2 flex items-center justify-between">
+                            <span className="font-semibold text-gray-900">{t("Total")}</span>
+                            <span className="font-bold text-red-600" data-testid="payroll-system-deductions-total">-{formatCurrency(detailSystemDeductions)}</span>
+                          </div>
                         </div>
                       </div>
                     )}
@@ -1125,7 +1182,7 @@ export function PayrollPage() {
                     )}
                     <div className="border-t border-gray-200 mt-3 pt-3 flex justify-between">
                       <span className="font-semibold">{t("Total Cost to Company")}</span>
-                      <span className="font-bold pw-amount">{formatCurrency(selectedRecord.total_cost_company ?? selectedRecord.total_cost_to_company ?? 0)}</span>
+                      <span className="font-bold pw-amount">{detailCompanyCost === null ? '-' : formatCurrency(detailCompanyCost)}</span>
                     </div>
                   </div>
                 )}

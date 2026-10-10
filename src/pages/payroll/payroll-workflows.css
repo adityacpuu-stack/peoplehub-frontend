@@ -46,15 +46,24 @@
 .pw-calculation-scroll { overflow-x:auto; max-width:100%; }
 .pw-calculation-scroll table { font-size:12px; line-height:1.8; }
 .pw-calculation-scroll h3 { position:sticky; left:0; }
+/* Annual PPh 21: money never breaks mid-digit; the history table scrolls instead. */
+.pw-policy dd.pw-annual-amount,.pw-annual-amount { white-space:nowrap; overflow-wrap:normal; }
+.pw-annual-tax { min-width:0; }
+.pw-annual-tax .pw-annual-period { min-width:9.5rem; }
+.pw-annual-period-item { white-space:nowrap; }
+.pw-correction-row { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)) auto; gap:12px; align-items:end; padding:12px 0; border-bottom:1px solid var(--ph-line,#e4e9e6); }
+.pw-correction-row > button { justify-self:start; }
 @media(max-width:760px) {
   .pw-automatic { grid-template-columns:minmax(0,1fr); }
   .pw-automatic .pw-generate-actions { grid-column:1; grid-row:auto; max-width:none; }
   .pw-policy-facts { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .pw-bpjs-columns,.pw-rule-columns,.pw-detail-columns { grid-template-columns:minmax(0,1fr); gap:20px; }
+  .pw-correction-row { grid-template-columns:repeat(2,minmax(0,1fr)); }
 }
 @media(max-width:480px) {
   .pw-policy-facts,.pw-preview-totals { grid-template-columns:minmax(0,1fr); }
   .pw-policy-facts > .sm\:col-span-3 { grid-column:auto; }
+  .pw-correction-row { grid-template-columns:minmax(0,1fr); }
   .pw-summary-value:last-child { text-align:left; }
   .pw-bpjs-columns .ph-kv > div { flex-wrap:wrap; gap:6px; }
   .pw-detail-content .flex.justify-between { align-items:baseline; flex-wrap:wrap; gap:6px 12px; }

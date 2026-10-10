@@ -19,6 +19,7 @@ import {
 } from 'recharts';
 import { payrollService, type Payroll } from '@/services/payroll.service';
 import { companyService, type Company } from '@/services/company.service';
+import { collectPages } from '@/services/master-data';
 
 function savedContribution(value: unknown, field: string): number {
   if (value == null || (typeof value !== 'number' && typeof value !== 'string')
@@ -58,11 +59,12 @@ export function BPJSKesehatanPage() {
       setLoadError(null);
       setBpjsData([]);
       setSelectedEmployee(null);
-      const [payrollRes, companiesRes] = await Promise.all([
-        payrollService.getAll({ period: selectedPeriod, limit: 1000 }),
+      // Every page of the period; one limit=1000 request could truncate it.
+      const [payrollRows, companiesRes] = await Promise.all([
+        collectPages((page, limit) => payrollService.getAll({ period: selectedPeriod, page, limit })),
         companyService.getAll(),
       ]);
-      const rows: BPJSKesehatanData[] = payrollRes.data.map(record => {
+      const rows: BPJSKesehatanData[] = payrollRows.map(record => {
         const employeeContribution = savedContribution(record.bpjs_kes_employee, 'bpjs_kes_employee');
         const companyContribution = savedContribution(record.bpjs_kes_company, 'bpjs_kes_company');
         const statuses = ['paid', 'pending', 'overdue'] as const;

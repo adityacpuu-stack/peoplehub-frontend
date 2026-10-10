@@ -18,6 +18,7 @@ import {
 import { PageSpinner } from '@/components/ui';
 import { payrollService, type Payroll } from '@/services/payroll.service';
 import { companyService, type Company } from '@/services/company.service';
+import { collectPages } from '@/services/master-data';
 
 // Mock data for PPh 21 trend
 const pph21TrendData = [
@@ -58,15 +59,14 @@ export function PPh21Page() {
       try {
         setIsLoading(true);
         setLoadError(null);
-        const [payrollRes, companiesRes] = await Promise.all([
-          payrollService.getAll({
-            period: selectedPeriod,
-            company_id: selectedCompany || undefined,
-            limit: 1000,
-          }),
+        // Every page of the period; one limit=1000 request could truncate it.
+        const [rows, companiesRes] = await Promise.all([
+          collectPages((page, limit) => payrollService.getAll({
+            period: selectedPeriod, company_id: selectedCompany || undefined, page, limit,
+          })),
           companyService.getAll(),
         ]);
-        setPayrolls(payrollRes.data || []);
+        setPayrolls(rows);
         setCompanies(companiesRes.data || []);
       } catch (err) {
         console.error('Failed to fetch data:', err);

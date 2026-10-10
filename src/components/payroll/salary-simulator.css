@@ -1,0 +1,45 @@
+/* Salary simulator: shared Modal primitive, Public Sans, white surface, quiet green accent.
+   Inputs left, plain aligned result rows right; stacked on narrow screens. */
+.salary-sim { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 24px; align-items: start; }
+.salary-sim label { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.salary-sim label > span, .salary-sim legend, .salary-sim-label { font-size: 13px; font-weight: 600; color: var(--ph-ink); }
+.salary-sim-inputs { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.salary-sim-target input { font-size: 18px; font-weight: 600; }
+.salary-sim-pair, .salary-sim-allowances { display: grid; gap: 10px; }
+.salary-sim-allowances { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.salary-sim-allowances .salary-sim-label { grid-column: 1 / -1; margin: 0; }
+.salary-sim-source { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.salary-sim-source label { flex-direction: row; align-items: center; gap: 8px; font-size: 13px; }
+.salary-sim-scope, .salary-sim-note, .salary-sim-empty { margin: 0; font-size: 12px; color: var(--ph-muted); }
+.salary-sim-error { color: #b4232f; font-size: 12px; }
+.salary-sim-warning { margin: 0; font-size: 12px; color: #7a4a00; border-left: 3px solid #d8a13a; padding: 2px 0 2px 8px; }
+.salary-sim-result { min-width: 0; border-left: 1px solid var(--ph-line); padding-left: 24px; display: flex; flex-direction: column; gap: 12px; }
+.salary-sim-headline { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.salary-sim-headline span { display: block; font-size: 12px; color: var(--ph-muted); }
+/* Money is never split: amounts stay one physical line; labels wrap instead. */
+.salary-sim-headline strong { display: block; font-size: 22px; font-weight: 700; color: var(--ph-ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.salary-sim-status { margin: 0; font-size: 13px; color: var(--ph-ink); }
+.salary-sim-status-exact { color: var(--ph-accent); }
+.salary-sim-status-below_minimum, .salary-sim-status-nearest { color: #9a5b00; }
+.salary-sim-rows { margin: 0; display: flex; flex-direction: column; }
+/* Label wraps; the amount keeps its full width. If both cannot share a line the
+   amount drops below the label (right-aligned) instead of breaking digits. */
+.salary-sim-rows > div { display: flex; flex-wrap: wrap; justify-content: space-between; column-gap: 12px; row-gap: 2px; padding: 6px 0; border-bottom: 1px solid var(--ph-line); font-size: 13px; }
+.salary-sim-rows dt { color: var(--ph-ink); flex: 1 1 8rem; min-width: 0; overflow-wrap: break-word; }
+.salary-sim-rows dd { margin: 0 0 0 auto; text-align: right; font-variant-numeric: tabular-nums; flex: 0 0 auto; max-width: none; white-space: nowrap; }
+.salary-sim-rows dd em { display: block; font-style: normal; color: var(--ph-muted); font-size: 12px; }
+.salary-sim-nowrap { white-space: nowrap; }
+.salary-sim-help { font-size: 12px; color: var(--ph-muted); }
+.salary-sim-scope { overflow-wrap: anywhere; }
+.salary-sim-subtotal { font-weight: 600; }
+.salary-sim-muted dt, .salary-sim-muted dd { color: var(--ph-muted); }
+.salary-sim-alert { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #b4232f; font-size: 13px; }
+.salary-sim-alert p, .salary-sim-apply p { margin: 0; }
+.salary-sim-apply { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--ph-ink); border-top: 1px solid var(--ph-line); padding-top: 10px; }
+@media (max-width: 720px) {
+  .salary-sim { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .salary-sim-result { border-left: 0; padding-left: 0; border-top: 1px solid var(--ph-line); padding-top: 16px; }
+  .salary-sim-allowances { grid-template-columns: minmax(0, 1fr); }
+  .salary-sim-headline { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .salary-sim-headline strong { font-size: 19px; }
+}

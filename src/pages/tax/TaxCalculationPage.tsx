@@ -7,6 +7,8 @@ import { Calculator, Building2, Calendar, Search, Download, RefreshCw, CheckCirc
 import { PageSpinner } from '@/components/ui';
 import { payrollService, type Payroll } from '@/services/payroll.service';
 import { companyService, type Company } from '@/services/company.service';
+import { collectPages } from '@/services/master-data';
+import { savedThp, sumSavedThp } from '@/components/payroll/saved-payroll';
 
 const statusConfig: Record<string, { label: string; color: string; bg: string; icon: any }> = {
   calculated: { get label() { return t('Calculated'); }, color: 'text-blue-600', bg: 'bg-blue-100', icon: CheckCircle },
@@ -35,15 +37,13 @@ export function TaxCalculationPage() {
       try {
         setIsLoading(true);
         setLoadError(null);
-        const [payrollRes, companiesRes] = await Promise.all([
-          payrollService.getAll({
-            period: selectedPeriod,
-            company_id: selectedCompany || undefined,
-            limit: 1000,
-          }),
+        const [rows, companiesRes] = await Promise.all([
+          collectPages((page, limit) => payrollService.getAll({
+            period: selectedPeriod, company_id: selectedCompany || undefined, page, limit,
+          })),
           companyService.getAll(),
         ]);
-        setPayrolls(payrollRes.data || []);
+        setPayrolls(rows);
         setCompanies(companiesRes.data || []);
       } catch (err) {
         console.error('Failed to fetch data:', err);
@@ -92,7 +92,9 @@ export function TaxCalculationPage() {
   const totalPPh21 = payrolls.reduce((sum, p) => sum + (Number(p.pph21) || 0), 0);
   const totalBPJSEmployee = payrolls.reduce((sum, p) => sum + (Number(p.bpjs_employee_total) || 0), 0);
   const totalBPJSCompany = payrolls.reduce((sum, p) => sum + (Number(p.bpjs_company_total) || 0), 0);
-  const totalNet = payrolls.reduce((sum, p) => sum + (Number(p.take_home_pay ?? p.net_salary) || 0), 0);
+  // Saved take-home pay only; rows without one are excluded, never net_salary.
+  const totalNet = sumSavedThp(payrolls).total;
+  const thpText = (p: Payroll) => { const v = savedThp(p); return v === null ? '-' : formatCurrency(v); };
   const employeeCount = payrolls.length;
 
   // Period options
@@ -249,7 +251,7 @@ export function TaxCalculationPage() {
                       <span className="text-sm text-green-600">{formatCurrency(Number(payroll.bpjs_company_total) || 0)}</span>
                     </td>
                     <td className="px-3 py-4 text-right">
-                      <span className="font-bold text-gray-900">{formatCurrency(Number(payroll.take_home_pay ?? payroll.net_salary) || 0)}</span>
+                      <span className="font-bold text-gray-900">{thpText(payroll)}</span>
                     </td>
                     <td className="px-3 py-4 text-center">
                       <button type="button"
@@ -328,7 +330,7 @@ export function TaxCalculationPage() {
 
               {/* Net Salary */}
               <div className="p-4 border border-cyan-200 tax-section">
-                <dl className="ph-kv tax-kv-row"><dt>{t("Take Home Pay")}</dt><dd>{formatCurrency(Number(selectedPayroll.take_home_pay ?? selectedPayroll.net_salary) || 0)}</dd></dl>
+                <dl className="ph-kv tax-kv-row"><dt>{t("Take Home Pay")}</dt><dd>{thpText(selectedPayroll)}</dd></dl>
               </div>
             </div><div className="ph-dialog-footer tax-dialog-actions"><button type="button" className="ph-button tax-button" onClick={() => setSelectedPayroll(null)}>{t("Tutup")}</button></div></div>
 </Modal>

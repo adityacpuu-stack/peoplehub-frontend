@@ -473,6 +473,12 @@ test('v2 fixed allowance and external refund override contradictory legacy flags
   state.payroll.metadata.calculation.policy.bpjs_paid_by_company = true;
   state.payroll.metadata.calculation.tax_allowance = '12500.25';
   Object.assign(state.payroll.metadata.calculation.payments, { regular: 0, bonus: 0, total: 0 });
+  // Backend saved read presentation for this row (payroll-read-presentation.ts).
+  Object.assign(state.payroll, { presentation: { version: 1, basis: 'calculation_v2', take_home_pay: 0, company_cost: null,
+    taxable_base: 777777.77, funding: { pph21: 'withheld', tax_allowance_mode: 'fixed', bpjs_employee: 'company' },
+    position: { total: 12500.25, business: 0, tax_allowance: 12500.25 }, earnings: null,
+    deductions: { pph21: -23456.75, bpjs_employee: 0, system: 123.45, total: -23333.3 },
+    company_borne: { pph21: 12500.25, bpjs_employee: 24680.12, bpjs_company: 55555.55 } } });
   await page.reload();
   const row = page.getByRole('row').filter({ hasText: 'TEST-901' });
   await expect(row.getByText('Pajak diterapkan', { exact: true }).locator('..')).toContainText(/-Rp\s*23\.456,75/);
@@ -483,7 +489,11 @@ test('v2 fixed allowance and external refund override contradictory legacy flags
   const policy = detail.getByRole('region', { name: 'Kebijakan dan pembayaran payroll' });
   await expect(policy.getByText('Pajak diterapkan', { exact: true }).locator('..')).toHaveText(/Pajak diterapkan-Rp\s*23\.456,75/);
   await expect(policy.getByText('Tunjangan pajak', { exact: true }).locator('..')).toHaveText(/Tunjangan pajakRp\s*12\.500,25/);
-  await expect(detail.getByText('Tunjangan Jabatan', { exact: true }).locator('..')).toContainText('12.500,25');
+  // Saved Position 12,500.25 is entirely the snapshot's tax allowance: it is
+  // shown as tax allowance income, not as business Position.
+  await expect(detail.getByTestId('payroll-position-tax')).toHaveText(/Tunjangan pajak\+Rp\s*12\.500,25/);
+  await expect(detail.getByTestId('payroll-position-business')).toHaveCount(0);
+  await expect(detail.getByTestId('payroll-position-combined')).toHaveCount(0);
   const bpjs = detail.getByRole('region', { name: 'Rincian BPJS tersimpan' });
   await expect(bpjs.getByText('Total BPJS karyawan', { exact: true }).locator('..')).toHaveText(/Total BPJS karyawanRp\s*24\.680,12/);
   await expect(bpjs.getByText('BPJS Kesehatan karyawan', { exact: true }).locator('..')).toHaveText(/BPJS Kesehatan karyawanRp\s*9\.000,01/);
@@ -504,12 +514,21 @@ test('v2 fixed allowance and external refund override contradictory legacy flags
 for (const version of ['legacy', 'v2']) {
   test(`${version} detail preserves numeric zero THP and final gross-up before nonzero fallbacks`, async ({ page }) => {
     const state = await openPayroll(page);
+    // take_home_pay is the canonical saved THP (as in exports and reports); its
+    // zero must not fall back to the nonzero thp column.
     Object.assign(state.payroll, {
-      pph21_paid_by_company: version === 'legacy', thp: 0, take_home_pay: '9876543.21',
+      pph21_paid_by_company: version === 'legacy', take_home_pay: 0, thp: '9876543.21',
       final_gross_up: 0, gross_up_initial: '888888.88', gross_salary: '777777.77',
     });
-    if (version === 'legacy') Reflect.deleteProperty(state.payroll, 'metadata');
-    else state.payroll.metadata.calculation.policy.tax_allowance_mode = 'gross_up';
+    if (version === 'legacy') {
+      Reflect.deleteProperty(state.payroll, 'metadata');
+      // Backend presentation of this legacy row: company-paid gross-up, saved THP 0.
+      Object.assign(state.payroll, { presentation: { version: 1, basis: 'saved_flag', take_home_pay: 0, company_cost: null,
+        taxable_base: 0, funding: { pph21: 'company_paid', tax_allowance_mode: 'gross_up', bpjs_employee: 'company' },
+        position: { total: null, business: null, tax_allowance: null }, earnings: null,
+        deductions: { pph21: 0, bpjs_employee: 0, system: 123.45, total: 123.45 },
+        company_borne: { pph21: -23456.75, bpjs_employee: 24680.12, bpjs_company: 55555.55 } } });
+    } else state.payroll.metadata.calculation.policy.tax_allowance_mode = 'gross_up';
     await page.getByTitle('Lihat Detail').click();
     const summary = page.getByRole('region', { name: 'Ringkasan payroll' });
     const zero = version === 'legacy' ? /Rp\s*0$/ : /Rp\s*0,00$/;

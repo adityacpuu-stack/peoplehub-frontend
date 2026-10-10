@@ -19,6 +19,7 @@ import {
 } from 'recharts';
 import { payrollService, type Payroll } from '@/services/payroll.service';
 import { companyService, type Company } from '@/services/company.service';
+import { collectPages } from '@/services/master-data';
 
 function savedContribution(value: unknown, field: string): number {
   if (value == null || (typeof value !== 'number' && typeof value !== 'string')
@@ -54,11 +55,12 @@ export function BPJSKetenagakerjaanPage() {
       setLoadError(null);
       setBpjsData([]);
       setSelectedEmployee(null);
-      const [payrollRes, companiesRes] = await Promise.all([
-        payrollService.getAll({ period: selectedPeriod, limit: 1000 }),
+      // Every page of the period; one limit=1000 request could truncate it.
+      const [payrollRows, companiesRes] = await Promise.all([
+        collectPages((page, limit) => payrollService.getAll({ period: selectedPeriod, page, limit })),
         companyService.getAll(),
       ]);
-      const rows: BPJSKetenagakerjaanData[] = payrollRes.data.map(record => {
+      const rows: BPJSKetenagakerjaanData[] = payrollRows.map(record => {
         const jkk = savedContribution(record.bpjs_jkk_company, 'bpjs_jkk_company');
         const jkm = savedContribution(record.bpjs_jkm_company, 'bpjs_jkm_company');
         const jhtEmployee = savedContribution(record.bpjs_jht_employee, 'bpjs_jht_employee');

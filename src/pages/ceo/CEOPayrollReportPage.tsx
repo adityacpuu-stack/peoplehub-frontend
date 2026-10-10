@@ -2,10 +2,12 @@ import { insightNumber, insightFixed } from '@/pages/ceo/insight-display';
 import { t, useLocale, intlLocale } from '@/i18n';
 import { Modal } from '@/components/ui/Modal';
 import { ReportPage, ReportHeader, ReportSummary, ReportSection } from '@/pages/dashboard/ReportingLayout';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Calendar, Download, AlertCircle, Search, Eye, FileText, ChevronDown, ChevronUp, Briefcase } from 'lucide-react';
 import { PageSpinner } from '@/components/ui';
-import { payrollService, type Payroll } from '@/services/payroll.service';
+import { payrollService, type Payroll, type PayrollEarningKey } from '@/services/payroll.service';
+import { savedThp, signedDeduction, sumSavedThp } from '@/components/payroll/saved-payroll';
+import { collectPages } from '@/services/master-data';
 import { useAuthStore } from '@/stores/auth.store';
 import { canAction } from '@/lib/actions';
 
@@ -18,6 +20,15 @@ const statusConfig: Record<string, { label: string; color: string; bg: string }>
   rejected: { get label() { return t('Rejected'); }, color: 'text-red-600', bg: 'bg-red-100' },
   paid: { get label() { return t('Paid'); }, color: 'text-emerald-600', bg: 'bg-emerald-100' },
   cancelled: { get label() { return t('Cancelled'); }, color: 'text-gray-500', bg: 'bg-gray-100' },
+};
+
+// Labels for the backend presentation's saved earning lines.
+const earningLabels: Record<PayrollEarningKey, string> = {
+  basic_salary: 'Gaji Pokok', position_allowance: 'Tunjangan Jabatan',
+  position_allowance_unsplit: 'Tunjangan Jabatan (gabungan tersimpan)', tax_allowance: 'Tunjangan pajak',
+  transport_allowance: 'Tunjangan Transport', meal_allowance: 'Tunjangan Makan', overtime_pay: 'Lembur',
+  other_allowances: 'Tunjangan Lainnya', thr: 'THR', bonus: 'Bonus',
+  incentive: 'Insentif', commission: 'Komisi', back_pay: 'Rapel',
 };
 
 export function CEOPayrollReportPage() {
@@ -35,6 +46,9 @@ export function CEOPayrollReportPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
   const [selectedPayroll, setSelectedPayroll] = useState<Payroll | null>(null);
+  const [slip, setSlip] = useState<Payroll | null>(null);
+  const [slipError, setSlipError] = useState(false);
+  const slipRequest = useRef(0);
   const [sortField, setSortField] = useState<'name' | 'gross' | 'net' | 'status'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
@@ -47,13 +61,11 @@ export function CEOPayrollReportPage() {
       setIsLoading(true);
       setError(null);
 
-      const payrollRes = await payrollService.getAll({
-        period: selectedPeriod,
-        limit: 1000,
-      });
+      // Every page of the period; one limit=1000 request could truncate it.
+      const rows = await collectPages((page, limit) => payrollService.getAll({ period: selectedPeriod, page, limit }));
 
-      setPayrolls(payrollRes.data || []);
-      setFilteredPayrolls(payrollRes.data || []);
+      setPayrolls(rows);
+      setFilteredPayrolls(rows);
     } catch (err: any) {
       console.error('Failed to fetch payroll data:', err);
       setError('Failed to load payroll data');
@@ -102,7 +114,7 @@ export function CEOPayrollReportPage() {
           comparison = (Number(a.gross_salary) || 0) - (Number(b.gross_salary) || 0);
           break;
         case 'net':
-          comparison = (Number(a.take_home_pay ?? a.net_salary) || 0) - (Number(b.take_home_pay ?? b.net_salary) || 0);
+          comparison = (savedThp(a) ?? -Infinity) - (savedThp(b) ?? -Infinity) || 0;
           break;
         case 'status':
           comparison = (a.status || '').localeCompare(b.status || '');
@@ -133,6 +145,25 @@ export function CEOPayrollReportPage() {
     return formatCurrency(value);
   };
 
+  // Deductions, company contributions and earnings are the backend's saved read
+  // presentation (what the saved result withheld); never re-derived here.
+  const money = (value: number | null | undefined) => value == null ? '-' : formatCurrency(value);
+  const openPayslip = async (row: Payroll) => {
+    const request = ++slipRequest.current;
+    setSelectedPayroll(row);
+    setSlip(null);
+    setSlipError(false);
+    try {
+      // List rows carry no earning components; the slip reads the saved detail.
+      const detail = await payrollService.getById(row.id);
+      if (request === slipRequest.current) setSlip(detail);
+    } catch {
+      if (request === slipRequest.current) setSlipError(true);
+    }
+  };
+  const closePayslip = () => { slipRequest.current++; setSelectedPayroll(null); setSlip(null); setSlipError(false); };
+  const slipView = slip?.presentation ?? null;
+
   // Generate period options (last 12 months)
   const periodOptions = Array.from({ length: 12 }, (_, i) => {
     const date = new Date();
@@ -148,7 +179,8 @@ export function CEOPayrollReportPage() {
 
   // Calculate summary stats
   const totalGross = payrolls.reduce((sum, p) => sum + (Number(p.gross_salary) || 0), 0);
-  const totalNet = payrolls.reduce((sum, p) => sum + (Number(p.take_home_pay ?? p.net_salary) || 0), 0);
+  // Saved take-home pay (take_home_pay, then thp); rows without one are counted.
+  const { total: totalNet, missing: missingThp } = sumSavedThp(payrolls);
   const totalEmployees = payrolls.length;
   const paidCount = payrolls.filter((p) => p.status === 'paid').length;
   const pendingCount = payrolls.filter((p) => ['draft', 'processing', 'validated', 'submitted', 'approved'].includes(p.status || '')).length;
@@ -211,6 +243,7 @@ export function CEOPayrollReportPage() {
             </div></div></div><div className="report-metric"><div  className="report-metric-context"><div>
               <p className="report-metric-value">{formatCompactCurrency(totalNet)}</p>
               <p className="report-metric-label">{t("Total Net Salary")}</p>
+              {missingThp > 0 && <p className="text-xs text-gray-500">{t('{count} payroll tanpa THP tersimpan tidak dijumlahkan', { count: missingThp })}</p>}
             </div></div></div><div className="report-metric"><div  className="report-metric-context"><div>
               <p className="report-metric-value">{insightNumber(paidCount)}</p>
               <p className="report-metric-label">{t("Sudah Dibayar")}</p>
@@ -317,9 +350,7 @@ export function CEOPayrollReportPage() {
               {filteredPayrolls.length > 0 ? (
                 filteredPayrolls.map((payroll) => {
                   const status = statusConfig[payroll.status || 'draft'];
-                  const totalDeductions =
-                    (Number(payroll.pph21) || 0) +
-                    (Number(payroll.bpjs_employee_total) || 0);
+                  const totalDeductions = payroll.presentation?.deductions.total ?? null;
 
                   return (
                     <tr key={payroll.id} className="hover:bg-gray-50 transition-colors">
@@ -357,12 +388,12 @@ export function CEOPayrollReportPage() {
                       </td>
                       <td className="px-3 py-4 text-right hidden lg:table-cell">
                         <span className="text-red-600 text-sm">
-                          -{formatCurrency(totalDeductions)}
+                          {totalDeductions === null ? '-' : `-${formatCurrency(totalDeductions)}`}
                         </span>
                       </td>
                       <td className="px-3 py-4 text-right">
                         <span className="font-bold text-gray-900 text-sm">
-                          {formatCurrency(Number(payroll.take_home_pay ?? payroll.net_salary) || 0)}
+                          {money(savedThp(payroll))}
                         </span>
                       </td>
                       <td className="px-3 py-4 text-center">
@@ -374,7 +405,7 @@ export function CEOPayrollReportPage() {
                       </td>
                       <td className="px-3 py-4 text-center">
                         <button
-                          onClick={() => setSelectedPayroll(payroll)}
+                          onClick={() => void openPayslip(payroll)}
                           className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors"
                         >
                           <Eye className="h-3.5 w-3.5" />{t("Detail")} </button>
@@ -397,7 +428,7 @@ export function CEOPayrollReportPage() {
               )}
             </tbody>
           </table></div></ReportSection>{/* Payslip Detail Modal */}{selectedPayroll && (
-        <Modal isOpen onClose={() => setSelectedPayroll(null)} title={t("Slip Gaji")} description={periodOptions.find((p) => p.value === selectedPeriod)?.label} size="lg" className="report-payslip-dialog executive-dialog">
+        <Modal isOpen onClose={closePayslip} title={t("Slip Gaji")} description={periodOptions.find((p) => p.value === selectedPeriod)?.label} size="lg" className="report-payslip-dialog executive-dialog">
 
 
             <div className="admin-dialog-content">
@@ -419,44 +450,38 @@ export function CEOPayrollReportPage() {
                 </div>
               </div>
 
+              {/* The slip renders the saved detail's backend read presentation:
+                  same earnings, deductions and company contributions as the payroll
+                  detail and exports. Nothing is recomputed or defaulted to 0. */}
+              {slipError ? (
+                <p className="text-sm text-red-600" role="alert">{t("Gagal memuat detail payroll. Coba lagi.")}</p>
+              ) : !slip || !slipView ? (
+                <p className="text-sm text-gray-500">{t("Memuat...")}</p>
+              ) : (<>
               {/* Earnings */}
-              <section className="ph-section"><h5 className="text-sm font-semibold text-gray-700 mb-3">{t("Pendapatan")}</h5>
+              <section className="ph-section" data-testid="payslip-earnings"><h5 className="text-sm font-semibold text-gray-700 mb-3">{t("Pendapatan")}</h5>
                 <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">{t("Gaji Pokok")}</span>
-                    <span className="font-medium text-gray-900">
-                      {formatCurrency(Number(selectedPayroll.basic_salary) || 0)}
-                    </span>
-                  </div>
-                  {Number((selectedPayroll as { allowances?: number }).allowances) > 0 && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">{t("Tunjangan")}</span>
-                      <span className="font-medium text-gray-900">
-                        {formatCurrency(Number((selectedPayroll as { allowances?: number }).allowances) || 0)}
-                      </span>
+                  {(slipView.earnings?.items ?? []).filter(item => item.key === 'basic_salary' || item.amount !== 0).map(item => (
+                    <div key={item.key} className="flex justify-between text-sm" data-testid={`payslip-earning-${item.key}`}>
+                      <span className="text-gray-600">{t(earningLabels[item.key])}</span>
+                      <span className="font-medium text-gray-900">{money(item.amount)}</span>
                     </div>
-                  )}
-                  {Number(selectedPayroll.overtime_pay) > 0 && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">{t("Lembur")}</span>
-                      <span className="font-medium text-gray-900">
-                        {formatCurrency(Number(selectedPayroll.overtime_pay) || 0)}
-                      </span>
-                    </div>
-                  )}
-                  {Number(selectedPayroll.bonus) > 0 && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">{t("Bonus")}</span>
-                      <span className="font-medium text-gray-900">
-                        {formatCurrency(Number(selectedPayroll.bonus) || 0)}
-                      </span>
+                  ))}
+                  {/* A saved total not explained by the saved lines is shown, not hidden. */}
+                  {slipView.earnings?.unreconciled != null && slipView.earnings.unreconciled !== 0 && (
+                    <div className="flex justify-between text-sm" data-testid="payslip-earnings-unreconciled">
+                      <span className="text-amber-700">{t("Selisih komponen tersimpan")}</span>
+                      <span className="font-medium text-amber-700">{money(slipView.earnings.unreconciled)}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-sm pt-2 border-t border-gray-100">
-                    <span className="font-semibold text-gray-700">{t("Total Pendapatan")}</span>
-                    <span className="font-bold text-gray-900">
-                      {formatCurrency(Number(selectedPayroll.gross_salary) || 0)}
-                    </span>
+                    <span className="font-semibold text-gray-700">{t("Total Pendapatan Tunai")}</span>
+                    <span className="font-bold text-gray-900" data-testid="payslip-earnings-total">{money(slipView.earnings?.total)}</span>
+                  </div>
+                  {/* DPP is the tax base (includes the BPJS object), not money paid. */}
+                  <div className="flex justify-between text-xs text-gray-500" data-testid="payslip-taxable-base">
+                    <span>{t("Dasar pengenaan pajak (DPP)")} · {t("Bukan pendapatan tunai; termasuk objek BPJS.")}</span>
+                    <span>{money(slipView.taxable_base)}</span>
                   </div>
                 </div>
               </section>
@@ -464,51 +489,59 @@ export function CEOPayrollReportPage() {
               {/* Deductions */}
               <section className="ph-section"><h5 className="text-sm font-semibold text-gray-700 mb-3">{t("Potongan")}</h5>
                 <div className="space-y-2">
-                  {Number(selectedPayroll.pph21) > 0 && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">{t("PPh 21")}</span>
-                      <span className="font-medium text-red-600">
-                        -{formatCurrency(Number(selectedPayroll.pph21) || 0)}
-                      </span>
+                  {slipView.deductions.pph21 !== null && slipView.deductions.pph21 !== 0 && (
+                    <div className="flex justify-between text-sm" data-testid="payslip-deduction-pph21">
+                      <span className="text-gray-600">{slipView.annual_tax ? t("PPh 21 masa pajak terakhir (tahunan)") : t("PPh 21")}
+                        {slipView.deductions.pph21 < 0 && <> · {t("refund kelebihan potong")}</>}</span>
+                      <span className={`font-medium ${slipView.deductions.pph21 < 0 ? 'text-emerald-600' : 'text-red-600'}`}>{signedDeduction(slipView.deductions.pph21, formatCurrency)}</span>
                     </div>
                   )}
-                  {Number(selectedPayroll.bpjs_employee_total) > 0 && (
-                    <div className="flex justify-between text-sm">
+                  {slipView.deductions.bpjs_employee !== null && slipView.deductions.bpjs_employee > 0 && (
+                    <div className="flex justify-between text-sm" data-testid="payslip-deduction-bpjs">
                       <span className="text-gray-600">{t("BPJS Karyawan")}</span>
-                      <span className="font-medium text-red-600">
-                        -{formatCurrency(Number(selectedPayroll.bpjs_employee_total) || 0)}
-                      </span>
+                      <span className="font-medium text-red-600">-{money(slipView.deductions.bpjs_employee)}</span>
                     </div>
                   )}
-                  {Number((selectedPayroll as { deductions?: number }).deductions) > 0 && (
+                  {slipView.deductions.system !== null && slipView.deductions.system > 0 && (
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">{t("Potongan Lain")}</span>
-                      <span className="font-medium text-red-600">
-                        -{formatCurrency(Number((selectedPayroll as { deductions?: number }).deductions) || 0)}
-                      </span>
+                      <span className="font-medium text-red-600">-{money(slipView.deductions.system)}</span>
                     </div>
+                  )}
+                  {slipView.funding.pph21 === null && (
+                    <p className="text-xs text-gray-500" data-testid="payslip-funding-unrecorded">{t("Penanggung PPh21 dan BPJS karyawan tidak tercatat pada payroll ini.")}</p>
                   )}
                   <div className="flex justify-between text-sm pt-2 border-t border-gray-100">
                     <span className="font-semibold text-gray-700">{t("Total Potongan")}</span>
-                    <span className="font-bold text-red-600">
-                      -{formatCurrency(
-                        (Number(selectedPayroll.pph21) || 0) +
-                          (Number(selectedPayroll.bpjs_employee_total) || 0) +
-                          (Number((selectedPayroll as { deductions?: number }).deductions) || 0)
-                      )}
+                    <span className="font-bold text-red-600" data-testid="payslip-deduction-total">
+                      {slipView.deductions.total === null ? '-' : signedDeduction(slipView.deductions.total, formatCurrency)}
                     </span>
                   </div>
                 </div>
               </section>
 
-              {/* Company Contribution */}
-              {Number(selectedPayroll.bpjs_company_total) > 0 && (
+              {/* Company Contribution: employer BPJS plus what the saved result shows the company bore. */}
+              {[slipView.company_borne.bpjs_company, slipView.company_borne.pph21, slipView.company_borne.bpjs_employee].some(v => v !== null && v !== 0) && (
                 <section className="ph-section"><h5 className="text-sm font-semibold text-gray-700 mb-3">{t("Kontribusi Perusahaan")}</h5>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">{t("BPJS Perusahaan")}</span>
-                    <span className="font-medium text-emerald-600">
-                      {formatCurrency(Number(selectedPayroll.bpjs_company_total) || 0)}
-                    </span>
+                  <div className="space-y-2">
+                    {slipView.company_borne.bpjs_company !== null && slipView.company_borne.bpjs_company !== 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">{t("BPJS Perusahaan")}</span>
+                        <span className="font-medium text-emerald-600">{money(slipView.company_borne.bpjs_company)}</span>
+                      </div>
+                    )}
+                    {slipView.company_borne.pph21 !== null && slipView.company_borne.pph21 !== 0 && (
+                      <div className="flex justify-between text-sm" data-testid="payslip-company-pph21">
+                        <span className="text-gray-600">{slipView.funding.pph21 === 'company_paid' ? t("PPh21 (Ditanggung Perusahaan)") : t("Tunjangan pajak")}</span>
+                        <span className="font-medium text-emerald-600">{money(slipView.company_borne.pph21)}</span>
+                      </div>
+                    )}
+                    {slipView.company_borne.bpjs_employee !== null && slipView.company_borne.bpjs_employee !== 0 && (
+                      <div className="flex justify-between text-sm" data-testid="payslip-company-bpjs">
+                        <span className="text-gray-600">{t("BPJS Karyawan")} · {t("Ditanggung Perusahaan")}</span>
+                        <span className="font-medium text-emerald-600">{money(slipView.company_borne.bpjs_employee)}</span>
+                      </div>
+                    )}
                   </div>
                 </section>
               )}
@@ -516,10 +549,9 @@ export function CEOPayrollReportPage() {
               {/* Net Salary */}
               <section  className="report-inline-note"><div className="flex justify-between items-center">
                   <span className="font-semibold text-emerald-700">{t("Take Home Pay")}</span>
-                  <span className="text-2xl font-bold text-emerald-600">
-                    {formatCurrency(Number(selectedPayroll.take_home_pay ?? selectedPayroll.net_salary) || 0)}
-                  </span>
+                  <span className="text-2xl font-bold text-emerald-600" data-testid="payslip-thp">{money(slipView.take_home_pay)}</span>
                 </div></section>
+              </>)}
 
               {/* Status */}
               <div className="flex items-center justify-between pt-4 border-t border-gray-200">
@@ -533,7 +565,7 @@ export function CEOPayrollReportPage() {
                 </span>
               </div>
             </div>
-          <div className="ph-dialog-footer"><button type="button" className="ph-button" onClick={() => setSelectedPayroll(null)}>{t("Tutup")}</button></div>
+          <div className="ph-dialog-footer"><button type="button" className="ph-button" onClick={closePayslip}>{t("Tutup")}</button></div>
 </Modal>
       )}</ReportPage>
   );

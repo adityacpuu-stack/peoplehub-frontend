@@ -248,7 +248,7 @@ export function PayrollAutomation({ companyId, period, busy, onBegin, onEnd, onM
     {generated && <section aria-label={t("Hasil generate payroll")} className="space-y-3">
       <h3 className="font-semibold">{t("Hasil generate dari server")}</h3>
       <p>{payrollNumber(Number(generated.generated))}{' '}{t("payroll berhasil dibuat ·")} {payrollNumber(Number(generated.errors))}{' '}{t("karyawan gagal")}</p>
-      <ul className="text-sm space-y-2">{generated.results.map(row => <li key={row.id}>{employeeLabel(row)} · {row.payroll_number}{' '}{t("· THP")} {money(row.thp ?? row.take_home_pay ?? row.net_salary)}{' '}{t("· Biaya perusahaan")} {money(row.total_cost_company ?? row.total_cost_to_company)}</li>)}</ul>
+      <ul className="text-sm space-y-2">{generated.results.map(row => <li key={row.id}>{employeeLabel(row)} · {row.payroll_number}{' '}{t("· THP")} {money(row.take_home_pay ?? row.thp)}{' '}{t("· Biaya perusahaan")} {money(row.total_cost_to_company ?? row.total_cost_company)}</li>)}</ul>
       <EmployeeErrors errors={generated.errorDetails} />
     </section>}
     {generationErrors.length > 0 && <section aria-label={t("Tidak ikut generate")} className="space-y-2">

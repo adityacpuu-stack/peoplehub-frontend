@@ -1,5 +1,6 @@
 import api from './api';
 import type { ApiResponse, Decimalish, PaginatedResponse, PaginationParams } from '@/types';
+import { savedThp } from '@/components/payroll/saved-payroll';
 
 // ==========================================
 // TYPES
@@ -42,6 +43,64 @@ export interface PayrollPreparationInput {
   external_tax?: { amount: number; reference: string };
   payment_hold_reason?: string;
   bonus?: { amount: number; external_total_tax?: { amount: number; reference: string } };
+  annual_tax?: PayrollAnnualTaxInput;
+}
+
+/** Explicit inputs for the final (annual) PPh 21 period; the server validates and calculates. */
+export interface PayrollAnnualTaxInput {
+  reference: string;
+  final_period?: 'this_period' | 'next_period';
+  ptkp_status_start_of_year?: typeof SIMULATION_PTKP[number];
+  residency?: { mode: 'partial_year_subjective'; months: number };
+  other_deductions?: { amount: number; description: string };
+  /** Calendar employment months when the employment dates cannot tell. */
+  employment_months?: number;
+  other_company_income?: 'separate_employer';
+  include_rows_before_join?: true;
+  opening?: { periods: string[]; gross: number; deductible_contributions: number; tax_withheld: number; replaces_unfinalized?: boolean };
+  corrections?: Array<{ period: string; gross?: number; deductible_contributions?: number; tax_withheld?: number }>;
+}
+
+/** Frozen final-period worksheet (backend payroll-annual-history.ts AnnualTaxSnapshot). Display only. */
+export interface PayrollAnnualTax {
+  version: 1;
+  tax_year: number;
+  period?: string;
+  final_reason: 'december' | 'cessation' | 'cross_year_cessation';
+  explicit_choice?: 'this_period' | 'next_period' | null;
+  source: 'calculated' | 'external_override';
+  policy_source?: 'preparation' | 'salary_status_default';
+  reference?: string | null;
+  ptkp?: { status: string; amount: number; basis: 'explicit_input' | 'consistent_saved_status'; evidence: string[] } | null;
+  residency?: { mode: 'full_year' } | { mode: 'partial_year_subjective'; months: number };
+  /** Calendar employment months (occupational cap). */
+  months?: number | null;
+  months_basis?: 'employment_dates' | 'explicit_input' | null;
+  /** Payroll periods covered by saved history, opening and this period. */
+  payroll_periods_covered?: number | null;
+  history?: {
+    rows: Array<{ id: number; period: string; status: string; gross: number; tax: number; deductible_contributions: number;
+      funding: string; ptkp_status: string | null; corrected: string[] }>;
+    excluded: Array<{ id: number; period: string; status: string; reason: string }>;
+    opening: { periods: string[]; gross: number; deductible_contributions: number; tax_withheld: number;
+      replaces_unfinalized?: boolean } | null;
+    corrections: PayrollAnnualTaxInput['corrections'] | null;
+    expected_periods: string[];
+    totals: { gross: number; deductible_contributions: number; tax: number };
+  } | null;
+  current?: { dpp_before_tax_allowance: number; bonus?: number; deductible_contributions: number } | null;
+  other_deductions?: { amount: number; description: string } | null;
+  worksheet?: {
+    annual_gross: number; tax_allowance: number; occupational_deduction: number; deductible_contributions: number;
+    other_deductions: number; net_income: number; annualized_net_income: number | null; ptkp: number; pkp: number;
+    pasal17_full_year: number; annual_liability: number; prior_tax: number; period_tax: number;
+  } | null;
+  settlement: {
+    mode: 'gross_up' | 'fixed' | 'none'; period_tax: number; tax_allowance: number; employee_tax: number; company_tax: number;
+    iterations?: number;
+    /** Share of period_tax attributable to a separate preparation bonus. */
+    bonus_tax?: number;
+  };
 }
 
 export interface PayrollAutomationTreatment {
@@ -116,7 +175,84 @@ export interface PayrollCalculationSnapshot {
     total?: Decimalish | null;
     held?: boolean | null;
   } | null;
+  /** Final (annual) PPh 21 period only. */
+  annual_tax?: PayrollAnnualTax | null;
   [key: string]: unknown;
+}
+
+/** Backend saved read presentation (payroll-read-presentation.ts); null = not saved / not knowable. */
+export type PayrollEarningKey = 'basic_salary' | 'position_allowance' | 'position_allowance_unsplit' | 'tax_allowance'
+  | 'transport_allowance' | 'meal_allowance' | 'overtime_pay' | 'other_allowances' | 'thr' | 'bonus'
+  | 'incentive' | 'commission' | 'back_pay';
+export interface PayrollReadPresentation {
+  version: 1;
+  basis: 'calculation_v2' | 'generation' | 'saved_result' | 'saved_flag' | 'unrecorded';
+  take_home_pay: number | null;
+  company_cost: number | null;
+  taxable_base: number | null;
+  funding: {
+    pph21: 'company_paid' | 'withheld' | null;
+    tax_allowance_mode: 'gross_up' | 'fixed' | 'none' | null;
+    bpjs_employee: 'company' | 'employee' | null;
+  };
+  position: { total: number | null; business: number | null; tax_allowance: number | null };
+  /** unreconciled: saved total minus listed saved items (null when total not saved). */
+  earnings: { items: Array<{ key: PayrollEarningKey; amount: number }>; total: number | null; unreconciled: number | null } | null;
+  deductions: { pph21: number | null; bpjs_employee: number | null; system: number | null; total: number | null };
+  company_borne: { pph21: number | null; bpjs_employee: number | null; bpjs_company: number | null };
+  /** Final (annual) PPh 21 period; null for a monthly TER row. Absent on older API responses. */
+  annual_tax?: PayrollAnnualTax | null;
+}
+
+// ==========================================
+// TARGET THP -> BASIC SALARY SIMULATION (read-only)
+// ==========================================
+
+export type SimulationSalaryStatus = 'new_gross' | 'existing';
+export const SIMULATION_PTKP = ['TK/0', 'TK/1', 'TK/2', 'TK/3', 'K/0', 'K/1', 'K/2', 'K/3'] as const;
+export interface SimulationAllowances { position: number; transport: number; meal: number; other: number }
+export interface SalarySimulationRequest {
+  company_id: number;
+  context: 'employee_form' | 'standalone';
+  employee_id?: number;
+  /** Payroll period (YYYY-MM) whose company/employee rules are checked. */
+  period: string;
+  target_thp: number;
+  ptkp_status: string;
+  salary_status: SimulationSalaryStatus;
+  allowance_source: 'manual' | 'employee_contract';
+  allowances: SimulationAllowances;
+}
+export type SimulationApplyReason = 'standalone' | 'not_exact' | 'policy_rules_apply' | 'rules_unreadable'
+  | 'allowances_not_registered' | 'sources_pending';
+export interface SalarySimulationResult {
+  status: 'exact' | 'below_minimum' | 'nearest';
+  target_thp: number;
+  basic_salary: number;
+  achieved_thp: number;
+  difference: number;
+  salary_status: SimulationSalaryStatus;
+  ptkp_status: string;
+  allowances_used: SimulationAllowances & { total: number };
+  allowance_source: 'manual' | 'employee_contract';
+  breakdown: {
+    basic_salary: number; fixed_allowances: number; gross_cash: number; taxable_base_dpp: number;
+    bpjs_object_pph21: number; ter_golongan: string; ter_rate: number; pph21: number;
+    pph21_paid_by: 'company' | 'employee'; tax_allowance: number;
+    bpjs_employee: { jht: number; jp: number; jks: number; total: number };
+    bpjs_employee_paid_by: 'company' | 'employee';
+    bpjs_company: { jht: number; jkm: number; jkk: number; jks: number; jp: number; total: number };
+    employee_deductions: number; take_home_pay: number; company_cost: number;
+  };
+  scope: { period: string; automation_active: boolean; policy_rules_apply: boolean; rules_unreadable: boolean;
+    /** Always a monthly TER estimate; December settles the year at generation. Absent on older API responses. */
+    estimate?: 'monthly_ter'; final_tax_period?: boolean };
+  employee_context: {
+    employee_id: number; contract_income: (SimulationAllowances & { total: number }) | null;
+    pending_sources: number; one_time_excluded: number;
+  } | null;
+  apply: { allowed: boolean; reasons: SimulationApplyReason[] };
+  assumptions: string[];
 }
 
 export interface PayrollProrationSnapshot {
@@ -225,6 +361,8 @@ export interface Payroll {
     proration?: PayrollProrationSnapshot | null;
     [key: string]: unknown;
   } | null;
+  /** Saved read presentation from the backend (list rows: earnings null). */
+  presentation?: PayrollReadPresentation | null;
   // Relations
   employee: PayrollEmployee;
   details?: PayrollDetail[];
@@ -254,7 +392,10 @@ export interface PayrollSummary {
   approved_count: number;
   paid_count: number;
   total_gross: number;
+  /** Sum of saved take-home pay (take_home_pay, then thp). */
   total_net: number;
+  /** Rows with no saved take-home pay; excluded from total_net. */
+  total_net_missing: number;
   total_tax: number;
   total_bpjs_employee: number;
   total_bpjs_company: number;
@@ -382,21 +523,8 @@ export interface CalculatePayrollRequest {
   leave_days?: number;
 }
 
+// Saved payroll money is immutable; money changes go through discard + regenerate.
 export interface UpdatePayrollRequest {
-  basic_salary?: number;
-  transport_allowance?: number;
-  meal_allowance?: number;
-  position_allowance?: number;
-  other_allowances?: number;
-  overtime_hours?: number;
-  overtime_pay?: number;
-  bonus?: number;
-  thr?: number;
-  incentive?: number;
-  loan_deduction?: number;
-  absence_deduction?: number;
-  late_deduction?: number;
-  other_deductions?: number;
   notes?: string;
   hr_notes?: string;
 }
@@ -478,6 +606,13 @@ export const payrollService = {
     const saved = response.data.data;
     if (!response.data.success || saved?.employee_id !== employeeId || !('input' in saved)
       || (saved.period !== undefined && saved.period !== period)) throw new Error('Simpan persiapan belum terkonfirmasi. Muat ulang data.');
+    return response.data.data;
+  },
+
+  /** Read-only Target THP -> basic salary simulation; never saves anything. */
+  simulateSalary: async (data: SalarySimulationRequest, signal?: AbortSignal): Promise<SalarySimulationResult> => {
+    const response = await api.post<ApiResponse<SalarySimulationResult>>('/payroll/salary-simulation', data, { signal });
+    if (!response.data.success || !response.data.data) throw new Error('Simulasi gaji gagal.');
     return response.data.data;
   },
 
@@ -766,7 +901,10 @@ export const payrollService = {
         summary.total_employees++;
         // Convert to numbers (Prisma Decimal comes as string)
         summary.total_gross += Number(p.gross_salary) || 0;
-        summary.total_net += Number(p.take_home_pay ?? p.net_salary) || 0;
+        // Saved payout only; net_salary is pre-tax/BPJS for pure-gross rows.
+        const thp = savedThp(p);
+        if (thp === null) summary.total_net_missing++;
+        else summary.total_net += thp;
         summary.total_tax += Number(p.pph21) || 0;
         summary.total_bpjs_employee += Number(p.bpjs_employee_total) || 0;
         summary.total_bpjs_company += Number(p.bpjs_company_total) || 0;
@@ -799,6 +937,7 @@ export const payrollService = {
         paid_count: 0,
         total_gross: 0,
         total_net: 0,
+        total_net_missing: 0,
         total_tax: 0,
         total_bpjs_employee: 0,
         total_bpjs_company: 0,
