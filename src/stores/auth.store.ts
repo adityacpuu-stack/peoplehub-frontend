@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { User } from '@/types';
 import { authService } from '@/services/auth.service';
+import { clearEmployeeCreateDrafts, setEmployeeDraftOwner } from '@/lib/employee-create-draft';
 
 interface AuthState {
   user: User | null;
@@ -32,6 +33,9 @@ export const useAuthStore = create<AuthState>()(
 
       login: async (email: string, password: string) => {
         const response = await authService.login({ email, password });
+        // A new sign-in never inherits another session's Add Employee draft.
+        clearEmployeeCreateDrafts();
+        setEmployeeDraftOwner(response.user.id);
         syncAccountLocale(response.user.language);
         localStorage.setItem('token', response.token);
         if (response.refreshToken) {
@@ -52,6 +56,7 @@ export const useAuthStore = create<AuthState>()(
           // Ignore logout errors
         } finally {
           localStorage.removeItem('token');
+          clearEmployeeCreateDrafts();
           set({
             user: null,
             token: null,
@@ -63,12 +68,15 @@ export const useAuthStore = create<AuthState>()(
       checkAuth: async () => {
         const token = localStorage.getItem('token');
         if (!token) {
+          clearEmployeeCreateDrafts();
           set({ isLoading: false, isAuthenticated: false });
           return;
         }
 
         try {
           const user = await authService.me();
+          // Keep only this account's draft (another account may have signed in).
+          clearEmployeeCreateDrafts(user.id);
           syncAccountLocale(user.language);
           set({
             user,
@@ -79,6 +87,7 @@ export const useAuthStore = create<AuthState>()(
           lastRefreshAt = Date.now();
         } catch {
           localStorage.removeItem('token');
+          clearEmployeeCreateDrafts();
           set({
             user: null,
             token: null,
@@ -89,6 +98,8 @@ export const useAuthStore = create<AuthState>()(
       },
 
       setUser: (user: User) => {
+        // Another account replacing this one keeps only its own draft and owns new writes.
+        if (get().user?.id !== user.id) clearEmployeeCreateDrafts(user.id);
         syncAccountLocale(user.language);
         set({ user });
       },
@@ -106,6 +117,7 @@ export const useAuthStore = create<AuthState>()(
             // Ignore a response that belongs to a session which has since been
             // logged out or replaced (stale tab / concurrent logout).
             if (localStorage.getItem('token') !== token || !get().isAuthenticated) return;
+            if (get().user?.id !== user.id) clearEmployeeCreateDrafts(user.id);
             syncAccountLocale(user.language);
             set({ user });
             lastRefreshAt = Date.now();

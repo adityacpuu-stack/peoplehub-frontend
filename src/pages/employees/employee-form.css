@@ -66,3 +66,8 @@
   .ops-employee-form .employee-address-grid,
   .ops-employee-form .ops-review-sections { grid-template-columns: minmax(0,1fr); }
 }
+
+/* Add Employee draft notice: one quiet line, not a banner. */
+.employee-draft-notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin: 0 0 12px; padding: 8px 0; border-bottom: 1px solid var(--ph-line); font-size: 13px; color: var(--ph-muted); }
+.employee-draft-notice p { margin: 0; flex: 1 1 18rem; min-width: 0; }
+.employee-draft-confirm { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--ph-ink); }

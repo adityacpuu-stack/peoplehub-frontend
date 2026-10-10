@@ -4,7 +4,7 @@ import '@/components/ui/operations-refresh.css';
 import '@/pages/employees/operations-workflows.css';
 import '@/pages/employees/employee-form.css';
 import { Modal } from '@/components/ui/Modal';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useForm, Controller, type Control, type FieldErrors, type UseFormRegister, type UseFormSetValue } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -18,6 +18,9 @@ import { workLocationService, type WorkLocationOption } from '@/services/work-lo
 import type { CreateEmployeeRequest, UpdateEmployeeRequest, PaginatedResponse, Department, Employee } from '@/types';
 import { useAuthStore } from '@/stores/auth.store';
 import { canAction, canEditCompensation } from '@/lib/actions';
+import {
+  readEmployeeCreateDraft, removeEmployeeCreateDraft, writeEmployeeCreateDraft, type EmployeeDraftValues,
+} from '@/lib/employee-create-draft';
 import {
   employeeFormSchema,
   STEP_FIELDS,
@@ -338,6 +341,7 @@ export function EmployeeFormPage() {
     reset,
     watch,
     setValue,
+    getValues,
     trigger,
     getFieldState,
     formState: { errors, isSubmitting, dirtyFields },
@@ -450,8 +454,14 @@ export function EmployeeFormPage() {
   }, [employmentType, lastEmploymentType, isEdit, setValue]);
 
   // ---- Auto-calculate probation dates when join_date changes ---------------
+  // A restored draft sets join_date once; its saved (possibly custom) probation
+  // dates must survive that single change. Later real changes recalculate.
+  const skipProbationForRestore = useRef<string | null>(null);
   useEffect(() => {
     if (isEdit) return;
+    const restoring = skipProbationForRestore.current !== null && skipProbationForRestore.current === (joinDate ?? '');
+    skipProbationForRestore.current = null;
+    if (restoring) return;
     if (joinDate && /^\d{4}-\d{2}-\d{2}$/.test(joinDate)) {
       const [year, month, day] = joinDate.split('-').map(Number);
       // Clamp to the last day of the target calendar month: Jan 31 + 3
@@ -474,6 +484,131 @@ export function EmployeeFormPage() {
       setValue('email', '');
     }
   }, [hasOfficeEmail, setValue]);
+
+  // ---- Refresh-safe Add Employee draft (create only, this tab, this user) ----
+  // Restore waits for auth + reference data, re-checks company/related records
+  // against what this account can load, drops compensation without salary-edit
+  // access and never reuses the generated employee ID. Persistence starts only
+  // after a real user edit (or a restore) and writes synchronously on change.
+  const draftUserId = !isEdit ? authUser?.id : undefined;
+  const [draftChecked, setDraftChecked] = useState(false);
+  const [draftNotice, setDraftNotice] = useState<'restored' | 'saved' | 'unavailable' | null>(null);
+  const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null);
+  const [draftTrimmed, setDraftTrimmed] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const draftTouched = useRef(false);
+  const draftFinished = useRef(false);
+  const draftStep = useRef(currentStep);
+  const persistDraft = useRef<(() => void) | null>(null);
+
+  // The same mounted form can switch route (create <-> edit without reload) or
+  // account (setUser/refresh). Either change ends the previous draft scope: old
+  // writes stop, create values are cleared and the new scope restores its own
+  // draft (if any). An edit route loads its employee via the fetch effect.
+  const draftScope = `${id ?? 'create'}:${authUser?.id ?? 'none'}`;
+  const previousDraftScope = useRef(draftScope);
+  useEffect(() => {
+    if (previousDraftScope.current === draftScope) return;
+    previousDraftScope.current = draftScope;
+    draftTouched.current = false;
+    draftFinished.current = false;
+    skipProbationForRestore.current = null;
+    setDraftChecked(false);
+    setDraftNotice(null);
+    setDraftTrimmed(false);
+    setConfirmDiscard(false);
+    if (!id) {
+      setLastEmploymentType('');
+      reset(emptyValues);
+    }
+    draftStep.current = 1;
+    setCurrentStep(1);
+  }, [draftScope, id, reset]);
+
+  useEffect(() => {
+    if (draftUserId === undefined || isLoading || loadError || draftChecked) return;
+    const draft = readEmployeeCreateDraft(draftUserId);
+    if (draft) {
+      const restored: EmployeeDraftValues = { ...draft.values };
+      let trimmed = false;
+      const drop = (key: keyof EmployeeDraftValues) => {
+        const value = restored[key];
+        if (value !== undefined && value !== null && value !== '') trimmed = true;
+        delete restored[key];
+      };
+      const present = (value: unknown) => value !== undefined && value !== null && value !== '';
+      const companyIdValue = Number(restored.company_id);
+      if (present(restored.company_id) && !companies.some(c => c.id === companyIdValue)) {
+        // Company no longer accessible: drop it and everything scoped to it.
+        for (const key of ['company_id', 'department_id', 'position_id', 'work_location_id', 'manager_id',
+          'leave_approver_id', 'overtime_approver_id'] as const) drop(key);
+      } else {
+        if (present(restored.department_id) && !departments.some(d => d.id === Number(restored.department_id)
+          && (d.company_id ?? d.company?.id ?? companyIdValue) === companyIdValue)) drop('department_id');
+        if (present(restored.work_location_id) && !workLocations.some(w => w.id === Number(restored.work_location_id)
+          && (w.company_id == null || w.company_id === companyIdValue))) drop('work_location_id');
+        for (const key of ['manager_id', 'leave_approver_id', 'overtime_approver_id'] as const) {
+          if (present(restored[key]) && !employees.some(e => e.id === Number(restored[key]))) drop(key);
+        }
+      }
+      if (!compensationEditable) for (const key of COMPENSATION_FIELDS) drop(key as keyof EmployeeDraftValues);
+      // Default effects must not overwrite the restored BPJS/probation choices.
+      skipProbationForRestore.current = typeof restored.join_date === 'string' ? restored.join_date : '';
+      setLastEmploymentType(typeof restored.employment_type === 'string' && restored.employment_type ? restored.employment_type : 'permanent');
+      reset({ ...emptyValues, ...restored } as EmployeeFormInput);
+      draftStep.current = draft.step;
+      setCurrentStep(draft.step);
+      draftTouched.current = true;
+      setDraftSavedAt(draft.saved_at);
+      setDraftTrimmed(trimmed);
+      setDraftNotice('restored');
+      // Keep the stored record in line with what was actually restored.
+      writeEmployeeCreateDraft(draftUserId, compensationEditable ? restored : withoutCompensation(restored, false), draft.step);
+    }
+    setDraftChecked(true);
+  }, [draftUserId, isLoading, loadError, draftChecked, companies, departments, workLocations, employees, compensationEditable, reset]);
+
+  useEffect(() => {
+    if (draftUserId === undefined || !draftChecked) return;
+    const persist = () => {
+      if (draftFinished.current) return;
+      const values = getValues();
+      const result = writeEmployeeCreateDraft(draftUserId, compensationEditable ? values : withoutCompensation(values, false), draftStep.current);
+      // Not the authenticated account any more (session ended/replaced): stop
+      // writing for this form; the scope reset below takes over.
+      if (result === 'not_owner') { draftFinished.current = true; return; }
+      setDraftNotice(notice => !result ? 'unavailable' : notice === 'restored' ? 'restored' : 'saved');
+    };
+    persistDraft.current = persist;
+    const subscription = watch((_values, { name, type }) => {
+      if (draftFinished.current) return;
+      if (!draftTouched.current) {
+        // Programmatic defaults (BPJS flags, probation, generated ID) are not a draft.
+        if (type !== 'change' && !(name && getFieldState(name as Parameters<typeof getFieldState>[0]).isDirty)) return;
+        draftTouched.current = true;
+      }
+      persist();
+    });
+    return () => { subscription.unsubscribe(); persistDraft.current = null; };
+  }, [draftUserId, draftChecked, compensationEditable, getValues, getFieldState, watch]);
+
+  useEffect(() => {
+    draftStep.current = currentStep;
+    if (draftTouched.current && !draftFinished.current) persistDraft.current?.();
+  }, [currentStep]);
+
+  const discardDraft = () => {
+    draftTouched.current = false;
+    if (draftUserId !== undefined) removeEmployeeCreateDraft(draftUserId);
+    skipProbationForRestore.current = null;
+    setLastEmploymentType('');
+    reset(emptyValues);
+    draftStep.current = 1;
+    setCurrentStep(1);
+    setDraftNotice(null);
+    setDraftTrimmed(false);
+    setConfirmDiscard(false);
+  };
 
   // ---- Derived: departments filtered by company ----------------------------
   const companyIdNum = companyId != null && companyId !== '' ? Number(companyId) : undefined;
@@ -539,6 +674,10 @@ export function EmployeeFormPage() {
         toast.success(t("Employee updated successfully"));
       } else {
         await employeeService.create(withoutCompensation(buildPayload(values), compensationEditable));
+        // Created: the draft is done. Mark finished first so no later change
+        // (navigation/unmount) can write it back. A failed save keeps it.
+        draftFinished.current = true;
+        if (draftUserId !== undefined) removeEmployeeCreateDraft(draftUserId);
         toast.success(t("Employee created successfully"));
       }
       navigate('/employees');
@@ -623,6 +762,26 @@ export function EmployeeFormPage() {
       <nav aria-label={t("Employee registration steps")}><ol className="ops-step-nav">
         {STEPS.map((step) => <li key={step.id}><button type="button" aria-label={t('Go to {step}', { step: t(step.title) })} aria-current={currentStep === step.id ? 'step' : undefined} onClick={() => goToStep(step.id)} disabled={step.id > currentStep + 1}><span>{step.id}</span>{t(step.title)}</button></li>)}
       </ol></nav>
+
+      {/* Add Employee draft notice (create only) */}
+      {!isEdit && draftNotice && <div className="employee-draft-notice" role="status" data-testid="employee-draft-notice">
+        <p>
+          {draftNotice === 'restored'
+            ? t('Draft restored from this browser tab (saved {time}). The employee ID was generated again.', {
+              time: draftSavedAt ? new Date(draftSavedAt).toLocaleTimeString(intlLocale(), { hour: '2-digit', minute: '2-digit' }) : '-' })
+            : draftNotice === 'saved'
+              ? t('Draft saved in this browser tab until the employee is created, discarded or you sign out.')
+              : t('This browser is not keeping a draft; finish the form in this session.')}
+          {draftTrimmed && <> {t('Some draft entries were not restored because your company or salary access changed.')}</>}
+        </p>
+        {draftNotice !== 'unavailable' && (confirmDiscard
+          ? <span className="employee-draft-confirm">
+              <span>{t('Discard the draft and clear the form?')}</span>
+              <button type="button" className="ph-button ops-danger" onClick={discardDraft} data-testid="employee-draft-discard-confirm">{t('Discard')}</button>
+              <button type="button" className="ph-button" onClick={() => setConfirmDiscard(false)}>{t('Keep draft')}</button>
+            </span>
+          : <button type="button" className="ph-button" onClick={() => setConfirmDiscard(true)} data-testid="employee-draft-discard">{t('Discard draft')}</button>)}
+      </div>}
 
       {/* Form */}
       <form onSubmit={onSubmit} noValidate className="employee-form-body">

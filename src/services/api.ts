@@ -2,6 +2,7 @@ import { t, getLocale } from '@/i18n';
 import { translateError } from '@/i18n/error-message';
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import toast from 'react-hot-toast';
+import { clearEmployeeCreateDrafts } from '@/lib/employee-create-draft';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -127,6 +128,8 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !isAuthEndpoint) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      // Authentication lost: drop Add Employee drafts (HR PII) before redirect.
+      clearEmployeeCreateDrafts();
       window.location.href = '/login';
       toast.error(
         serverCode && ACCOUNT_STATE_CODES.has(serverCode) && serverMessage

@@ -720,6 +720,14 @@ Tipe pengunduran diri wajib dipilih|Select a resignation type|Tipe resign harus 
 Alasan minimal 3 karakter|Reason must contain at least 3 characters
 Alasan maksimal 500 karakter|Reason must contain no more than 500 characters
 Catatan maksimal 1000 karakter|Notes must contain no more than 1000 characters
+Draf dipulihkan dari tab browser ini (disimpan {time}). ID karyawan dibuat ulang.|Draft restored from this browser tab (saved {time}). The employee ID was generated again.
+Draf tersimpan di tab browser ini sampai karyawan dibuat, dibuang, atau Anda keluar.|Draft saved in this browser tab until the employee is created, discarded or you sign out.
+Browser ini tidak menyimpan draf; selesaikan formulir pada sesi ini.|This browser is not keeping a draft; finish the form in this session.
+Sebagian isian draf tidak dipulihkan karena akses perusahaan atau gaji Anda berubah.|Some draft entries were not restored because your company or salary access changed.
+Buang draf|Discard draft
+Buang draf dan kosongkan formulir?|Discard the draft and clear the form?
+Buang|Discard
+Simpan draf|Keep draft
 `.trim().split('\n');
 
 export const operations: Record<string, MessagePair> = {};
