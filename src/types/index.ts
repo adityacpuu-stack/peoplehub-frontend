@@ -431,8 +431,8 @@ export interface LeaveRequest {
   rejection_reason?: string;
   rejected_by?: number;
   rejected_at?: string;
-  document_path?: string;
-  document_name?: string;
+  /** A private supporting document exists; open it only via GET /leaves/:id/document. Never a key or URL. */
+  has_document?: boolean;
   employee?: {
     id: number;
     name: string;

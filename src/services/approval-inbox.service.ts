@@ -23,6 +23,9 @@ export interface ApprovalRequest {
   approved_at?: string | null;
   rejected_at?: string | null;
   can_approve: boolean;
+  /** Leave only: a private supporting document exists (opened via the leave document endpoint). */
+  has_document?: boolean;
+  leaveType?: { code?: string | null; name?: string | null } | null;
 }
 
 export const hasExecutiveApprovals = (roles: string[] = []) => roles.includes('CEO') || roles.includes('Group CEO');

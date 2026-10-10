@@ -9,6 +9,7 @@ import api from '@/services/api';
 import './leave-workspace.css';
 import './leave-refresh.css';
 import { Calendar, Search, Eye, XCircle, Clock, Download, ChevronLeft, ChevronRight, Loader2, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { LeaveDocumentDownload } from '@/components/leave/LeaveDocumentDownload';
 import { leaveService } from '../../services/leave.service';
 import { companyService } from '../../services/company.service';
 import { toNum } from '@/lib/utils';
@@ -277,7 +278,7 @@ export function LeaveRequestsPage() {
     </section>
     {showDetailModal && selectedLeave && <OperationalDialog title={t("Leave Request Details")} subtitle={t('Request #{id}', { id: selectedLeave.id })} onClose={handleCloseDetailModal} className="lw-dialog leave-refresh-dialog"><div className="ph-workflow dw-detail dw-fields">
       <div className="lw-detail-heading"><h3>{selectedLeave.employee?.name || '—'}</h3><span className={`lw-status ${getStatusColor(selectedLeave.status)}`}>{t(selectedLeave.status)}</span></div>
-      <dl className="ph-kv dw-detail-grid"><div><dt>{t("Leave type")}</dt><dd>{selectedLeave.leaveType?.name || '—'}</dd></div><div><dt>{t("Stored working days")}</dt><dd>{chargedDaysLabel(selectedLeave)}</dd></div><div><dt>{t("Start date")}</dt><dd>{formatDate(selectedLeave.start_date)}</dd></div><div><dt>{t("End date")}</dt><dd>{formatDate(selectedLeave.end_date)}</dd></div><div className="lw-wide"><dt>{t("Reason")}</dt><dd>{selectedLeave.reason || '—'}</dd></div>{selectedLeave.rejection_reason && <div className="lw-wide"><dt>{t("Rejection reason")}</dt><dd>{selectedLeave.rejection_reason}</dd></div>}</dl>
+      <dl className="ph-kv dw-detail-grid"><div><dt>{t("Leave type")}</dt><dd>{selectedLeave.leaveType?.name || '—'}</dd></div><div><dt>{t("Stored working days")}</dt><dd>{chargedDaysLabel(selectedLeave)}</dd></div><div><dt>{t("Start date")}</dt><dd>{formatDate(selectedLeave.start_date)}</dd></div><div><dt>{t("End date")}</dt><dd>{formatDate(selectedLeave.end_date)}</dd></div><div className="lw-wide"><dt>{t("Reason")}</dt><dd>{selectedLeave.reason || '—'}</dd></div>{selectedLeave.rejection_reason && <div className="lw-wide"><dt>{t("Rejection reason")}</dt><dd>{selectedLeave.rejection_reason}</dd></div>}{selectedLeave.has_document && <div className="lw-wide"><dt>{t("Attachment")}</dt><dd><LeaveDocumentDownload leave={selectedLeave} /></dd></div>}</dl>
       <p className="lw-note">{t("Monitoring only. Assigned approvers review requests in My Approval.")}</p>
       <div className="ph-form-actions dw-actions"><button className="ow-button" onClick={handleCloseDetailModal}>{t("Close")}</button></div>
     </div></OperationalDialog>}

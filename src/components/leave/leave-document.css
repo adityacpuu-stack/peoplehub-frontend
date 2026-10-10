@@ -1,0 +1,37 @@
+/* Keep the upload action visible without depending on native file-input styling. */
+.leave-document-field { display: grid; gap: 8px; min-width: 0; }
+.leave-document-label { font-size: 13px; font-weight: 600; color: var(--ph-ink, #24302b); }
+.leave-document-required { font-weight: 400; color: var(--ph-muted, #65716b); }
+.leave-document-surface { display: grid; gap: 10px; padding: 16px; border: 1px solid #c5d5cb; border-radius: 10px; background: #f6f9f6; min-width: 0; }
+.leave-document-surface-error { border-color: #c66d61; }
+.leave-document-empty { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.leave-document-choose, .leave-document-change, .leave-document-remove { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 9px 14px; border-radius: 7px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: background-color 120ms; }
+.leave-document-choose { border: 1px solid #365f48; background: #365f48; color: #fff; }
+.leave-document-choose:hover:not(:disabled) { background: #294b37; }
+.leave-document-choose svg { width: 18px; height: 18px; flex: none; }
+.leave-document-change { border: 1px solid #c5d5cb; background: #fff; color: #365f48; }
+.leave-document-remove { border: 1px solid transparent; background: transparent; color: #65716b; }
+.leave-document-change:hover:not(:disabled), .leave-document-remove:hover:not(:disabled) { background: #e9f0eb; }
+.leave-document-field button:focus-visible { outline: 2px solid #365f48; outline-offset: 3px; }
+.leave-document-field button:disabled { opacity: .55; cursor: not-allowed; }
+.leave-document-empty-note, .leave-document-hint, .leave-document-privacy { margin: 0; font-size: 12px; line-height: 1.5; color: var(--ph-muted, #65716b); }
+.leave-document-privacy { display: flex; align-items: flex-start; gap: 6px; }
+.leave-document-privacy svg { width: 13px; height: 13px; margin-top: 2px; flex: none; }
+.leave-document-input { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.leave-document-file { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.leave-document-file-icon { width: 22px; height: 22px; flex: none; color: #365f48; }
+.leave-document-file-info { display: grid; gap: 3px; flex: 1; min-width: 0; }
+.leave-document-name { min-width: 0; overflow-wrap: anywhere; font-size: 13px; font-weight: 600; color: var(--ph-ink, #24302b); }
+.leave-document-size { font-size: 12px; color: var(--ph-muted, #65716b); font-variant-numeric: tabular-nums; }
+.leave-document-actions { display: flex; gap: 4px; flex: none; }
+.leave-document-remove svg, .leave-document-button svg { width: 15px; height: 15px; }
+.leave-document-error { margin: 0; font-size: 12px; color: #b44539; }
+.leave-document-download { display: grid; gap: 4px; justify-items: start; }
+.leave-document-button { display: inline-flex; align-items: center; gap: 6px; }
+@media (max-width: 480px) {
+  .leave-document-file { flex-wrap: wrap; }
+  .leave-document-actions { width: 100%; }
+  .leave-document-actions button { flex: 1; }
+  .leave-document-choose { width: 100%; }
+  .leave-document-empty { gap: 8px; }
+}

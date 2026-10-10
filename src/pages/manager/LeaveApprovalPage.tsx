@@ -7,6 +7,7 @@ import { OperationalDialog, OperationalWorkspace } from '@/components/ui/Operati
 import { leaveService } from '@/services/leave.service';
 import { useAuthStore } from '@/stores/auth.store';
 import type { LeaveRequest } from '@/types';
+import { LeaveDocumentDownload } from '@/components/leave/LeaveDocumentDownload';
 import { toNum } from '@/lib/utils';
 import { TeamFeedback, TeamPagination, TeamStatus } from './team-management';
 import { APPROVALS_CHANGED, calendarDate, timestamp } from './team-management-utils';
@@ -90,7 +91,7 @@ export function LeaveApprovalPage() {
           {selected.is_emergency && <div className="tm-wide"><dt>{t("Request priority")}</dt><dd>{t("Emergency leave")}</dd></div>}
           {selected.work_handover && <div className="tm-wide"><dt>{t("Task handover")}</dt><dd>{selected.work_handover}</dd></div>}
           {selected.contact_during_leave && <div><dt>{t("Contact during leave")}</dt><dd>{selected.contact_during_leave}</dd></div>}
-          {selected.document_name && <div><dt>{t("Attachment")}</dt><dd>{selected.document_name}</dd></div>}
+          {selected.has_document && <div className="tm-wide"><dt>{t("Attachment")}</dt><dd><LeaveDocumentDownload leave={selected} /></dd></div>}
           <div><dt>{t("Submitted")}</dt><dd>{timestamp(selected.created_at)}</dd></div>
           {['approved', 'rejected'].includes(selected.status) && selected.approver && <div><dt>{selected.status === 'approved' ? t("Approved") : t("Rejected")}{' '}{t("by")}</dt><dd>{selected.approver.name}<small>{timestamp(selected.status === 'approved' ? selected.approved_at : selected.rejected_at)}</small></dd></div>}
           {selected.rejection_reason && <div className="tm-wide"><dt>{t("Rejection reason")}</dt><dd>{selected.rejection_reason}</dd></div>}

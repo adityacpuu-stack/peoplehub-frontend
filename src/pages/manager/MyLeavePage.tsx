@@ -11,6 +11,9 @@ import { cn , toNum } from '@/lib/utils';
 import { leaveService } from '@/services/leave.service';
 import { employeeService } from '@/services/employee.service';
 import type { LeaveRequest, LeaveBalance, LeaveType, Employee } from '@/types';
+import { LeaveDocumentField } from '@/components/leave/LeaveDocumentField';
+import { LeaveDocumentDownload } from '@/components/leave/LeaveDocumentDownload';
+import { leaveDocumentMissing, leaveDocumentServerError } from '@/components/leave/leave-document';
 import toast from 'react-hot-toast';
 
 export function MyLeavePage() {
@@ -46,6 +49,12 @@ export function MyLeavePage() {
     work_handover: '',
     contact_during_leave: '',
   });
+  // Supporting document: kept on a failed submit, cleared on success, close or
+  // leave-type change so a file is never sent with an unintended request.
+  const [documentFile, setDocumentFile] = useState<File | null>(null);
+  const [documentError, setDocumentError] = useState<string | null>(null);
+  const clearDocument = () => { setDocumentFile(null); setDocumentError(null); };
+  const closeRequestModal = () => { if (isSubmitting) return; clearDocument(); setShowRequestModal(false); };
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -150,9 +159,15 @@ export function MyLeavePage() {
       toast.error(t("Tanggal mulai dan berakhir harus diisi"));
       return;
     }
+    const selectedType = leaveTypes.find(type => type.id === formData.leave_type_id);
+    if (selectedType?.requires_document && !documentFile) {
+      setDocumentError(leaveDocumentMissing(selectedType));
+      return;
+    }
 
     if (isSubmitting) return;
     setIsSubmitting(true);
+    setDocumentError(null);
     try {
       await leaveService.create({
         leave_type_id: formData.leave_type_id,
@@ -161,9 +176,10 @@ export function MyLeavePage() {
         reason: formData.reason || undefined,
         work_handover: formData.work_handover || undefined,
         contact_during_leave: formData.contact_during_leave || undefined,
-      });
+      }, selectedType?.requires_document ? documentFile : null);
 
       toast.success(t("Pengajuan cuti berhasil dikirim"));
+      clearDocument();
       setShowRequestModal(false);
       setFormData({
         leave_type_id: leaveTypes.length > 0 ? leaveTypes[0].id : 0,
@@ -176,7 +192,9 @@ export function MyLeavePage() {
       fetchData();
     } catch (error) {
       console.error('Failed to submit leave request:', error);
-      toast.error((isAxiosError(error) && error.response?.data?.error?.message) || t("Gagal mengajukan cuti"), { id: 'api-error' });
+      const documentProblem = isAxiosError(error) ? leaveDocumentServerError(error.response?.data?.error?.code) : null;
+      if (documentProblem) setDocumentError(documentProblem);
+      toast.error((documentProblem && t(documentProblem)) || (isAxiosError(error) && error.response?.data?.error?.message) || t("Gagal mengajukan cuti"), { id: 'api-error' });
     } finally {
       setIsSubmitting(false);
     }
@@ -267,10 +285,10 @@ export function MyLeavePage() {
         <footer className="personal-pagination"><span>{quantity(filteredRequests.length)}{' '}{t("shown on page")} {currentPage}{' '}{t("of")} {Math.max(1, totalPages)} &middot; {quantity(totalItems)}{' '}{t("total requests")}</span><div><button className="ph-button" aria-label={t("Previous page")} disabled={currentPage <= 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft /></button><button className="ph-button" aria-label={t("Next page")} disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight /></button></div></footer>
       </section>
 
-      {showRequestModal && <Modal isOpen onClose={() => setShowRequestModal(false)} title={t("Request Leave")} description={t("Choose your dates and share the details for approval.")} size="lg" busy={isSubmitting} className="ph-workflow personal-modal">
+      {showRequestModal && <Modal isOpen onClose={closeRequestModal} title={t("Request Leave")} description={t("Choose your dates and share the details for approval.")} size="lg" busy={isSubmitting} className="ph-workflow personal-modal">
         <form id="leave-request-form" onSubmit={handleSubmit}>
           <fieldset disabled={isSubmitting} className="personal-form-grid">
-            <label className="personal-field personal-full">{t("Leave Type")}<select required value={formData.leave_type_id || ''} onChange={e => setFormData({ ...formData, leave_type_id: Number(e.target.value) })}><option value="">{t("Select leave type...")}</option>{leaveTypes.map(type => <option key={type.id} value={type.id}>{type.name}</option>)}</select></label>
+            <label className="personal-field personal-full">{t("Leave Type")}<select required value={formData.leave_type_id || ''} onChange={e => { clearDocument(); setFormData({ ...formData, leave_type_id: Number(e.target.value) }); }}><option value="">{t("Select leave type...")}</option>{leaveTypes.map(type => <option key={type.id} value={type.id}>{type.name}</option>)}</select></label>
             <div className="personal-full personal-form-hint"><p>{t("Cuti hanya tersedia dalam hari penuh (full day).")}</p>{(() => {
               const type = leaveTypes.find(t => t.id === formData.leave_type_id);
               if (!type) return null;
@@ -281,13 +299,15 @@ export function MyLeavePage() {
             <label className="personal-field personal-full">{t("Reason")} <span className="personal-optional">{t("Optional")}</span><textarea rows={2} value={formData.reason} onChange={e => setFormData({ ...formData, reason: e.target.value })} placeholder={t("Please provide a reason for your leave request...")} /></label>
             <label className="personal-field">{t("Task Handover")}<input value={formData.work_handover} onChange={e => setFormData({ ...formData, work_handover: e.target.value })} placeholder={t("Person handling your tasks")} /></label>
             <label className="personal-field">{t("Emergency Contact")}<input value={formData.contact_during_leave} onChange={e => setFormData({ ...formData, contact_during_leave: e.target.value })} placeholder={t("Name and phone number")} /></label>
+            <LeaveDocumentField key={formData.leave_type_id} leaveType={leaveTypes.find(type => type.id === formData.leave_type_id)} file={documentFile}
+              onChange={file => { setDocumentFile(file); setDocumentError(null); }} error={documentError} disabled={isSubmitting} />
           </fieldset>
           <div className="personal-request-context">
             <div><span>{t("Available Balance")}</span><strong>{(() => { const balance = leaveBalances.find(b => b.leave_type_id === formData.leave_type_id); return balance ? t('{count} days', { count: quantity(getAvailableDays(balance)) }) : t("No balance allocated"); })()}</strong><small>{t("Pending days are already reserved.")}</small></div>
             <div><span>{t("Leave Approver")}</span><strong>{myProfile?.leaveApprover?.name || myProfile?.manager?.name || 'P&C'}</strong><small>{t("Your request will be sent for approval.")}</small></div>
           </div>
         </form>
-        <div className="ph-dialog-footer"><button className="ph-button" disabled={isSubmitting} onClick={() => setShowRequestModal(false)}>{t("Cancel")}</button><button className="ph-button ph-button-primary" form="leave-request-form" type="submit" disabled={isSubmitting}>{isSubmitting && <Loader2 className="animate-spin" />}{' '}{t("Submit Request")}</button></div>
+        <div className="ph-dialog-footer"><button className="ph-button" disabled={isSubmitting} onClick={closeRequestModal}>{t("Cancel")}</button><button className="ph-button ph-button-primary" form="leave-request-form" type="submit" disabled={isSubmitting}>{isSubmitting && <Loader2 className="animate-spin" />}{' '}{t("Submit Request")}</button></div>
       </Modal>}
 
       {selectedRequest && <Modal isOpen onClose={() => setSelectedRequest(null)} title={getLeaveTypeConfig(selectedRequest.leaveType).label} description={t("Leave request details")} size="lg" busy={isCancelling} className="ph-workflow personal-modal">
@@ -296,7 +316,7 @@ export function MyLeavePage() {
           <div className="personal-full"><dt>{t("Reason")}</dt><dd>{selectedRequest.reason || t("No reason provided")}</dd></div>
           {selectedRequest.work_handover && <div><dt>{t("Task Handover")}</dt><dd>{selectedRequest.work_handover}</dd></div>}
           {selectedRequest.contact_during_leave && <div><dt>{t("Emergency Contact")}</dt><dd>{selectedRequest.contact_during_leave}</dd></div>}
-          {selectedRequest.document_name && <div className="personal-full"><dt>{t("Attachment")}</dt><dd>{selectedRequest.document_name}</dd></div>}
+          {selectedRequest.has_document && <div className="personal-full"><dt>{t("Attachment")}</dt><dd><LeaveDocumentDownload leave={selectedRequest} /></dd></div>}
           <div><dt>{t("Submitted")}</dt><dd>{formatDateLong(selectedRequest.created_at)}</dd></div>
           {selectedRequest.approved_at && <div><dt>{selectedRequest.status === 'approved' ? t("Approved") : t("Processed")}</dt><dd>{formatDateLong(selectedRequest.approved_at)}</dd></div>}
           {selectedRequest.approver && <div><dt>{t("Approver")}</dt><dd>{selectedRequest.approver.name}</dd></div>}

@@ -19,6 +19,16 @@ interface CreateLeaveRequest {
   contact_during_leave?: string;
 }
 
+function leaveBody(data: object, document?: File | null): object | FormData {
+  if (!document) return data;
+  const form = new FormData();
+  form.append('data', JSON.stringify(data));
+  form.append('document', document, document.name);
+  return form;
+}
+// Same as the other upload services: a FormData body must not inherit the JSON default.
+const leaveConfig = (body: object | FormData) => body instanceof FormData ? { headers: { 'Content-Type': 'multipart/form-data' } } : undefined;
+
 export const leaveService = {
   // ==========================================
   // LEAVE TYPE ROUTES
@@ -92,8 +102,11 @@ export const leaveService = {
   // The backend deliberately ignores any employee_id in this payload and uses
   // the caller's own employee record, so this can never be used to file on
   // someone else's behalf — use createForEmployee for that.
-  create: async (data: CreateLeaveRequest): Promise<LeaveRequest> => {
-    const response = await api.post<ApiResponse<LeaveRequest>>('/leaves', data);
+  // With a supporting document the request and file go in ONE multipart call
+  // (`data` = the same JSON body, `document` = the file); otherwise plain JSON.
+  create: async (data: CreateLeaveRequest, document?: File | null): Promise<LeaveRequest> => {
+    const body = leaveBody(data, document);
+    const response = await api.post<ApiResponse<LeaveRequest>>('/leaves', body, leaveConfig(body));
     return response.data.data;
   },
 
@@ -101,9 +114,17 @@ export const leaveService = {
   // Matters most for maternity and sick leave, where the employee frequently
   // cannot file for themselves.
   createForEmployee: async (
-    data: CreateLeaveRequest & { employee_id: number }
+    data: CreateLeaveRequest & { employee_id: number },
+    document?: File | null,
   ): Promise<LeaveRequest> => {
-    const response = await api.post<ApiResponse<LeaveRequest>>('/leaves/employee', data);
+    const body = leaveBody(data, document);
+    const response = await api.post<ApiResponse<LeaveRequest>>('/leaves/employee', body, leaveConfig(body));
+    return response.data.data;
+  },
+
+  // Authorized short-lived forced-download link for a leave's supporting document.
+  getDocumentDownload: async (id: number): Promise<{ url: string; expires_in: number; file_name: string }> => {
+    const response = await api.get<ApiResponse<{ url: string; expires_in: number; file_name: string }>>(`/leaves/${id}/document`);
     return response.data.data;
   },
 
